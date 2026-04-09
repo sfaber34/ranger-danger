@@ -1565,27 +1565,22 @@ export class GameScene extends Phaser.Scene {
     setTimeout(() => {
       if (!this.scene.isActive()) return;
 
-      // Stone slab
-      const stoneW = 18, stoneH = 22;
-      const grave = this.add.container(deathX, deathY + 6).setDepth(10);
-      const slab = this.add.rectangle(0, 0, stoneW, stoneH, 0x6a6a78)
+      // Simple cross (lowercase 't' shape)
+      const grave = this.add.container(deathX, deathY + 4).setDepth(10);
+      const vertical = this.add.rectangle(0, 0, 4, 18, 0x6a6a78)
         .setStrokeStyle(1, 0x3e4654);
-      // Rounded top (circle on top of the rectangle)
-      const top = this.add.circle(0, -stoneH / 2, stoneW / 2, 0x6a6a78)
+      const horizontal = this.add.rectangle(0, -5, 12, 4, 0x6a6a78)
         .setStrokeStyle(1, 0x3e4654);
-      // Cross etched on the stone
-      const crossV = this.add.rectangle(0, -4, 2, 12, 0x3e4654);
-      const crossH = this.add.rectangle(0, -8, 8, 2, 0x3e4654);
       // Small dirt mound
-      const dirt = this.add.ellipse(0, stoneH / 2 + 2, 28, 8, 0x3e2310);
-      grave.add([dirt, slab, top, crossV, crossH]);
+      const dirt = this.add.ellipse(0, 10, 18, 6, 0x3e2310);
+      grave.add([dirt, vertical, horizontal]);
 
       // Pop up from below
       grave.setScale(0.3);
-      grave.y += 16;
+      grave.y += 14;
       this.tweens.add({
         targets: grave,
-        y: deathY + 6,
+        y: deathY + 4,
         scale: 1,
         duration: 400,
         ease: 'Back.Out'
