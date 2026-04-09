@@ -600,16 +600,86 @@ export class GameScene extends Phaser.Scene {
     for (const tower of this.towers) {
       tower.drawHpBar();
       const st = tower.stats();
-      const tgt = this.findNearestEnemy(tower.x, tower.y, st.range);
-      if (!tgt) continue;
-      const angle = Math.atan2(tgt.y - tower.y, tgt.x - tower.x);
-      tower.top.setRotation(angle);
-      if (time > tower.lastShot + st.fireRate) {
-        tower.lastShot = time;
-        tower.top.play(tower.kind === 'cannon' ? 'cannon-top-shoot' : 'tower-top-shoot', true);
-        this.spawnProjectile(tower.x, tower.y, tgt.x, tgt.y, st.projectileSpeed, st.damage, st.splashRadius);
+
+      if (st.splashRadius > 0) {
+        // Cannon: aim at the spot that hits the most enemies
+        const aim = this.findBestCannonTarget(tower.x, tower.y, st.range, st.splashRadius, st.projectileSpeed);
+        if (!aim) continue;
+        const angle = Math.atan2(aim.y - tower.y, aim.x - tower.x);
+        tower.top.setRotation(angle);
+        if (time > tower.lastShot + st.fireRate) {
+          tower.lastShot = time;
+          tower.top.play('cannon-top-shoot', true);
+          this.spawnProjectile(tower.x, tower.y, aim.x, aim.y, st.projectileSpeed, st.damage, st.splashRadius);
+        }
+      } else {
+        // Arrow: shoot at nearest enemy
+        const tgt = this.findNearestEnemy(tower.x, tower.y, st.range);
+        if (!tgt) continue;
+        const angle = Math.atan2(tgt.y - tower.y, tgt.x - tower.x);
+        tower.top.setRotation(angle);
+        if (time > tower.lastShot + st.fireRate) {
+          tower.lastShot = time;
+          tower.top.play('tower-top-shoot', true);
+          this.spawnProjectile(tower.x, tower.y, tgt.x, tgt.y, st.projectileSpeed, st.damage);
+        }
       }
     }
+  }
+
+  // Find the aim point within range that maximizes enemies hit by splash.
+  // Considers each enemy's predicted position when the cannonball arrives.
+  findBestCannonTarget(tx: number, ty: number, range: number, splash: number, projSpeed: number): { x: number; y: number } | null {
+    const r2 = range * range;
+    const s2 = splash * splash;
+
+    // Collect predicted positions for all enemies in range
+    const candidates: { px: number; py: number }[] = [];
+    this.enemies.children.iterate((c: any) => {
+      const e = c as Enemy;
+      if (!e || !e.active || e.dying) return true;
+      const d2 = (e.x - tx) ** 2 + (e.y - ty) ** 2;
+      if (d2 > r2) return true;
+      // Lead: predict where enemy will be when ball arrives
+      const dist = Math.sqrt(d2) || 1;
+      const travelTime = dist / projSpeed;
+      const b = e.body as Phaser.Physics.Arcade.Body;
+      const px = e.x + (b ? b.velocity.x * travelTime : 0);
+      const py = e.y + (b ? b.velocity.y * travelTime : 0);
+      candidates.push({ px, py });
+      return true;
+    });
+    // Also consider the boss
+    if (this.boss && this.boss.active && !this.boss.dying) {
+      const d2 = (this.boss.x - tx) ** 2 + (this.boss.y - ty) ** 2;
+      if (d2 <= r2) {
+        const dist = Math.sqrt(d2) || 1;
+        const travelTime = dist / projSpeed;
+        const b = this.boss.body as Phaser.Physics.Arcade.Body;
+        const px = this.boss.x + (b ? b.velocity.x * travelTime : 0);
+        const py = this.boss.y + (b ? b.velocity.y * travelTime : 0);
+        candidates.push({ px, py });
+      }
+    }
+
+    if (candidates.length === 0) return null;
+
+    // Test each candidate position as a potential aim point and pick the one
+    // that catches the most enemies in the splash radius
+    let bestCount = 0;
+    let bestX = candidates[0].px, bestY = candidates[0].py;
+    for (const c of candidates) {
+      let count = 0;
+      for (const o of candidates) {
+        if ((c.px - o.px) ** 2 + (c.py - o.py) ** 2 <= s2) count++;
+      }
+      if (count > bestCount) {
+        bestCount = count;
+        bestX = c.px;
+        bestY = c.py;
+      }
+    }
+    return { x: bestX, y: bestY };
   }
 
   findNearestEnemy(x: number, y: number, range: number): Enemy | Boss | null {
@@ -1228,13 +1298,46 @@ export class GameScene extends Phaser.Scene {
     this.projectiles.children.iterate((c: any) => {
       const p = c as Projectile;
       if (!p || !p.active) return true;
-      if (time - p.born > p.lifetime) p.destroy();
+      if (time - p.born > p.lifetime) { p.destroy(); return true; }
+
+      if (p.groundTarget) {
+        // Undo previous arc offset so physics position is correct
+        p.y += p.arcOffset;
+
+        // Check arrival at ground target
+        const d = Math.hypot(p.groundX - p.x, p.groundY - p.y);
+        if (d < 14) {
+          p.arcOffset = 0;
+          this.cannonExplode(p.groundX, p.groundY, p.splashRadius, p.damage);
+          p.destroy();
+          return true;
+        }
+
+        // Arc: parabolic height based on flight progress
+        const traveled = Math.hypot(p.x - p.startX, p.y - p.startY);
+        const t = Math.min(traveled / p.totalDist, 1);
+        const arcHeight = Math.sin(t * Math.PI) * 22;
+        p.arcOffset = arcHeight;
+
+        // Shadow follows on the ground
+        if (p.shadow) {
+          p.shadow.setPosition(p.x, p.y);
+          const shadowScale = 0.4 + Math.sin(t * Math.PI) * 0.5;
+          p.shadow.setScale(shadowScale);
+          p.shadow.setAlpha(0.4 - Math.sin(t * Math.PI) * 0.2);
+        }
+
+        // Visually shift the ball upward (arc)
+        p.y -= arcHeight;
+      }
       return true;
     });
   }
 
   projectileHitsBoss(pr: Projectile, b: Boss) {
     if (!pr.active || !b.active || b.dying) return;
+    // Cannonballs ignore direct hits — they explode on reaching their ground target
+    if (pr.groundTarget) return;
     b.hurt(pr.damage);
     const spark = this.add.sprite(pr.x, pr.y, 'fx_hit_0').setDepth(15);
     spark.play('fx-hit');
@@ -1255,18 +1358,11 @@ export class GameScene extends Phaser.Scene {
 
   projectileHitsEnemy(pr: Projectile, e: Enemy) {
     if (!pr.active || !e.active || e.dying) return;
-    const splash = pr.splashRadius;
-    const dmg = pr.damage;
-    const ix = pr.x, iy = pr.y;
+    // Cannonballs ignore direct hits — they explode on reaching their ground target
+    if (pr.groundTarget) return;
 
-    if (splash > 0) {
-      // AoE: damage everyone (including the initial hit enemy and boss) within radius
-      this.cannonExplode(ix, iy, splash, dmg);
-    } else {
-      this.applyDamageToEnemy(e, dmg);
-    }
-
-    const spark = this.add.sprite(ix, iy, 'fx_hit_0').setDepth(15);
+    this.applyDamageToEnemy(e, pr.damage);
+    const spark = this.add.sprite(pr.x, pr.y, 'fx_hit_0').setDepth(15);
     spark.play('fx-hit');
     spark.once('animationcomplete', () => spark.destroy());
     pr.destroy();
@@ -1394,16 +1490,8 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
-    // 7) Scorch mark that lingers briefly on the ground
-    const scorch = this.add.circle(x, y, radius * 0.7, 0x1a1214, 0.55)
-      .setDepth(2);
-    this.tweens.add({
-      targets: scorch,
-      alpha: { from: 0.55, to: 0 },
-      duration: 1200,
-      ease: 'Sine.In',
-      onComplete: () => scorch.destroy()
-    });
+    // 7) Permanent dirt crater on the ground
+    this.spawnCrater(x, y, radius);
 
     this.cameras.main.shake(140, 0.006);
 
@@ -1427,6 +1515,39 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------- COINS ----------
+  spawnCrater(x: number, y: number, _radius: number) {
+    const g = this.add.graphics().setDepth(1);
+    const cr = 10;
+    // Outer scorched dots — dark burnt ground
+    const burnColors = [0x1a1008, 0x241810, 0x2e2014];
+    const chunks = Phaser.Math.Between(6, 9);
+    for (let i = 0; i < chunks; i++) {
+      const a = (i / chunks) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.4, 0.4);
+      const d = cr + Phaser.Math.FloatBetween(1, 5);
+      const cx = x + Math.cos(a) * d;
+      const cy = y + Math.sin(a) * d;
+      g.fillStyle(burnColors[i % 3], Phaser.Math.FloatBetween(0.5, 0.7));
+      g.fillCircle(cx, cy, Phaser.Math.FloatBetween(1.5, 3));
+    }
+    // Brown crater bowl
+    g.fillStyle(0x3e2e1a, 0.6);
+    g.fillEllipse(x, y, cr * 2, cr * 1.5);
+    // Darker center
+    g.fillStyle(0x2a1e10, 0.5);
+    g.fillEllipse(x + Phaser.Math.FloatBetween(-1, 1), y + Phaser.Math.FloatBetween(-1, 1), cr * 1.1, cr * 0.8);
+    // Light dirt highlight on top rim
+    g.fillStyle(0x9a7a50, 0.25);
+    g.fillEllipse(x, y - cr * 0.3, cr * 1.3, cr * 0.35);
+    // Fade out over 15 seconds then destroy
+    this.tweens.add({
+      targets: g,
+      alpha: 0,
+      duration: 15000,
+      ease: 'Sine.In',
+      onComplete: () => g.destroy()
+    });
+  }
+
   updateCoins(delta: number) {
     const dt = delta / 1000;
     this.coins.children.iterate((c: any) => {

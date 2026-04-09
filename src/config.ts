@@ -26,11 +26,11 @@ export const CFG = {
         ]
       },
       cannon: {
-        cost: 120,
+        cost: 100,
         levels: [
-          { hp: 180, fireRate: 1400, range: 220, damage: 30, projectileSpeed: 360, splashRadius: 48, upgradeCost: 130 },
-          { hp: 250, fireRate: 1250, range: 240, damage: 44, projectileSpeed: 380, splashRadius: 58, upgradeCost: 220 },
-          { hp: 340, fireRate: 1100, range: 260, damage: 62, projectileSpeed: 400, splashRadius: 72, upgradeCost: 0 }
+          { hp: 180, fireRate: 1400, range: 220, damage: 15, projectileSpeed: 200, splashRadius: 48, upgradeCost: 110 },
+          { hp: 250, fireRate: 1250, range: 240, damage: 22, projectileSpeed: 220, splashRadius: 58, upgradeCost: 200 },
+          { hp: 340, fireRate: 1100, range: 260, damage: 32, projectileSpeed: 240, splashRadius: 72, upgradeCost: 0 }
         ]
       }
     }
@@ -41,7 +41,7 @@ export const CFG = {
     cost: 5
   },
 
-  startMoney: 60,
+  startMoney: 120,
 
   enemy: {
     basic:  { hp: 20, speed: 60,  dmg: 8,  coin: 1, color: 0xd9412b },
@@ -63,7 +63,7 @@ export const CFG = {
     waveSize: 100,          // enemies per wave
     waveCount: 2,           // number of waves before the boss
     waveBreak: 15000,       // ms of build break between waves
-    runnerPackStartWave: 0, // 0-indexed wave at which runner packs start appearing
+    runnerPackStartWave: 1, // 0-indexed wave at which runner packs start appearing
     runnerPackSize: 5,      // runners per pack
     runnerPackCooldownMin: 7000,
     runnerPackCooldownMax: 12000

@@ -787,6 +787,67 @@ function drawArrow(frame: 0|1) {
 }
 
 // ==================================================================
+//  CANNONBALL (32x32) — dark iron sphere with specular highlight
+// ==================================================================
+function drawCannonball(frame: 0|1) {
+  return (put: Put) => {
+    const cx = 16, cy = 16, r = 5;
+    // Main sphere body — dark iron
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r * r) continue;
+        const dist = Math.sqrt(dx * dx + dy * dy) / r;
+        let color: string;
+        if (dist < 0.4) color = '#4a4a54';       // lighter center
+        else if (dist < 0.7) color = '#333340';   // mid
+        else color = '#1e1e28';                    // dark edge
+        put(cx + dx, cy + dy, color);
+      }
+    }
+    // Outline ring
+    for (let dy = -(r + 1); dy <= r + 1; dy++) {
+      for (let dx = -(r + 1); dx <= r + 1; dx++) {
+        const d2 = dx * dx + dy * dy;
+        if (d2 > (r + 1) * (r + 1) || d2 <= r * r) continue;
+        // Only draw outline where there isn't already a sphere pixel
+        const innerD = Math.sqrt(dx * dx + dy * dy);
+        if (innerD > r && innerD <= r + 1.2) put(cx + dx, cy + dy, P.outline);
+      }
+    }
+    // Specular highlight — upper-left
+    const hx = cx - 2, hy = cy - 2;
+    put(hx, hy, '#8888a0');
+    put(hx + 1, hy, '#6a6a7a');
+    put(hx, hy + 1, '#6a6a7a');
+    if (frame === 0) {
+      put(hx - 1, hy - 1, '#aaaabc');  // bright specular dot
+    } else {
+      put(hx + 1, hy - 1, '#aaaabc');  // shifted slightly for subtle spin
+    }
+    // Bottom rivet/seam detail
+    put(cx - 1, cy + 3, '#141420');
+    put(cx, cy + 3, '#141420');
+    put(cx + 1, cy + 3, '#141420');
+  };
+}
+
+// Cannonball shadow (32x32) — simple dark ellipse
+function drawCannonballShadow() {
+  return (put: Put) => {
+    const cx = 16, cy = 16;
+    // Ellipse: wider than tall
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -4; dx <= 4; dx++) {
+        const nx = dx / 4, ny = dy / 2;
+        if (nx * nx + ny * ny <= 1) {
+          put(cx + dx, cy + dy, P.outline);
+        }
+      }
+    }
+  };
+}
+
+// ==================================================================
 //  COIN (32x32) — 6 spin frames
 // ==================================================================
 type CoinTier = 'bronze' | 'silver' | 'gold';
@@ -1180,6 +1241,11 @@ export function generateAllArt(scene: Phaser.Scene) {
   add(scene, 'arrow_0', makeCanvas(32, drawArrow(0)));
   add(scene, 'arrow_1', makeCanvas(32, drawArrow(1)));
 
+  // Cannonball
+  add(scene, 'cball_0', makeCanvas(32, drawCannonball(0)));
+  add(scene, 'cball_1', makeCanvas(32, drawCannonball(1)));
+  add(scene, 'cball_shadow', makeCanvas(32, drawCannonballShadow()));
+
   // Coin (bronze / silver / gold tiers)
   for (let i = 0; i < 6; i++) add(scene, `coin_${i}`, makeCanvas(32, drawCoin(i as any, 'gold')));
   for (const tier of ['bronze','silver','gold'] as const) {
@@ -1240,6 +1306,7 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('cannon-top-shoot', ['c_top_1','c_top_0'], 10, 0);
 
   mk('arrow-spin', ['arrow_0','arrow_1'], 20, -1);
+  mk('cball-spin', ['cball_0','cball_1'], 8, -1);
 
   mk('coin-spin',  ['coin_0','coin_1','coin_2','coin_3','coin_4','coin_5'], 10, -1);
   for (const tier of ['bronze','silver','gold'] as const) {
