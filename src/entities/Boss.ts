@@ -25,6 +25,12 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
   chargeDirY = 0;
   lastSmoke = 0;
 
+  // Pathfinding state (same as Enemy)
+  path: { x: number; y: number }[] = [];
+  pathIdx = 0;
+  lastPath = 0;
+  _pv = -1; // grid version tracker
+
   hpBar: Phaser.GameObjects.Graphics;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {

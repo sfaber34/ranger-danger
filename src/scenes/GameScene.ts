@@ -7,7 +7,7 @@ import { Wall } from '../entities/Wall';
 import { Projectile } from '../entities/Projectile';
 import { Coin } from '../entities/Coin';
 import { Boss } from '../entities/Boss';
-import { createGrid, findPath, Grid } from '../systems/Pathfinding';
+import { createGrid, findPath, edgesCanReachPlayer, Grid } from '../systems/Pathfinding';
 
 type BuildKind = 'none' | 'tower' | 'wall';
 
@@ -193,7 +193,8 @@ export class GameScene extends Phaser.Scene {
     this.pushHud();
   }
 
-  // Check if a 3x3 block with top-left at (tx,ty) is all free (and not under player)
+  // Check if a 2x2 block with top-left at (tx,ty) is all free, not under player,
+  // and wouldn't block enemy pathing from all 4 edges to the player.
   canPlaceTower(tx: number, ty: number): boolean {
     const s = CFG.tower.tiles;
     if (tx < 0 || ty < 0 || tx + s > CFG.worldCols || ty + s > CFG.worldRows) return false;
@@ -204,7 +205,11 @@ export class GameScene extends Phaser.Scene {
         if (pt.x === tx + i && pt.y === ty + j) return false;
       }
     }
-    return true;
+    // Temporarily block tiles and check edges can still reach the player
+    for (let j = 0; j < s; j++) for (let i = 0; i < s; i++) this.grid[ty + j][tx + i] = 1;
+    const ok = edgesCanReachPlayer(this.grid, pt.x, pt.y);
+    for (let j = 0; j < s; j++) for (let i = 0; i < s; i++) this.grid[ty + j][tx + i] = 0;
+    return ok;
   }
 
   handleClick(p: Phaser.Input.Pointer) {
@@ -268,6 +273,11 @@ export class GameScene extends Phaser.Scene {
     const pt = this.worldToTile(this.player.x, this.player.y);
     if (pt.x === tx && pt.y === ty) return;
     if (this.player.money < CFG.wall.cost) return;
+    // Check placing this wall won't block all paths from edges to player
+    this.grid[ty][tx] = 1;
+    const wallOk = edgesCanReachPlayer(this.grid, pt.x, pt.y);
+    this.grid[ty][tx] = 0;
+    if (!wallOk) return;
     this.player.money -= CFG.wall.cost;
     const w = new Wall(this, tx, ty);
     this.walls.push(w);
@@ -499,7 +509,13 @@ export class GameScene extends Phaser.Scene {
         this.ghost.setTint(this.canPlaceTower(ox, oy) ? 0x88ff88 : 0xff8888);
       } else {
         this.ghost.setPosition(tx * CFG.tile + CFG.tile / 2, ty * CFG.tile + CFG.tile / 2);
-        const valid = tx >= 0 && ty >= 0 && tx < CFG.worldCols && ty < CFG.worldRows && this.grid[ty][tx] === 0;
+        let valid = tx >= 0 && ty >= 0 && tx < CFG.worldCols && ty < CFG.worldRows && this.grid[ty][tx] === 0;
+        if (valid) {
+          const pt = this.worldToTile(this.player.x, this.player.y);
+          this.grid[ty][tx] = 1;
+          valid = edgesCanReachPlayer(this.grid, pt.x, pt.y);
+          this.grid[ty][tx] = 0;
+        }
         this.ghost.setTint(valid ? 0x88ff88 : 0xff8888);
       }
     }
@@ -641,37 +657,28 @@ export class GameScene extends Phaser.Scene {
       const e = c as Enemy;
       if (!e || !e.active || e.dying) return true;
 
-      // choose target: nearest of player or tower
-      let target: { x: number; y: number; ref: any } = { x: this.player.x, y: this.player.y, ref: this.player };
-      let bestD = (this.player.x - e.x) ** 2 + (this.player.y - e.y) ** 2;
-      for (const t of this.towers) {
-        const d = (t.x - e.x) ** 2 + (t.y - e.y) ** 2;
-        if (d < bestD) { bestD = d; target = { x: t.x, y: t.y, ref: t }; }
-      }
-      e.targetRef = target.ref;
+      // Always target the player — enemies never attack structures
+      const tx = this.player.x, ty = this.player.y;
+      e.targetRef = this.player;
+      const prefix = e.kind === 'basic' || e.kind === 'runner' ? 'eb' : 'eh';
+      const dist2 = (tx - e.x) ** 2 + (ty - e.y) ** 2;
 
-      // attack range — bigger for towers since they're 3x3
-      const attackRange = target.ref instanceof Tower ? CFG.tile * 2 : 30;
-      const dist2ToTarget = (target.x - e.x) ** 2 + (target.y - e.y) ** 2;
-      const prefix = e.kind === 'basic' ? 'eb' : 'eh';
-
-      if (dist2ToTarget < attackRange * attackRange) {
+      // Melee attack when close to player
+      if (dist2 < 30 * 30) {
         e.setVelocity(0, 0);
         if (e.anims.currentAnim?.key !== `${prefix}-atk`) e.play(`${prefix}-atk`);
         if (time > e.attackCd) {
           e.attackCd = time + 800;
-          const r = target.ref;
-          if (r === this.player) this.player.hurt(e.dmg, this);
-          else if (r && typeof r.hurt === 'function') r.hurt(e.dmg);
+          this.player.hurt(e.dmg, this);
           if (this.player.hp <= 0) this.lose();
         }
         return true;
       }
 
-      // Direct chase if nothing is in the way — this feels like real tracking.
-      const clear = !this.lineBlocked(e.x, e.y, target.x, target.y);
+      // Direct chase if line-of-sight is clear
+      const clear = !this.lineBlocked(e.x, e.y, tx, ty);
       if (clear) {
-        const dx = target.x - e.x, dy = target.y - e.y;
+        const dx = tx - e.x, dy = ty - e.y;
         const d = Math.hypot(dx, dy) || 1;
         e.setVelocity((dx / d) * e.speed, (dy / d) * e.speed);
         e.setFlipX(dx < 0);
@@ -680,12 +687,12 @@ export class GameScene extends Phaser.Scene {
         return true;
       }
 
-      // Blocked by walls/towers — recompute path occasionally and follow it.
+      // Blocked — BFS pathfind around walls/towers toward the player
       if (time > e.lastPath + 400 || (e as any)._pv !== this.gridVersion || !e.path || e.path.length === 0) {
         e.lastPath = time;
         (e as any)._pv = this.gridVersion;
         const start = this.worldToTile(e.x, e.y);
-        const goal = this.worldToTile(target.x, target.y);
+        const goal = this.worldToTile(tx, ty);
         const saved = this.grid[goal.y] && this.grid[goal.y][goal.x];
         if (saved === 1) this.grid[goal.y][goal.x] = 0;
         e.path = findPath(this.grid, start.x, start.y, goal.x, goal.y);
@@ -693,10 +700,9 @@ export class GameScene extends Phaser.Scene {
         e.pathIdx = 0;
       }
 
+      let moveX = 0, moveY = 0;
       if (e.path && e.path.length > 0) {
         if (e.pathIdx >= e.path.length) e.pathIdx = e.path.length - 1;
-        // Look ahead: skip to the furthest node we have line-of-sight to.
-        // This cuts the zig-zag from grid-aligned waypoints.
         let lookahead = e.pathIdx;
         for (let i = e.path.length - 1; i > e.pathIdx; i--) {
           const node = e.path[i];
@@ -711,31 +717,48 @@ export class GameScene extends Phaser.Scene {
         const dx = nx - e.x, dy = ny - e.y;
         const d = Math.hypot(dx, dy);
         if (d < 4 && e.pathIdx < e.path.length - 1) e.pathIdx++;
-        if (d > 0.01) {
-          e.setVelocity((dx / d) * e.speed, (dy / d) * e.speed);
-          e.setFlipX(dx < 0);
-        }
+        if (d > 0.01) { moveX = dx / d; moveY = dy / d; }
       } else {
-        const dx = target.x - e.x, dy = target.y - e.y;
+        // No path found — direct chase as fallback
+        const dx = tx - e.x, dy = ty - e.y;
         const d = Math.hypot(dx, dy) || 1;
-        e.setVelocity((dx / d) * e.speed, (dy / d) * e.speed);
-        e.setFlipX(dx < 0);
+        moveX = dx / d; moveY = dy / d;
       }
+
+      // Wall avoidance: push away from nearby blocked tiles to prevent corner sticking
+      const etx = Math.floor(e.x / CFG.tile), ety = Math.floor(e.y / CFG.tile);
+      let avoidX = 0, avoidY = 0;
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          if (ox === 0 && oy === 0) continue;
+          const gx = etx + ox, gy = ety + oy;
+          if (gx < 0 || gy < 0 || gx >= CFG.worldCols || gy >= CFG.worldRows) continue;
+          if (this.grid[gy][gx] !== 1) continue;
+          const wallCX = gx * CFG.tile + CFG.tile / 2;
+          const wallCY = gy * CFG.tile + CFG.tile / 2;
+          const rdx = e.x - wallCX, rdy = e.y - wallCY;
+          const rd = Math.hypot(rdx, rdy) || 1;
+          const strength = Math.max(0, 1 - rd / (CFG.tile * 1.2));
+          avoidX += (rdx / rd) * strength;
+          avoidY += (rdy / rd) * strength;
+        }
+      }
+      const avoidMag = Math.hypot(avoidX, avoidY);
+      if (avoidMag > 0) {
+        const avoidWeight = 0.4;
+        moveX = moveX * (1 - avoidWeight) + (avoidX / avoidMag) * avoidWeight;
+        moveY = moveY * (1 - avoidWeight) + (avoidY / avoidMag) * avoidWeight;
+        const ml = Math.hypot(moveX, moveY) || 1;
+        moveX /= ml; moveY /= ml;
+      }
+      e.setVelocity(moveX * e.speed, moveY * e.speed);
+      e.setFlipX(moveX < 0);
       if (e.anims.currentAnim?.key !== `${prefix}-move`) e.play(`${prefix}-move`);
       return true;
     });
   }
 
   // ---------- BOSS ----------
-  chooseBossTarget(b: Boss) {
-    let tx = this.player.x, ty = this.player.y, ref: any = this.player;
-    let bestD = (this.player.x - b.x) ** 2 + (this.player.y - b.y) ** 2;
-    for (const t of this.towers) {
-      const d = (t.x - b.x) ** 2 + (t.y - b.y) ** 2;
-      if (d < bestD) { bestD = d; tx = t.x; ty = t.y; ref = t; }
-    }
-    return { x: tx, y: ty, ref };
-  }
 
   updateBoss(time: number) {
     const b = this.boss;
@@ -795,9 +818,8 @@ export class GameScene extends Phaser.Scene {
 
     if (b.state !== 'chase') return;
 
-    const target = this.chooseBossTarget(b);
-    const dx = target.x - b.x, dy = target.y - b.y;
-    const dist = Math.hypot(dx, dy);
+    const px = this.player.x, py = this.player.y;
+    const distToPlayer = Math.hypot(px - b.x, py - b.y);
 
     // ability triggers (in priority order)
     // Birthing happens passively while chasing — no pause
@@ -805,7 +827,6 @@ export class GameScene extends Phaser.Scene {
       this.bossBirthSpawn(b);
       b.nextBirth = time + 3800;
     }
-    const distToPlayer = Math.hypot(this.player.x - b.x, this.player.y - b.y);
     if (time >= b.nextCharge && distToPlayer > 40) {
       b.state = 'charge_wind';
       b.stateEnd = time + 1200;
@@ -813,7 +834,7 @@ export class GameScene extends Phaser.Scene {
       b.play('boss-chargewind');
       return;
     }
-    if (dist < 62 && time >= b.nextSlam) {
+    if (distToPlayer < 62 && time >= b.nextSlam) {
       b.state = 'slam_wind';
       b.stateEnd = time + 600;
       b.setVelocity(0, 0);
@@ -821,11 +842,80 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // walk toward target
-    if (dist > 1) {
-      b.setVelocity((dx / dist) * b.speed, (dy / dist) * b.speed);
-      b.setFlipX(dx < 0);
+    // Pathfind toward the player (same logic as regular enemies)
+    let moveX = 0, moveY = 0;
+    const clear = !this.lineBlocked(b.x, b.y, px, py);
+    if (clear) {
+      const dx = px - b.x, dy = py - b.y;
+      const d = Math.hypot(dx, dy) || 1;
+      moveX = dx / d; moveY = dy / d;
+      b.path = [];
+    } else {
+      // BFS pathfinding around walls/towers
+      if (time > b.lastPath + 400 || b._pv !== this.gridVersion || !b.path || b.path.length === 0) {
+        b.lastPath = time;
+        b._pv = this.gridVersion;
+        const start = this.worldToTile(b.x, b.y);
+        const goal = this.worldToTile(px, py);
+        const saved = this.grid[goal.y] && this.grid[goal.y][goal.x];
+        if (saved === 1) this.grid[goal.y][goal.x] = 0;
+        b.path = findPath(this.grid, start.x, start.y, goal.x, goal.y);
+        if (saved === 1) this.grid[goal.y][goal.x] = 1;
+        b.pathIdx = 0;
+      }
+
+      if (b.path && b.path.length > 0) {
+        if (b.pathIdx >= b.path.length) b.pathIdx = b.path.length - 1;
+        let lookahead = b.pathIdx;
+        for (let i = b.path.length - 1; i > b.pathIdx; i--) {
+          const node = b.path[i];
+          const nx = node.x * CFG.tile + CFG.tile / 2;
+          const ny = node.y * CFG.tile + CFG.tile / 2;
+          if (!this.lineBlocked(b.x, b.y, nx, ny)) { lookahead = i; break; }
+        }
+        b.pathIdx = lookahead;
+        const node = b.path[b.pathIdx];
+        const nx = node.x * CFG.tile + CFG.tile / 2;
+        const ny = node.y * CFG.tile + CFG.tile / 2;
+        const dx = nx - b.x, dy = ny - b.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 4 && b.pathIdx < b.path.length - 1) b.pathIdx++;
+        if (d > 0.01) { moveX = dx / d; moveY = dy / d; }
+      } else {
+        const dx = px - b.x, dy = py - b.y;
+        const d = Math.hypot(dx, dy) || 1;
+        moveX = dx / d; moveY = dy / d;
+      }
     }
+
+    // Wall avoidance steering
+    const btx = Math.floor(b.x / CFG.tile), bty = Math.floor(b.y / CFG.tile);
+    let avoidX = 0, avoidY = 0;
+    for (let oy = -1; oy <= 1; oy++) {
+      for (let ox = -1; ox <= 1; ox++) {
+        if (ox === 0 && oy === 0) continue;
+        const gx = btx + ox, gy = bty + oy;
+        if (gx < 0 || gy < 0 || gx >= CFG.worldCols || gy >= CFG.worldRows) continue;
+        if (this.grid[gy][gx] !== 1) continue;
+        const wallCX = gx * CFG.tile + CFG.tile / 2;
+        const wallCY = gy * CFG.tile + CFG.tile / 2;
+        const rdx = b.x - wallCX, rdy = b.y - wallCY;
+        const rd = Math.hypot(rdx, rdy) || 1;
+        const strength = Math.max(0, 1 - rd / (CFG.tile * 1.2));
+        avoidX += (rdx / rd) * strength;
+        avoidY += (rdy / rd) * strength;
+      }
+    }
+    const avoidMag = Math.hypot(avoidX, avoidY);
+    if (avoidMag > 0) {
+      const avoidWeight = 0.35;
+      moveX = moveX * (1 - avoidWeight) + (avoidX / avoidMag) * avoidWeight;
+      moveY = moveY * (1 - avoidWeight) + (avoidY / avoidMag) * avoidWeight;
+      const ml = Math.hypot(moveX, moveY) || 1;
+      moveX /= ml; moveY /= ml;
+    }
+    b.setVelocity(moveX * b.speed, moveY * b.speed);
+    b.setFlipX(moveX < 0);
     if (b.anims.currentAnim?.key !== 'boss-move') b.play('boss-move');
 
     // passive contact damage (touching the player)
@@ -1119,39 +1209,12 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  enemyHitsWall(e: Enemy, w: Wall) {
-    if (!e.active || e.dying) return;
-    if (this.vTime > e.attackCd) {
-      e.attackCd = this.vTime + 700;
-      const prefix = e.kind === 'basic' ? 'eb' : 'eh';
-      e.play(`${prefix}-atk`, true);
-      w.hurt(e.dmg);
-      if (w.hp <= 0) {
-        const idx = this.walls.indexOf(w);
-        if (idx >= 0) this.walls.splice(idx, 1);
-        this.grid[w.tileY][w.tileX] = 0;
-        this.gridVersion++;
-        w.destroy();
-      }
-    }
+  enemyHitsWall(_e: Enemy, _w: Wall) {
+    // Enemies no longer attack structures — collider just blocks movement
   }
 
-  enemyHitsTower(e: Enemy, t: Tower) {
-    if (!e.active || e.dying) return;
-    if (this.vTime > e.attackCd) {
-      e.attackCd = this.vTime + 700;
-      t.hurt(e.dmg);
-      if (t.hp <= 0) {
-        const idx = this.towers.indexOf(t);
-        if (idx >= 0) this.towers.splice(idx, 1);
-        for (let j = 0; j < t.size; j++) for (let i = 0; i < t.size; i++) this.grid[t.tileY + j][t.tileX + i] = 0;
-        this.gridVersion++;
-        const burst = this.add.sprite(t.x, t.y, 'fx_death_0').setDepth(15);
-        burst.play('fx-death');
-        burst.once('animationcomplete', () => burst.destroy());
-        t.destroyTower();
-      }
-    }
+  enemyHitsTower(_e: Enemy, _t: Tower) {
+    // Enemies no longer attack structures — collider just blocks movement
   }
 
   // ---------- PROJECTILES ----------
