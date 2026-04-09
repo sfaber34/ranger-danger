@@ -14,7 +14,7 @@ export class Coin extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
     this.tier = tier;
     this.value = tier === 'gold' ? 3 : tier === 'silver' ? 2 : 1;
-    this.born = scene.time.now;
+    this.born = (scene as any).vTime ?? scene.time.now;
     this.setDepth(7);
     this.setSize(12, 12).setOffset(10, 10);
     this.play(`coin-${tier}-spin`);

@@ -21,9 +21,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   hurt(amount: number, scene: Phaser.Scene) {
-    if (this.invuln > scene.time.now) return;
+    const now = (scene as any).vTime ?? scene.time.now;
+    if (this.invuln > now) return;
     this.hp -= amount;
-    this.invuln = scene.time.now + 500;
+    this.invuln = now + 500;
     this.play('player-hit', true);
     scene.tweens.add({
       targets: this, alpha: 0.3, yoyo: true, duration: 80, repeat: 3,

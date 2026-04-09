@@ -34,14 +34,25 @@ export class GameScene extends Phaser.Scene {
   rampTimer = 0;
   heavyChance = CFG.spawn.heavyChanceStart;
   waveStartAt = 0;
-  spawnedCount = 0;
-  nextBreakAt = CFG.spawn.breakEvery;
-  breakUntil = 0;
+  wave = 0;               // 0-indexed current wave
+  waveSpawned = 0;        // enemies spawned in the current wave
+  waveKills = 0;          // kills counted for the current wave
+  waveBreakUntil = 0;     // timestamp when the inter-wave build break ends
   countdownText!: Phaser.GameObjects.Text;
+
+  // Virtual / scalable game time so the "speed up" button affects all
+  // cooldown / spawn logic, not just physics and animations.
+  timeMult = 1;
+  vTime = 0;
+
+  selectedTower: Tower | null = null;
+  selectionRing!: Phaser.GameObjects.Graphics;
+  towerPanel!: Phaser.GameObjects.Container;
+  towerPanelBounds = { x: 0, y: 0, w: 0, h: 0 };
 
   boss: Boss | null = null;
   bossSpawned = false;
-  bossSpawnAt = CFG.winKills; // boss arrives once the player reaches this kill count
+  bossCountdownUntil = 0;       // set once the last wave is cleared, boss spawns at this time
 
   killsTarget = CFG.winKills;
   gameOver = false;
@@ -91,7 +102,10 @@ export class GameScene extends Phaser.Scene {
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,ONE,TWO,X,ESC');
     this.input.keyboard!.on('keydown-ONE', () => this.setBuild('tower'));
     this.input.keyboard!.on('keydown-TWO', () => this.setBuild('wall'));
-    this.input.keyboard!.on('keydown-ESC', () => this.setBuild('none'));
+    this.input.keyboard!.on('keydown-ESC', () => {
+      if (this.selectedTower) this.deselectTower();
+      else this.setBuild('none');
+    });
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.handleClick(p));
 
     // build ghost
@@ -108,16 +122,23 @@ export class GameScene extends Phaser.Scene {
     }
     this.gridOverlay = gridG;
 
+    // selection ring (tower range visualizer)
+    this.selectionRing = this.add.graphics().setDepth(18).setVisible(false);
+
+    // tower upgrade panel (built once, positioned/shown on selection)
+    this.towerPanel = this.add.container(0, 0).setDepth(50).setVisible(false);
+
     // events from UI
     this.events.emit('hud', this.hudState());
     this.game.events.on('ui-build', (k: BuildKind) => this.setBuild(k));
     this.game.events.on('ui-sell', () => this.setBuild('none'));
+    this.game.events.on('ui-speed', (mult: number) => this.setTimeScale(mult));
 
     // initial UI update
     this.scene.get('UI').events.emit('hud', this.hudState());
 
     // pre-wave build phase
-    this.waveStartAt = this.time.now + CFG.spawn.startDelay;
+    this.waveStartAt = CFG.spawn.startDelay;
     this.countdownText = this.add.text(W / 2, 36, '', {
       fontFamily: 'monospace', fontSize: '20px', color: '#7cc4ff',
       stroke: '#0b0f1a', strokeThickness: 4
@@ -141,12 +162,22 @@ export class GameScene extends Phaser.Scene {
     this.game.events.emit('hud', this.hudState());
   }
 
+  setTimeScale(mult: number) {
+    this.timeMult = mult;
+    // Phaser's physics.world.timeScale is inverted: lower = faster.
+    this.physics.world.timeScale = 1 / mult;
+    this.anims.globalTimeScale = mult;
+    this.tweens.timeScale = mult;
+    this.time.timeScale = mult;
+  }
+
   setBuild(k: BuildKind) {
     this.buildKind = k;
     this.ghost.setVisible(k !== 'none');
     if (this.gridOverlay) this.gridOverlay.setVisible(k !== 'none');
     if (k === 'tower') this.ghost.setTexture('t_base');
     if (k === 'wall') this.ghost.setTexture('wall');
+    if (k !== 'none') this.deselectTower();
     this.pushHud();
   }
 
@@ -167,9 +198,16 @@ export class GameScene extends Phaser.Scene {
   handleClick(p: Phaser.Input.Pointer) {
     if (this.gameOver) return;
     const wx = p.worldX, wy = p.worldY;
+
+    // panel takes priority — clicks inside it are handled by button hit areas
+    if (this.selectedTower && this.pointInPanel(wx, wy)) return;
+
     const tx = Math.floor(wx / CFG.tile);
     const ty = Math.floor(wy / CFG.tile);
-    if (tx < 0 || ty < 0 || tx >= CFG.worldCols || ty >= CFG.worldRows) return;
+    if (tx < 0 || ty < 0 || tx >= CFG.worldCols || ty >= CFG.worldRows) {
+      this.deselectTower();
+      return;
+    }
 
     // sell with X held + click
     if (this.keys.X.isDown) {
@@ -177,7 +215,18 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (this.buildKind === 'none') return;
+    // click an existing tower with no active build = select it
+    if (this.buildKind === 'none') {
+      const hit = this.towers.find(t =>
+        tx >= t.tileX && tx < t.tileX + t.size &&
+        ty >= t.tileY && ty < t.tileY + t.size);
+      if (hit) this.selectTower(hit);
+      else this.deselectTower();
+      return;
+    }
+
+    // entering build mode cancels selection
+    this.deselectTower();
 
     if (this.buildKind === 'tower') {
       const s = CFG.tower.tiles;
@@ -222,7 +271,7 @@ export class GameScene extends Phaser.Scene {
       ty >= t.tileY && ty < t.tileY + t.size);
     if (ti >= 0) {
       const t = this.towers[ti];
-      this.player.money += Math.floor(CFG.tower.cost * 0.5);
+      this.player.money += Math.floor(t.totalSpent * 0.5);
       for (let j = 0; j < t.size; j++) for (let i = 0; i < t.size; i++) this.grid[t.tileY + j][t.tileX + i] = 0;
       t.destroyTower();
       this.towers.splice(ti, 1);
@@ -241,12 +290,177 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  selectTower(t: Tower) {
+    this.selectedTower = t;
+    this.drawSelectionRing(t);
+    this.buildTowerPanel(t);
+  }
+
+  deselectTower() {
+    this.selectedTower = null;
+    this.selectionRing.clear().setVisible(false);
+    this.towerPanel.removeAll(true);
+    this.towerPanel.setVisible(false);
+  }
+
+  drawSelectionRing(t: Tower) {
+    const st = t.stats();
+    const g = this.selectionRing;
+    g.clear();
+    g.lineStyle(2, 0x7cc4ff, 0.8);
+    g.strokeCircle(t.x, t.y, st.range);
+    g.lineStyle(1, 0x7cc4ff, 0.25);
+    g.strokeCircle(t.x, t.y, st.range - 3);
+    g.setVisible(true);
+  }
+
+  pointInPanel(wx: number, wy: number): boolean {
+    if (!this.towerPanel.visible) return false;
+    const b = this.towerPanelBounds;
+    return wx >= b.x && wx <= b.x + b.w && wy >= b.y && wy <= b.y + b.h;
+  }
+
+  buildTowerPanel(t: Tower) {
+    const panel = this.towerPanel;
+    panel.removeAll(true);
+
+    const W = 156, H = 74;
+    const px = t.x;
+    const py = t.y - CFG.tile * t.size / 2 - H / 2 - 10;
+    panel.setPosition(px, py);
+    panel.setVisible(true);
+    this.towerPanelBounds = { x: px - W / 2, y: py - H / 2, w: W, h: H };
+
+    const bg = this.add.rectangle(0, 0, W, H, 0x11172a, 0.95)
+      .setStrokeStyle(2, 0x2a3760);
+    panel.add(bg);
+
+    // little pointer nub at the bottom
+    const nub = this.add.triangle(0, H / 2 + 4, -6, -4, 6, -4, 0, 4, 0x11172a)
+      .setStrokeStyle(1, 0x2a3760);
+    panel.add(nub);
+
+    // Title: LVL X
+    const title = this.add.text(-W / 2 + 8, -H / 2 + 6, `ARROW  LVL ${t.level + 1}`, {
+      fontFamily: 'monospace', fontSize: '12px', color: '#7cc4ff'
+    });
+    panel.add(title);
+
+    // Sell label on the top-right
+    const sellVal = Math.floor(t.totalSpent * 0.5);
+    const sellLbl = this.add.text(W / 2 - 8, -H / 2 + 6, `SELL $${sellVal}`, {
+      fontFamily: 'monospace', fontSize: '11px', color: '#ffa07a'
+    }).setOrigin(1, 0);
+    panel.add(sellLbl);
+
+    // Current stats
+    const st = t.stats();
+    const stats = this.add.text(-W / 2 + 8, -H / 2 + 22,
+      `DMG ${st.damage}  RNG ${st.range}\nFIRE ${(1000 / st.fireRate).toFixed(1)}/s  HP ${t.hp}/${t.maxHp}`,
+      { fontFamily: 'monospace', fontSize: '10px', color: '#ccd' });
+    panel.add(stats);
+
+    // Upgrade button
+    const btnW = 70, btnH = 20;
+    const btnY = H / 2 - btnH / 2 - 4;
+    const canUp = t.canUpgrade();
+    const upCost = t.upgradeCost();
+    const affordable = canUp && this.player.money >= upCost;
+    const upLabel = canUp ? `UPGRADE $${upCost}` : 'MAX LEVEL';
+    const upColor = !canUp ? 0x3a3a4a : affordable ? 0x2a6b3a : 0x5a2a2a;
+    const upBg = this.add.rectangle(-W / 2 + btnW / 2 + 6, btnY, btnW, btnH, upColor)
+      .setStrokeStyle(1, 0x556);
+    const upTxt = this.add.text(upBg.x, upBg.y, upLabel, {
+      fontFamily: 'monospace', fontSize: '10px',
+      color: !canUp ? '#888' : affordable ? '#ffffff' : '#ff9a9a'
+    }).setOrigin(0.5);
+    if (canUp) {
+      upBg.setInteractive({ useHandCursor: true });
+      upBg.on('pointerdown', (_p: any, _lx: any, _ly: any, ev: any) => {
+        ev?.stopPropagation?.();
+        this.doUpgradeSelected();
+      });
+      upBg.on('pointerover', () => upBg.setFillStyle(affordable ? 0x3b8a4a : 0x7a3a3a));
+      upBg.on('pointerout',  () => upBg.setFillStyle(upColor));
+    }
+    panel.add([upBg, upTxt]);
+
+    // Sell button
+    const sellBg = this.add.rectangle(W / 2 - btnW / 2 - 6, btnY, btnW, btnH, 0x5a2a2a)
+      .setStrokeStyle(1, 0x556);
+    const sellTxt = this.add.text(sellBg.x, sellBg.y, `SELL $${sellVal}`, {
+      fontFamily: 'monospace', fontSize: '10px', color: '#ffd6c0'
+    }).setOrigin(0.5);
+    sellBg.setInteractive({ useHandCursor: true });
+    sellBg.on('pointerdown', (_p: any, _lx: any, _ly: any, ev: any) => {
+      ev?.stopPropagation?.();
+      this.doSellSelected();
+    });
+    sellBg.on('pointerover', () => sellBg.setFillStyle(0x8a3a3a));
+    sellBg.on('pointerout',  () => sellBg.setFillStyle(0x5a2a2a));
+    panel.add([sellBg, sellTxt]);
+  }
+
+  doUpgradeSelected() {
+    const t = this.selectedTower;
+    if (!t) return;
+    if (!t.canUpgrade()) return;
+    const cost = t.upgradeCost();
+    if (this.player.money < cost) {
+      this.floatText(t.x, t.y - 20, `NEED $${cost}`, '#ff6a6a');
+      return;
+    }
+    this.player.money -= cost;
+    t.totalSpent += cost;
+    t.upgrade();
+    this.floatText(t.x, t.y - 24, `LVL ${t.level + 1}`, '#7cf29a');
+    this.pushHud();
+    // refresh ring + panel
+    this.drawSelectionRing(t);
+    this.buildTowerPanel(t);
+  }
+
+  doSellSelected() {
+    const t = this.selectedTower;
+    if (!t) return;
+    this.player.money += Math.floor(t.totalSpent * 0.5);
+    for (let j = 0; j < t.size; j++)
+      for (let i = 0; i < t.size; i++)
+        this.grid[t.tileY + j][t.tileX + i] = 0;
+    const idx = this.towers.indexOf(t);
+    if (idx >= 0) this.towers.splice(idx, 1);
+    t.destroyTower();
+    this.gridVersion++;
+    this.deselectTower();
+    this.pushHud();
+  }
+
+  floatText(x: number, y: number, msg: string, color: string) {
+    const txt = this.add.text(x, y, msg, {
+      fontFamily: 'monospace', fontSize: '12px', color,
+      stroke: '#0b0f1a', strokeThickness: 3
+    }).setOrigin(0.5).setDepth(40);
+    this.tweens.add({
+      targets: txt,
+      y: y - 18,
+      alpha: { from: 1, to: 0 },
+      duration: 700,
+      ease: 'Sine.Out',
+      onComplete: () => txt.destroy()
+    });
+  }
+
   worldToTile(x: number, y: number) {
     return { x: Math.floor(x / CFG.tile), y: Math.floor(y / CFG.tile) };
   }
 
-  update(time: number, delta: number) {
+  update(_realTime: number, delta: number) {
     if (this.gameOver) return;
+
+    // Virtual time advances at timeMult speed; all downstream systems use it.
+    const vd = delta * this.timeMult;
+    this.vTime += vd;
+    const time = this.vTime;
 
     // Ghost follow pointer
     if (this.buildKind !== 'none') {
@@ -270,13 +484,13 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    this.updatePlayer(time, delta);
+    this.updatePlayer(time, vd);
     this.updateTowers(time);
-    this.updateEnemies(time, delta);
+    this.updateEnemies(time, vd);
     this.updateBoss(time);
     this.updateProjectiles(time);
-    this.updateCoins(delta);
-    this.updateSpawning(time, delta);
+    this.updateCoins(vd);
+    this.updateSpawning(time, vd);
     this.checkEndConditions();
   }
 
@@ -320,14 +534,15 @@ export class GameScene extends Phaser.Scene {
   // ---------- TOWERS ----------
   updateTowers(time: number) {
     for (const tower of this.towers) {
-      const tgt = this.findNearestEnemy(tower.x, tower.y, CFG.tower.range);
+      const st = tower.stats();
+      const tgt = this.findNearestEnemy(tower.x, tower.y, st.range);
       if (!tgt) continue;
       const angle = Math.atan2(tgt.y - tower.y, tgt.x - tower.x);
       tower.top.setRotation(angle);
-      if (time > tower.lastShot + CFG.tower.fireRate) {
+      if (time > tower.lastShot + st.fireRate) {
         tower.lastShot = time;
         tower.top.play('tower-top-shoot', true);
-        this.spawnProjectile(tower.x, tower.y, tgt.x, tgt.y, CFG.tower.projectileSpeed, CFG.tower.damage);
+        this.spawnProjectile(tower.x, tower.y, tgt.x, tgt.y, st.projectileSpeed, st.damage);
       }
     }
   }
@@ -486,7 +701,7 @@ export class GameScene extends Phaser.Scene {
     } else if (b.state === 'birthing' && time >= b.stateEnd) {
       this.bossBirthSpawn(b);
       b.state = 'chase';
-      b.nextBirth = time + 9000;
+      b.nextBirth = time + 6000;
       b.play('boss-idle');
     } else if (b.state === 'charge_wind' && time >= b.stateEnd) {
       // Charge always aims at the player, ignoring towers.
@@ -497,12 +712,22 @@ export class GameScene extends Phaser.Scene {
       b.stateEnd = time + 1000;
       b.setVelocity(b.chargeDirX * 320, b.chargeDirY * 320);
       b.play('boss-move');
+      // initial launch puff behind her (covers the "against a wall" case)
+      this.spawnChargeSmoke(b, 3);
+      b.lastSmoke = time;
     } else if (b.state === 'charging' && time >= b.stateEnd) {
       b.setVelocity(0, 0);
       this.bossChargeImpact(b);
       b.state = 'chase';
-      b.nextCharge = time + 14000;
+      b.nextCharge = time + 9500;
       b.play('boss-idle');
+    }
+
+    // Smoke trail while charging (throttled). Even if the boss isn't moving
+    // (wall-locked), the initial puff already fired above.
+    if (b.state === 'charging' && time > b.lastSmoke + 60) {
+      b.lastSmoke = time;
+      this.spawnChargeSmoke(b, 1);
     }
 
     if (b.state !== 'chase') return;
@@ -520,7 +745,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const distToPlayer = Math.hypot(this.player.x - b.x, this.player.y - b.y);
-    if (time >= b.nextCharge && distToPlayer > 160) {
+    if (time >= b.nextCharge && distToPlayer > 40) {
       b.state = 'charge_wind';
       b.stateEnd = time + 1200;
       b.setVelocity(0, 0);
@@ -577,6 +802,35 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.shake(180, 0.008);
   }
 
+  spawnChargeSmoke(b: Boss, puffs: number) {
+    // position behind the boss (opposite the charge direction)
+    const backDist = 26;
+    const baseX = b.x - b.chargeDirX * backDist;
+    const baseY = b.y - b.chargeDirY * backDist + 4; // slight downward bias
+    for (let i = 0; i < puffs; i++) {
+      const jx = Phaser.Math.Between(-6, 6);
+      const jy = Phaser.Math.Between(-4, 4);
+      const r = Phaser.Math.Between(8, 12);
+      const shade = [0x9a9aa8, 0xb8b8c4, 0x7e7e8a][i % 3];
+      const puff = this.add.circle(baseX + jx, baseY + jy, r, shade, 0.7)
+        .setDepth(8)
+        .setStrokeStyle(1, 0x5a5a66, 0.5);
+      // lazy drift opposite to charge + upward
+      const driftX = -b.chargeDirX * 14 + Phaser.Math.Between(-6, 6);
+      const driftY = -b.chargeDirY * 14 + Phaser.Math.Between(-14, -6);
+      this.tweens.add({
+        targets: puff,
+        x: puff.x + driftX,
+        y: puff.y + driftY,
+        scale: { from: 0.7, to: 1.6 },
+        alpha: { from: 0.75, to: 0 },
+        duration: 520,
+        ease: 'Sine.Out',
+        onComplete: () => puff.destroy()
+      });
+    }
+  }
+
   bossChargeImpact(b: Boss) {
     const r = 80;
     if (Phaser.Math.Distance.Between(b.x, b.y, this.player.x, this.player.y) < r) {
@@ -621,6 +875,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   destroyTower(t: Tower) {
+    if (this.selectedTower === t) this.deselectTower();
     const idx = this.towers.indexOf(t);
     if (idx >= 0) this.towers.splice(idx, 1);
     for (let j = 0; j < t.size; j++)
@@ -638,6 +893,16 @@ export class GameScene extends Phaser.Scene {
     this.grid[w.tileY][w.tileX] = 0;
     this.gridVersion++;
     w.destroy();
+  }
+
+  liveEnemyCount(): number {
+    let n = 0;
+    this.enemies.children.iterate((c: any) => {
+      const e = c as Enemy;
+      if (e && e.active && !e.dying) n++;
+      return true;
+    });
+    return n;
   }
 
   spawnBoss() {
@@ -682,8 +947,8 @@ export class GameScene extends Phaser.Scene {
 
   enemyHitsPlayer(e: Enemy) {
     if (!e.active || e.dying) return;
-    if (this.time.now > e.attackCd) {
-      e.attackCd = this.time.now + 700;
+    if (this.vTime > e.attackCd) {
+      e.attackCd = this.vTime + 700;
       this.player.hurt(e.dmg, this);
       if (this.player.hp <= 0) this.lose();
     }
@@ -691,8 +956,8 @@ export class GameScene extends Phaser.Scene {
 
   enemyHitsWall(e: Enemy, w: Wall) {
     if (!e.active || e.dying) return;
-    if (this.time.now > e.attackCd) {
-      e.attackCd = this.time.now + 700;
+    if (this.vTime > e.attackCd) {
+      e.attackCd = this.vTime + 700;
       const prefix = e.kind === 'basic' ? 'eb' : 'eh';
       e.play(`${prefix}-atk`, true);
       w.hurt(e.dmg);
@@ -708,8 +973,8 @@ export class GameScene extends Phaser.Scene {
 
   enemyHitsTower(e: Enemy, t: Tower) {
     if (!e.active || e.dying) return;
-    if (this.time.now > e.attackCd) {
-      e.attackCd = this.time.now + 700;
+    if (this.vTime > e.attackCd) {
+      e.attackCd = this.vTime + 700;
       t.hurt(e.dmg);
       if (t.hp <= 0) {
         const idx = this.towers.indexOf(t);
@@ -776,10 +1041,8 @@ export class GameScene extends Phaser.Scene {
       burst.play('fx-death');
       burst.once('animationcomplete', () => burst.destroy());
       this.player.kills++;
+      this.waveKills++;
       this.pushHud();
-      if (!this.bossSpawned && this.player.kills >= this.bossSpawnAt) {
-        this.spawnBoss();
-      }
     }
   }
 
@@ -816,33 +1079,65 @@ export class GameScene extends Phaser.Scene {
     // initial build phase — show countdown, don't spawn anything yet
     if (time < this.waveStartAt) {
       const secs = Math.ceil((this.waveStartAt - time) / 1000);
-      this.countdownText.setText(`BUILD PHASE — wave in ${secs}`);
+      this.countdownText.setText(`BUILD PHASE — wave 1 in ${secs}`);
       this.countdownText.setColor('#7cc4ff');
       return;
     }
 
-    // mid-level build break
-    if (time < this.breakUntil) {
-      const secs = Math.ceil((this.breakUntil - time) / 1000);
-      this.countdownText.setText(`BUILD PHASE — next wave in ${secs}`);
+    const waveSize = CFG.spawn.waveSize;
+    const lastWaveIdx = CFG.spawn.waveCount - 1;
+    const isLastWave = this.wave >= lastWaveIdx;
+
+    // Boss already out — nothing to show/spawn here
+    if (this.bossSpawned) {
+      if (this.countdownText.text) this.countdownText.setText('');
+      return;
+    }
+
+    // Between-wave build break
+    if (time < this.waveBreakUntil) {
+      const secs = Math.ceil((this.waveBreakUntil - time) / 1000);
+      this.countdownText.setText(`WAVE ${this.wave + 1} IN ${secs}`);
       this.countdownText.setColor('#7cc4ff');
       return;
     }
 
-    // transition flash right after any build phase ends
-    const justStarted = Math.max(this.waveStartAt, this.breakUntil);
-    if (this.countdownText.text && time < justStarted + 1500) {
-      this.countdownText.setText('WAVE INCOMING!');
-      this.countdownText.setColor('#ff6a6a');
+    // Boss lead-in: only on the final wave once every enemy has been spawned.
+    if (isLastWave && this.waveSpawned >= waveSize) {
+      const live = this.liveEnemyCount();
+      const left = Math.max(live, waveSize - this.waveKills);
+      if (left > 0) {
+        this.countdownText.setText(`KILL THE STRAGGLERS — ${left} LEFT`);
+        this.countdownText.setColor('#ff9a4a');
+      } else {
+        if (this.bossCountdownUntil === 0) {
+          this.bossCountdownUntil = time + CFG.boss.prepTime;
+        }
+        if (time >= this.bossCountdownUntil) {
+          this.spawnBoss();
+          return;
+        }
+        const secs = Math.ceil((this.bossCountdownUntil - time) / 1000);
+        this.countdownText.setText(`BROOD MOTHER SPAWNING IN ${secs}`);
+        this.countdownText.setColor('#ff5050');
+      }
       return;
-    } else if (this.countdownText.text) {
-      this.countdownText.setText('');
     }
 
-    // Stop the normal wave spawner once the boss is active — only the boss
-    // births new mobs from here on.
-    if (this.bossSpawned) return;
+    // Non-last wave finished → start build break, advance wave counter.
+    if (!isLastWave && this.waveSpawned >= waveSize && this.waveKills >= waveSize) {
+      this.wave++;
+      this.waveSpawned = 0;
+      this.waveKills = 0;
+      this.waveBreakUntil = time + CFG.spawn.waveBreak;
+      return;
+    }
 
+    // Active wave — show progress banner.
+    this.countdownText.setText(`WAVE ${this.wave + 1} — ${this.waveKills}/${waveSize}`);
+    this.countdownText.setColor('#eee');
+
+    // Ramp difficulty, spawn until this wave's quota is met.
     this.spawnTimer += delta;
     this.rampTimer += delta;
     if (this.rampTimer > CFG.spawn.rampEvery) {
@@ -850,14 +1145,10 @@ export class GameScene extends Phaser.Scene {
       this.spawnInterval = Math.max(CFG.spawn.minInterval, this.spawnInterval * CFG.spawn.rampFactor);
       this.heavyChance = Math.min(CFG.spawn.heavyChanceMax, this.heavyChance + CFG.spawn.heavyChanceStep);
     }
-    if (this.spawnTimer > this.spawnInterval) {
+    if (this.spawnTimer > this.spawnInterval && this.waveSpawned < waveSize) {
       this.spawnTimer = 0;
       this.spawnEnemy();
-      this.spawnedCount++;
-      if (this.spawnedCount >= this.nextBreakAt) {
-        this.nextBreakAt += CFG.spawn.breakEvery;
-        this.breakUntil = time + CFG.spawn.breakDuration;
-      }
+      this.waveSpawned++;
     }
   }
 

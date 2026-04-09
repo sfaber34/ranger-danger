@@ -16,7 +16,7 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
 
   fire(tx: number, ty: number, speed: number, damage: number) {
     this.damage = damage;
-    this.born = this.scene.time.now;
+    this.born = (this.scene as any).vTime ?? this.scene.time.now;
     const angle = Math.atan2(ty - this.y, tx - this.x);
     this.setRotation(angle);
     this.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);

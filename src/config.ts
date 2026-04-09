@@ -15,13 +15,13 @@ export const CFG = {
   },
 
   tower: {
-    hp: 120,
-    cost: 60,
-    fireRate: 620,
-    range: 240,
-    projectileSpeed: 480,
-    damage: 16,
-    tiles: 2 // 2x2 footprint
+    cost: 60,     // L1 build cost
+    tiles: 2,     // 2x2 footprint
+    levels: [
+      { hp: 120, fireRate: 620, range: 240, damage: 16, projectileSpeed: 480, upgradeCost: 60 },
+      { hp: 170, fireRate: 520, range: 270, damage: 24, projectileSpeed: 520, upgradeCost: 110 },
+      { hp: 240, fireRate: 430, range: 300, damage: 34, projectileSpeed: 560, upgradeCost: 0 }
+    ]
   },
 
   wall: {
@@ -47,9 +47,14 @@ export const CFG = {
     heavyChanceStart: 0.0,
     heavyChanceMax: 0.35,
     heavyChanceStep: 0.03,
-    breakEvery: 100,        // trigger a build break every N spawned enemies
-    breakDuration: 15000    // ms of pause during a build break
+    waveSize: 100,          // enemies per wave
+    waveCount: 2,           // number of waves before the boss
+    waveBreak: 15000        // ms of build break between waves
   },
 
-  winKills: 200 // kills needed to trigger the boss; defeating the boss wins
+  winKills: 200, // kills needed to trigger the boss; defeating the boss wins
+
+  boss: {
+    prepTime: 15000 // ms between clearing the last wave enemy and boss arrival
+  }
 };

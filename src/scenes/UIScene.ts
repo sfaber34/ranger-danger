@@ -11,6 +11,9 @@ export class UIScene extends Phaser.Scene {
   buildText!: Phaser.GameObjects.Text;
   btnTower!: Phaser.GameObjects.Container;
   btnWall!: Phaser.GameObjects.Container;
+  btnSpeed!: Phaser.GameObjects.Container;
+  speedLabel!: Phaser.GameObjects.Text;
+  speedIdx = 0;
   endPanel?: Phaser.GameObjects.Container;
   bossBarBg?: Phaser.GameObjects.Rectangle;
   bossBar?: Phaser.GameObjects.Rectangle;
@@ -29,7 +32,7 @@ export class UIScene extends Phaser.Scene {
     this.killsText = this.add.text(12, 72, '', { fontFamily: 'monospace', fontSize: '14px', color: '#eee' });
 
     this.hintText = this.add.text(12, this.scale.height - 22,
-      `1=Tower(${CFG.tower.cost})  2=Wall(${CFG.wall.cost})  Click=Build  Hold X+Click=Sell  ESC=Cancel`,
+      `1=Tower(${CFG.tower.cost})  2=Wall(${CFG.wall.cost})  Click tower=Info  Hold X+Click=Sell  ESC=Cancel`,
       { fontFamily: 'monospace', fontSize: '12px', color: '#667' });
 
     this.buildText = this.add.text(W - 12, 10, '', { fontFamily: 'monospace', fontSize: '13px', color: '#7cc4ff' }).setOrigin(1, 0);
@@ -37,6 +40,12 @@ export class UIScene extends Phaser.Scene {
     // build buttons (top-right)
     this.btnTower = this.makeButton(W - 160, 34, 70, 28, `TOWER ${CFG.tower.cost}`, () => this.game.events.emit('ui-build', 'tower'));
     this.btnWall = this.makeButton(W - 82, 34, 70, 28, `WALL ${CFG.wall.cost}`, () => this.game.events.emit('ui-build', 'wall'));
+
+    // speed toggle (top-right, above build buttons)
+    this.btnSpeed = this.makeButton(W - 46, 10, 40, 18, '> 1x', () => this.cycleSpeed());
+    this.speedLabel = this.btnSpeed.list[1] as Phaser.GameObjects.Text;
+    this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
+      .on('down', () => this.cycleSpeed());
 
     // listen for HUD updates
     this.game.events.on('hud', (s: any) => this.updateHud(s));
@@ -69,6 +78,14 @@ export class UIScene extends Phaser.Scene {
     const pct = Math.max(0, (s.hp ?? 0) / maxHp);
     this.bossBar.width = maxW * pct;
     this.bossBar.fillColor = pct > 0.5 ? 0xd94a4a : pct > 0.25 ? 0xd97a4a : 0xff3030;
+  }
+
+  cycleSpeed() {
+    const speeds = [1, 2, 4];
+    const labels = ['> 1x', '>> 2x', '>>> 4x'];
+    this.speedIdx = (this.speedIdx + 1) % speeds.length;
+    this.speedLabel.setText(labels[this.speedIdx]);
+    this.game.events.emit('ui-speed', speeds[this.speedIdx]);
   }
 
   makeButton(x: number, y: number, w: number, h: number, label: string, onClick: () => void) {

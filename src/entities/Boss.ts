@@ -24,6 +24,7 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
 
   chargeDirX = 1;
   chargeDirY = 0;
+  lastSmoke = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'boss_idle0');
@@ -33,9 +34,9 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     this.setSize(50, 46).setOffset(7, 14);
     this.play('boss-idle');
 
-    const now = scene.time.now;
-    this.nextBirth = now + 6000;
-    this.nextCharge = now + 11000;
+    const now = (scene as any).vTime ?? scene.time.now;
+    this.nextBirth = now + 4000;
+    this.nextCharge = now + 7500;
     this.nextSlam = now + 1500;
   }
 
