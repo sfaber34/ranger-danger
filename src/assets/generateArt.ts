@@ -48,6 +48,16 @@ const P = {
   goldM:   '#c08820',
   goldL:   '#fff0a0',
 
+  bronze:  '#c47a3e',
+  bronzeD: '#4a2408',
+  bronzeM: '#8b4513',
+  bronzeL: '#e8a572',
+
+  silver:  '#c8d0d8',
+  silverD: '#4a525a',
+  silverM: '#7a8090',
+  silverL: '#eef2f6',
+
   steel:   '#c0c8d4',
   steelD:  '#5a6270',
 
@@ -637,7 +647,13 @@ function drawArrow(frame: 0|1) {
 // ==================================================================
 //  COIN (32x32) — 6 spin frames
 // ==================================================================
-function drawCoin(frame: 0|1|2|3|4|5) {
+type CoinTier = 'bronze' | 'silver' | 'gold';
+function drawCoin(frame: 0|1|2|3|4|5, tier: CoinTier = 'gold') {
+  const pal = tier === 'bronze'
+    ? { base: P.bronze, d: P.bronzeD, m: P.bronzeM, l: P.bronzeL }
+    : tier === 'silver'
+    ? { base: P.silver, d: P.silverD, m: P.silverM, l: P.silverL }
+    : { base: P.gold, d: P.goldD, m: P.goldM, l: P.goldL };
   return (put: Put) => {
     const cx = 16, cy = 16;
     // shadow
@@ -653,7 +669,7 @@ function drawCoin(frame: 0|1|2|3|4|5) {
     for (let y = -h; y <= h; y++) {
       for (let x = -w; x <= w; x++) {
         if ((x * x) / (w * w + 0.1) + (y * y) / (h * h) <= 1) {
-          put(cx + x, cy + y, P.gold);
+          put(cx + x, cy + y, pal.base);
         }
       }
     }
@@ -662,7 +678,7 @@ function drawCoin(frame: 0|1|2|3|4|5) {
       for (let x = -w - 1; x <= w + 1; x++) {
         if ((x * x) / ((w + 1) * (w + 1) + 0.1) + (y * y) / ((h + 0.6) * (h + 0.6)) <= 1 &&
             !((x * x) / (w * w + 0.1) + (y * y) / (h * h) <= 1)) {
-          put(cx + x, cy + y, P.goldD);
+          put(cx + x, cy + y, pal.d);
         }
       }
     }
@@ -671,7 +687,7 @@ function drawCoin(frame: 0|1|2|3|4|5) {
       for (let y = -h + 1; y <= -2; y++) {
         for (let x = -w + 1; x <= 0; x++) {
           if ((x * x) / ((w - 1) * (w - 1) + 0.1) + (y * y) / ((h - 1) * (h - 1)) <= 1) {
-            put(cx + x, cy + y, P.goldL);
+            put(cx + x, cy + y, pal.l);
           }
         }
       }
@@ -681,17 +697,17 @@ function drawCoin(frame: 0|1|2|3|4|5) {
       for (let y = 2; y <= h - 1; y++) {
         for (let x = 1; x <= w - 1; x++) {
           if ((x * x) / ((w - 1) * (w - 1) + 0.1) + (y * y) / ((h - 1) * (h - 1)) <= 1) {
-            put(cx + x, cy + y, P.goldM);
+            put(cx + x, cy + y, pal.m);
           }
         }
       }
     }
     // star emblem when facing (w >= 5)
     if (w >= 5) {
-      put(cx, cy - 2, P.goldD);
-      put(cx - 1, cy, P.goldD); put(cx, cy, P.goldD); put(cx + 1, cy, P.goldD);
-      put(cx - 2, cy + 1, P.goldD); put(cx + 2, cy + 1, P.goldD);
-      put(cx, cy + 2, P.goldD);
+      put(cx, cy - 2, pal.d);
+      put(cx - 1, cy, pal.d); put(cx, cy, pal.d); put(cx + 1, cy, pal.d);
+      put(cx - 2, cy + 1, pal.d); put(cx + 2, cy + 1, pal.d);
+      put(cx, cy + 2, pal.d);
     }
   };
 }
@@ -1015,8 +1031,11 @@ export function generateAllArt(scene: Phaser.Scene) {
   add(scene, 'arrow_0', makeCanvas(32, drawArrow(0)));
   add(scene, 'arrow_1', makeCanvas(32, drawArrow(1)));
 
-  // Coin
-  for (let i = 0; i < 6; i++) add(scene, `coin_${i}`, makeCanvas(32, drawCoin(i as any)));
+  // Coin (bronze / silver / gold tiers)
+  for (let i = 0; i < 6; i++) add(scene, `coin_${i}`, makeCanvas(32, drawCoin(i as any, 'gold')));
+  for (const tier of ['bronze','silver','gold'] as const) {
+    for (let i = 0; i < 6; i++) add(scene, `coin_${tier}_${i}`, makeCanvas(32, drawCoin(i as any, tier)));
+  }
 
   // Effects
   for (let i = 0; i < 3; i++) add(scene, `fx_hit_${i}`,   makeCanvas(32, drawHitSpark(i as any)));
@@ -1070,6 +1089,11 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('arrow-spin', ['arrow_0','arrow_1'], 20, -1);
 
   mk('coin-spin',  ['coin_0','coin_1','coin_2','coin_3','coin_4','coin_5'], 10, -1);
+  for (const tier of ['bronze','silver','gold'] as const) {
+    mk(`coin-${tier}-spin`,
+      [`coin_${tier}_0`,`coin_${tier}_1`,`coin_${tier}_2`,`coin_${tier}_3`,`coin_${tier}_4`,`coin_${tier}_5`],
+      10, -1);
+  }
 
   mk('fx-hit',    ['fx_hit_0','fx_hit_1','fx_hit_2'], 22, 0);
   mk('fx-death',  ['fx_death_0','fx_death_1','fx_death_2','fx_death_3','fx_death_4'], 18, 0);

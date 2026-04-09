@@ -41,7 +41,7 @@ export class GameScene extends Phaser.Scene {
 
   boss: Boss | null = null;
   bossSpawned = false;
-  bossSpawnAt = 200; // boss arrives once the player reaches this kill count
+  bossSpawnAt = CFG.winKills; // boss arrives once the player reaches this kill count
 
   killsTarget = CFG.winKills;
   gameOver = false;
@@ -132,7 +132,8 @@ export class GameScene extends Phaser.Scene {
       money: this.player?.money ?? 0,
       kills: this.player?.kills ?? 0,
       target: this.killsTarget,
-      build: this.buildKind
+      build: this.buildKind,
+      bossSpawned: this.bossSpawned
     };
   }
 
@@ -488,8 +489,8 @@ export class GameScene extends Phaser.Scene {
       b.nextBirth = time + 9000;
       b.play('boss-idle');
     } else if (b.state === 'charge_wind' && time >= b.stateEnd) {
-      const target = this.chooseBossTarget(b);
-      const dx = target.x - b.x, dy = target.y - b.y;
+      // Charge always aims at the player, ignoring towers.
+      const dx = this.player.x - b.x, dy = this.player.y - b.y;
       const d = Math.hypot(dx, dy) || 1;
       b.chargeDirX = dx / d; b.chargeDirY = dy / d;
       b.state = 'charging';
@@ -518,7 +519,8 @@ export class GameScene extends Phaser.Scene {
       b.play('boss-birth');
       return;
     }
-    if (time >= b.nextCharge && dist > 160) {
+    const distToPlayer = Math.hypot(this.player.x - b.x, this.player.y - b.y);
+    if (time >= b.nextCharge && distToPlayer > 160) {
       b.state = 'charge_wind';
       b.stateEnd = time + 1200;
       b.setVelocity(0, 0);
@@ -606,7 +608,8 @@ export class GameScene extends Phaser.Scene {
       const dist = 18;
       const ex = b.x + Math.cos(a) * dist;
       const ey = b.y + Math.sin(a) * dist - 6;
-      const e = new Enemy(this, ex, ey, 'basic');
+      const kind: EnemyKind = Math.random() < 0.4 ? 'heavy' : 'basic';
+      const e = new Enemy(this, ex, ey, kind);
       this.enemies.add(e);
       const body = e.body as Phaser.Physics.Arcade.Body;
       body.setVelocity(Math.cos(a) * 120, Math.sin(a) * 120 - 40);
@@ -653,11 +656,21 @@ export class GameScene extends Phaser.Scene {
       if (d > bestD) { bestD = d; best = c; }
     }
     this.boss = new Boss(this, best.x, best.y);
+    this.pushHud();
     this.physics.add.overlap(this.projectiles, this.boss, (a: any, b: any) => {
       const pr = (a instanceof Projectile ? a : b) as Projectile;
       const bs = (a instanceof Boss ? a : b) as Boss;
       this.projectileHitsBoss(pr, bs);
     });
+    // Colliders: boss cannot phase through walls/towers. If the collision
+    // happens while charging, slam the charge impact right where she stopped.
+    const onStructureHit = () => {
+      if (this.boss && this.boss.state === 'charging') {
+        this.boss.stateEnd = 0; // updateBoss will fire bossChargeImpact next frame
+      }
+    };
+    this.physics.add.collider(this.boss, this.wallGroup, onStructureHit);
+    this.physics.add.collider(this.boss, this.towerGroup, onStructureHit);
     this.game.events.emit('boss-spawn', { hp: this.boss.hp, maxHp: this.boss.maxHp });
     this.countdownText.setText('THE BROOD MOTHER APPROACHES');
     this.countdownText.setColor('#ff5050');
@@ -735,6 +748,16 @@ export class GameScene extends Phaser.Scene {
     spark.once('animationcomplete', () => spark.destroy());
     pr.destroy();
     this.game.events.emit('boss-hp', { hp: b.hp, maxHp: b.maxHp });
+    if (b.dying) {
+      // boss drops a big pile of gold
+      const drops = 12;
+      for (let i = 0; i < drops; i++) {
+        const a = (i / drops) * Math.PI * 2;
+        const d = Phaser.Math.Between(6, 22);
+        const coin = new Coin(this, b.x + Math.cos(a) * d, b.y + Math.sin(a) * d, 'gold');
+        this.coins.add(coin);
+      }
+    }
   }
 
   projectileHitsEnemy(pr: Projectile, e: Enemy) {
@@ -745,11 +768,10 @@ export class GameScene extends Phaser.Scene {
     spark.once('animationcomplete', () => spark.destroy());
     pr.destroy();
     if (e.hp <= 0) {
-      // drop coin(s)
-      for (let i = 0; i < 1; i++) {
-        const coin = new Coin(this, e.x + Phaser.Math.Between(-4, 4), e.y + Phaser.Math.Between(-4, 4), e.coin);
-        this.coins.add(coin);
-      }
+      // drop coin (bronze for basic, silver for heavy)
+      const tier = e.kind === 'basic' ? 'bronze' : 'silver';
+      const coin = new Coin(this, e.x + Phaser.Math.Between(-4, 4), e.y + Phaser.Math.Between(-4, 4), tier);
+      this.coins.add(coin);
       const burst = this.add.sprite(e.x, e.y, 'fx_death_0').setDepth(15);
       burst.play('fx-death');
       burst.once('animationcomplete', () => burst.destroy());
@@ -816,6 +838,10 @@ export class GameScene extends Phaser.Scene {
     } else if (this.countdownText.text) {
       this.countdownText.setText('');
     }
+
+    // Stop the normal wave spawner once the boss is active — only the boss
+    // births new mobs from here on.
+    if (this.bossSpawned) return;
 
     this.spawnTimer += delta;
     this.rampTimer += delta;

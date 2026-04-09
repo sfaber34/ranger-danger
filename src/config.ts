@@ -32,8 +32,8 @@ export const CFG = {
   startMoney: 60,
 
   enemy: {
-    basic: { hp: 20, speed: 60, dmg: 8, coin: 3, color: 0xd9412b },
-    heavy: { hp: 30, speed: 40, dmg: 10, coin: 5, color: 0x7a1d14 }
+    basic: { hp: 20, speed: 60, dmg: 8, coin: 1, color: 0xd9412b },
+    heavy: { hp: 30, speed: 40, dmg: 10, coin: 2, color: 0x7a1d14 }
   },
 
   coin: { magnetRange: 90, magnetSpeed: 420 },
@@ -51,5 +51,5 @@ export const CFG = {
     breakDuration: 15000    // ms of pause during a build break
   },
 
-  winKills: 500
+  winKills: 200 // kills needed to trigger the boss; defeating the boss wins
 };

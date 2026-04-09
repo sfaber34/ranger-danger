@@ -90,7 +90,13 @@ export class UIScene extends Phaser.Scene {
     this.hpBar.width = 178 * pct;
     this.hpBar.fillColor = pct > 0.5 ? 0x4ad96a : pct > 0.25 ? 0xd9a84a : 0xd94a4a;
     this.moneyText.setText(`$ ${s.money}`);
-    this.killsText.setText(`Kills: ${s.kills}/${s.target}`);
+    if (s.bossSpawned) {
+      this.killsText.setText(`Kill the Boss!`);
+      this.killsText.setColor('#ff6a6a');
+    } else {
+      this.killsText.setText(`Kills: ${s.kills}/${s.target} -> Boss`);
+      this.killsText.setColor('#eee');
+    }
     this.buildText.setText(s.build === 'none' ? 'Build: —' : `Build: ${s.build.toUpperCase()}`);
   }
 
