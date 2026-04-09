@@ -28,6 +28,7 @@ export class GameScene extends Phaser.Scene {
   buildKind: BuildKind = 'none';
   buildTowerKind: TowerKind = 'arrow';
   nextRunnerPack = 0;
+  playerStoppedAt = 0;
   ghost!: Phaser.GameObjects.Sprite;
   gridOverlay!: Phaser.GameObjects.Graphics;
 
@@ -579,12 +580,28 @@ export class GameScene extends Phaser.Scene {
       if (target.x >= this.player.x) this.player.facingRight = true;
       else this.player.facingRight = false;
 
-      // Auto-shoot
-      if (time > this.player.lastShot + CFG.player.fireRate) {
+      // Fire rate: half speed while moving, full speed after standing still for 400ms
+      if (moving) {
+        this.playerStoppedAt = 0;
+      } else if (this.playerStoppedAt === 0) {
+        this.playerStoppedAt = time;
+      }
+      const stoodLongEnough = !moving && this.playerStoppedAt > 0 && (time - this.playerStoppedAt) >= 400;
+      const rate = stoodLongEnough ? CFG.player.fireRate : CFG.player.fireRate * 2;
+      if (time > this.player.lastShot + rate) {
         this.player.lastShot = time;
         bow.play('bow-shoot', true);
         bow.once('animationcomplete-bow-shoot', () => bow.play('bow-idle'));
-        this.spawnProjectile(this.player.x, this.player.y, target.x, target.y, CFG.player.projectileSpeed, CFG.player.damage);
+        // Lead the target
+        let aimX = target.x, aimY = target.y;
+        if (target.body) {
+          const dist = Math.hypot(target.x - this.player.x, target.y - this.player.y) || 1;
+          const travelTime = dist / CFG.player.projectileSpeed;
+          const tb = target.body as Phaser.Physics.Arcade.Body;
+          aimX = target.x + tb.velocity.x * travelTime;
+          aimY = target.y + tb.velocity.y * travelTime;
+        }
+        this.spawnProjectile(this.player.x, this.player.y, aimX, aimY, CFG.player.projectileSpeed, CFG.player.damage);
       }
     } else {
       // No target — bow points in the direction the player faces, held out to the side
@@ -613,15 +630,23 @@ export class GameScene extends Phaser.Scene {
           this.spawnProjectile(tower.x, tower.y, aim.x, aim.y, st.projectileSpeed, st.damage, st.splashRadius);
         }
       } else {
-        // Arrow: shoot at nearest enemy
+        // Arrow: shoot at nearest enemy with lead targeting
         const tgt = this.findNearestEnemy(tower.x, tower.y, st.range);
         if (!tgt) continue;
-        const angle = Math.atan2(tgt.y - tower.y, tgt.x - tower.x);
+        let aimX = tgt.x, aimY = tgt.y;
+        if (tgt.body) {
+          const dist = Math.hypot(tgt.x - tower.x, tgt.y - tower.y) || 1;
+          const travelTime = dist / st.projectileSpeed;
+          const tb = tgt.body as Phaser.Physics.Arcade.Body;
+          aimX = tgt.x + tb.velocity.x * travelTime;
+          aimY = tgt.y + tb.velocity.y * travelTime;
+        }
+        const angle = Math.atan2(aimY - tower.y, aimX - tower.x);
         tower.top.setRotation(angle);
         if (time > tower.lastShot + st.fireRate) {
           tower.lastShot = time;
           tower.top.play('tower-top-shoot', true);
-          this.spawnProjectile(tower.x, tower.y, tgt.x, tgt.y, st.projectileSpeed, st.damage);
+          this.spawnProjectile(tower.x, tower.y, aimX, aimY, st.projectileSpeed, st.damage);
         }
       }
     }
@@ -1715,10 +1740,10 @@ export class GameScene extends Phaser.Scene {
     if (this.bossSpawned && (!this.boss || this.boss.dying || !this.boss.active)) {
       // Start a 5s collection window so the player can grab coins
       if (this.winDelayUntil === 0) {
-        this.winDelayUntil = this.vTime + 5000;
+        this.winDelayUntil = this.vTime + 12000;
         this.countdownText.setText('VICTORY! Collect your loot!');
         this.countdownText.setColor('#7cf29a');
-      } else if (this.vTime >= this.winDelayUntil) {
+      } else if (this.vTime >= this.winDelayUntil || this.coins.countActive() === 0) {
         this.win();
       }
     }
