@@ -476,6 +476,15 @@ export class GameScene extends Phaser.Scene {
     this.vTime += vd;
     const time = this.vTime;
 
+    // While dying, keep the world alive for the death animation but skip player input
+    if (this.dying) {
+      this.updateTowers(time);
+      this.updateEnemies(time, vd);
+      this.updateBoss(time);
+      this.updateProjectiles(time);
+      return;
+    }
+
     // Ghost follow pointer
     if (this.buildKind !== 'none') {
       const p = this.input.activePointer;
@@ -714,11 +723,6 @@ export class GameScene extends Phaser.Scene {
       b.state = 'chase';
       b.nextSlam = time + 4200;
       b.play('boss-idle');
-    } else if (b.state === 'birthing' && time >= b.stateEnd) {
-      this.bossBirthSpawn(b);
-      b.state = 'chase';
-      b.nextBirth = time + 3800;
-      b.play('boss-idle');
     } else if (b.state === 'charge_wind' && time >= b.stateEnd) {
       // Charge always aims at the player, ignoring towers.
       const dx = this.player.x - b.x, dy = this.player.y - b.y;
@@ -771,12 +775,10 @@ export class GameScene extends Phaser.Scene {
     const dist = Math.hypot(dx, dy);
 
     // ability triggers (in priority order)
+    // Birthing happens passively while chasing — no pause
     if (time >= b.nextBirth) {
-      b.state = 'birthing';
-      b.stateEnd = time + 1400;
-      b.setVelocity(0, 0);
-      b.play('boss-birth');
-      return;
+      this.bossBirthSpawn(b);
+      b.nextBirth = time + 3800;
     }
     const distToPlayer = Math.hypot(this.player.x - b.x, this.player.y - b.y);
     if (time >= b.nextCharge && distToPlayer > 40) {
@@ -830,10 +832,62 @@ export class GameScene extends Phaser.Scene {
         if (w.hp <= 0) this.destroyWall(w);
       }
     }
-    const burst = this.add.sprite(b.x, b.y + 8, 'fx_death_0').setDepth(15).setScale(2);
-    burst.play('fx-death');
-    burst.once('animationcomplete', () => burst.destroy());
-    this.cameras.main.shake(180, 0.008);
+
+    // Ground pound VFX — visible red/orange shockwave
+    const slamCore = this.add.circle(b.x, b.y, r, 0xff4020, 0.5)
+      .setDepth(14).setScale(0.15);
+    this.tweens.add({
+      targets: slamCore,
+      scale: 1,
+      alpha: { from: 0.55, to: 0 },
+      duration: 300,
+      ease: 'Cubic.Out',
+      onComplete: () => slamCore.destroy()
+    });
+
+    const slamRing = this.add.circle(b.x, b.y, r, 0x000000, 0)
+      .setStrokeStyle(3, 0xff5030, 0.9)
+      .setDepth(15).setScale(0.15);
+    this.tweens.add({
+      targets: slamRing,
+      scale: 1.08,
+      alpha: { from: 1, to: 0 },
+      duration: 380,
+      ease: 'Sine.Out',
+      onComplete: () => slamRing.destroy()
+    });
+
+    // Debris chunks flying outward
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.15, 0.15);
+      const dist = r * Phaser.Math.FloatBetween(0.6, 1.1);
+      const col = [0xd94a2a, 0xff8a40, 0x8a4a2a, 0xffc060][i % 4];
+      const sz = Phaser.Math.Between(2, 4);
+      const chunk = this.add.rectangle(b.x, b.y, sz, sz, col, 1).setDepth(16);
+      this.tweens.add({
+        targets: chunk,
+        x: b.x + Math.cos(a) * dist,
+        y: b.y + Math.sin(a) * dist,
+        alpha: { from: 1, to: 0 },
+        angle: Phaser.Math.Between(-180, 180),
+        duration: Phaser.Math.Between(300, 500),
+        ease: 'Cubic.Out',
+        onComplete: () => chunk.destroy()
+      });
+    }
+
+    // Ground scorch
+    const slamScorch = this.add.circle(b.x, b.y, r * 0.6, 0x1a0808, 0.45)
+      .setDepth(2);
+    this.tweens.add({
+      targets: slamScorch,
+      alpha: { from: 0.45, to: 0 },
+      duration: 1000,
+      ease: 'Sine.In',
+      onComplete: () => slamScorch.destroy()
+    });
+
+    this.cameras.main.shake(200, 0.01);
   }
 
   spawnChargeSmoke(b: Boss, puffs: number) {
@@ -887,6 +941,57 @@ export class GameScene extends Phaser.Scene {
     const burst = this.add.sprite(b.x, b.y, 'fx_death_0').setDepth(15).setScale(3);
     burst.play('fx-death');
     burst.once('animationcomplete', () => burst.destroy());
+
+    // Red shockwave showing AoE reach
+    const core = this.add.circle(b.x, b.y, r, 0xff2020, 0.45)
+      .setDepth(14).setScale(0.15);
+    this.tweens.add({
+      targets: core,
+      scale: 1,
+      alpha: { from: 0.5, to: 0 },
+      duration: 320,
+      ease: 'Cubic.Out',
+      onComplete: () => core.destroy()
+    });
+
+    // Outer ring edge
+    const ring = this.add.circle(b.x, b.y, r, 0x000000, 0)
+      .setStrokeStyle(4, 0xff4040, 1)
+      .setDepth(15).setScale(0.15);
+    this.tweens.add({
+      targets: ring,
+      scale: 1.05,
+      alpha: { from: 1, to: 0 },
+      duration: 400,
+      ease: 'Sine.Out',
+      onComplete: () => ring.destroy()
+    });
+
+    // Second fainter wave trailing behind
+    const wave2 = this.add.circle(b.x, b.y, r, 0x000000, 0)
+      .setStrokeStyle(2, 0xff6a3a, 0.7)
+      .setDepth(14).setScale(0.1);
+    this.tweens.add({
+      targets: wave2,
+      scale: 1.15,
+      alpha: { from: 0.7, to: 0 },
+      duration: 520,
+      delay: 60,
+      ease: 'Sine.Out',
+      onComplete: () => wave2.destroy()
+    });
+
+    // Ground scorch
+    const scorch = this.add.circle(b.x, b.y, r * 0.8, 0x1a0808, 0.5)
+      .setDepth(2);
+    this.tweens.add({
+      targets: scorch,
+      alpha: { from: 0.5, to: 0 },
+      duration: 1400,
+      ease: 'Sine.In',
+      onComplete: () => scorch.destroy()
+    });
+
     this.cameras.main.shake(360, 0.016);
   }
 
@@ -1402,11 +1507,101 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  dying = false;
+
   lose() {
-    if (this.gameOver) return;
-    this.gameOver = true;
-    this.physics.pause();
-    this.game.events.emit('game-end', { win: false, name: this.playerName, kills: this.player.kills, money: this.player.money });
+    if (this.gameOver || this.dying) return;
+    this.dying = true;
+
+    // Stop the player but keep the scene running for the death animation
+    this.player.setVelocity(0, 0);
+    (this.player.body as Phaser.Physics.Arcade.Body).enable = false;
+
+    // Kill any existing tweens on the player (e.g. hurt flash) to avoid conflicts
+    this.tweens.killTweensOf(this.player);
+
+    this.cameras.main.shake(300, 0.012);
+
+    const deathX = this.player.x;
+    const deathY = this.player.y;
+
+    // Instantly hide the player sprite — no rotation/shrink
+    this.player.setVisible(false);
+
+    // White flash at death point
+    const flash = this.add.circle(deathX, deathY, 30, 0xffffff, 0.95).setDepth(19);
+    this.tweens.add({
+      targets: flash,
+      scale: 2.5,
+      alpha: 0,
+      duration: 350,
+      ease: 'Cubic.Out',
+      onComplete: () => flash.destroy()
+    });
+
+    // Pixel explosion — chunky coloured squares flying outward
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.2, 0.2);
+      const d = Phaser.Math.Between(28, 60);
+      const col = [0xff4040, 0xff8060, 0x4a90e2, 0xf2c79a, 0xffffff, 0xffcc40][i % 6];
+      const sz = Phaser.Math.Between(3, 6);
+      const p = this.add.rectangle(deathX, deathY, sz, sz, col, 1).setDepth(20);
+      this.tweens.add({
+        targets: p,
+        x: deathX + Math.cos(a) * d,
+        y: deathY + Math.sin(a) * d - Phaser.Math.Between(5, 20),
+        alpha: { from: 1, to: 0 },
+        angle: Phaser.Math.Between(-360, 360),
+        duration: Phaser.Math.Between(500, 800),
+        ease: 'Cubic.Out',
+        onComplete: () => p.destroy()
+      });
+    }
+
+    // Camera zoom on death spot
+    this.cameras.main.zoomTo(1.3, 800);
+
+    // Gravestone pops up from the ground after particles settle
+    setTimeout(() => {
+      if (!this.scene.isActive()) return;
+
+      // Stone slab
+      const stoneW = 18, stoneH = 22;
+      const grave = this.add.container(deathX, deathY + 6).setDepth(10);
+      const slab = this.add.rectangle(0, 0, stoneW, stoneH, 0x6a6a78)
+        .setStrokeStyle(1, 0x3e4654);
+      // Rounded top (circle on top of the rectangle)
+      const top = this.add.circle(0, -stoneH / 2, stoneW / 2, 0x6a6a78)
+        .setStrokeStyle(1, 0x3e4654);
+      // Cross etched on the stone
+      const crossV = this.add.rectangle(0, -4, 2, 12, 0x3e4654);
+      const crossH = this.add.rectangle(0, -8, 8, 2, 0x3e4654);
+      // Small dirt mound
+      const dirt = this.add.ellipse(0, stoneH / 2 + 2, 28, 8, 0x3e2310);
+      grave.add([dirt, slab, top, crossV, crossH]);
+
+      // Pop up from below
+      grave.setScale(0.3);
+      grave.y += 16;
+      this.tweens.add({
+        targets: grave,
+        y: deathY + 6,
+        scale: 1,
+        duration: 400,
+        ease: 'Back.Out'
+      });
+    }, 900);
+
+    // Show defeat screen after the full animation (real-time)
+    setTimeout(() => {
+      if (!this.scene.isActive()) return;
+      this.gameOver = true;
+      this.physics.pause();
+      this.game.events.emit('game-end', {
+        win: false, name: this.playerName,
+        kills: this.player.kills, money: this.player.money
+      });
+    }, 3500);
   }
   win() {
     if (this.gameOver) return;

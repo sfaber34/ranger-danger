@@ -3,7 +3,6 @@ import Phaser from 'phaser';
 export type BossState =
   | 'chase'
   | 'slam_wind'
-  | 'birthing'
   | 'charge_wind'
   | 'charging'
   | 'dying';
