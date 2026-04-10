@@ -46,3 +46,27 @@
 - **Dark Fortress**: dark stone tiles, cracks, glowing runes
 - Use Perlin/simplex noise or random seeding to generate natural-looking terrain variation per level
 - Terrain is purely cosmetic — no gameplay effect on walkability (walls/towers still use the grid)
+
+## 4. Unlock Progression System
+- Towers and content unlock through character experience earned by beating levels
+- Leftover money at end of a level converts to experience (ties into loot collection window)
+
+### Tower Unlock Order
+1. **Arrow Tower** — available from the start (Level 1 acts as a tutorial with only arrows)
+2. **Cannon Tower** — unlocked after beating Level 1
+3. **TBD Tower 3** — unlocked after beating Level 2
+4. **TBD Tower 4** — unlocked after further progression
+- Each new tower unlock should feel like a meaningful power spike
+
+### Enemy / Tower Synergy
+- As each tower type unlocks, new enemy types weak to that tower are introduced in subsequent levels
+  - e.g. Cannon unlocks → next level introduces clustered swarm enemies vulnerable to AoE
+  - e.g. Tower 3 unlocks → next level introduces enemies with a weakness matching that tower's specialty
+- Encourages players to use newly unlocked towers rather than spamming one type
+- Earlier enemy types still appear but in different mixes to keep variety
+
+### Experience & Persistence
+- Track total XP earned across all levels (localStorage)
+- Show XP progress bar on level select screen
+- Unlock thresholds clearly visible so players know what they're working toward
+- Replay earlier levels to farm XP if needed (but diminishing returns to prevent grinding)
