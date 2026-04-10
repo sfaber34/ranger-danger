@@ -9,14 +9,29 @@
 - Cannon and arrow tops should still rotate to aim but drawn from the angled perspective
 - Update hit flash and upgrade pop animations to match new art style
 
-## 2. Level Select Screen (Island Map)
-- Create an island-themed world map as the level select screen
-- The island is viewed from above at an angle, showing different biomes/regions
-- Each level is a node on the map connected by a path
+## 2. Level Select Screen (Pick One Approach)
 - Levels unlock sequentially — beating one unlocks the next
-- Save/load progress (localStorage) to track which levels are beaten
+- Each level has 3 difficulties: Easy, Medium, Hard
+- Save/load progress (localStorage) to track completion per level per difficulty
 
-### Level Progression & Biomes
+### Option A: Card-Based Select
+- Each biome is a card (e.g. Grasslands, Alien Planet, Mountains, Dungeon, etc.)
+- Multiple cards per biome for Easy / Medium / Hard difficulties
+- Cards show completion status — green checkmark (or similar) for each difficulty beaten
+- Cards could show a preview image of the biome, level number, and difficulty stars
+- Locked levels shown as greyed-out/face-down cards
+- Clean grid layout, easy to scan at a glance
+
+### Option B: Map-Based Select
+- Connected world map with dotted paths between level nodes
+- Levels are clickable circles on the map — click for more info or to play
+- Path dots light up / animate as levels are beaten, showing progression
+- Each level node shows biome art and completion status
+- Clicking a level opens a detail panel where you select difficulty (Easy / Medium / Hard)
+- Difficulty completion shown as 3 stars or colored pips on the node
+- Locked levels shown greyed out with a lock icon on the node
+
+### Level Biomes (shared by both options)
 1. **Grasslands** (Level 1) — current level, green fields, basic enemies
 2. **Forest** — denser terrain, tree obstacles, faster enemy waves
 3. **Swamp** — muddy ground slows player, poison enemies
@@ -25,13 +40,6 @@
 6. **Volcanic** — fire hazards, lava rivers as natural walls, elite enemies
 7. **Frozen Peaks** — ice slows projectiles, blizzard reduces visibility
 8. **Dark Fortress** — final level, all enemy types, multiple bosses
-
-### Map Visual Style
-- Hand-drawn pixel art island with biome colors visible on the map
-- Beaten levels shown with a flag/checkmark
-- Locked levels shown greyed out with a lock icon
-- Animated path between levels lights up as you progress
-- Player avatar stands on the current/last-beaten level node
 
 ## 3. Improve Ground/Terrain Variety
 - Current ground is a single shade of green — looks flat and unpolished
