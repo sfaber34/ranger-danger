@@ -95,3 +95,25 @@
 - When a Level 1 tower is upgraded, show a choice panel with both specialization options
 - Display name, icon, and brief description of each path
 - Highlight stat changes compared to the base Level 1 tower
+
+## 6. Character Abilities (Purchasable Upgrades)
+- Spend XP or in-game currency to permanently upgrade the player character
+- Upgrades persist across levels (part of the progression system)
+
+### Stat Upgrades
+- **Attack Speed** — reduce bow fire rate cooldown
+- **Attack Range** — increase targeting/shooting distance
+- **Attack Damage** — increase arrow damage per hit
+- **Movement Speed** — move faster around the map
+- **Coin Magnet Range** — collect coins from further away
+- **Coin Magnet Speed** — coins fly toward player faster
+- **Max HP** — increase player health pool
+- **HP Regen** — slowly regenerate health over time
+- **Armor** — reduce incoming damage by a flat amount or percentage
+
+### Design Notes
+- Each stat should have multiple tiers (e.g. 5 levels each, progressively more expensive)
+- Accessible from the level select screen or during the pre-wave build phase
+- Show clear before/after values so the player knows what they're buying
+- Balance so upgrades feel impactful but no single stat becomes a must-buy
+- Could tie into the XP system from TODO #4 — XP is the currency for these upgrades
