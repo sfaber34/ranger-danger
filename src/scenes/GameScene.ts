@@ -135,6 +135,9 @@ export class GameScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '20px', color: '#7cc4ff',
       stroke: '#0b0f1a', strokeThickness: 4
     }).setOrigin(0.5).setDepth(30).setScrollFactor(0);
+
+    // Signal to the main page that loading is done
+    this.game.events.emit('game-ready');
   }
 
   hudState() {

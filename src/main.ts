@@ -36,10 +36,13 @@ function start() {
   started = true;
   const name = (nameInput.value || 'hero').trim().slice(0, 14);
   (window as any).__playerName = name;
-  overlay.classList.add('hidden');
+
+  // Switch overlay to loading state (keep it visible)
+  const panel = overlay.querySelector('.panel') as HTMLDivElement;
+  panel.classList.add('loading');
   requestWakeLock();
 
-  new Phaser.Game({
+  const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
     width: CFG.width,
@@ -55,6 +58,11 @@ function start() {
       autoCenter: Phaser.Scale.CENTER_BOTH
     },
     scene: [BootScene, GameScene, UIScene]
+  });
+
+  // Hide overlay once the game scene is ready
+  game.events.on('game-ready', () => {
+    overlay.classList.add('hidden');
   });
 }
 

@@ -17,6 +17,14 @@
       .panel button { margin-top:14px; background:#2a3760; color:#fff; border:none; padding:10px 20px; border-radius:4px; font-size:14px; cursor:pointer; }
       .panel button:hover { background:#3b4d84; }
       .hint { color:#556; font-size:11px; margin-top:14px; line-height:1.5; }
+      /* Loading state */
+      .panel.loading input, .panel.loading button, .panel.loading .hint, .panel.loading p { display:none; }
+      .loader { display:none; margin:18px auto 0; }
+      .panel.loading .loader { display:block; }
+      .loader-bar { width:200px; height:6px; background:#0b0f1a; border-radius:3px; overflow:hidden; margin:12px auto 0; }
+      .loader-fill { width:0%; height:100%; background:linear-gradient(90deg,#2a3760,#7cc4ff); border-radius:3px; animation:load-pulse 1.8s ease-in-out infinite; }
+      @keyframes load-pulse { 0%{width:5%} 50%{width:70%} 100%{width:95%} }
+      .load-text { color:#7cc4ff; font-size:13px; margin-top:10px; letter-spacing:1px; }
     </style>
   </head>
   <body>
@@ -29,6 +37,10 @@
         <br/>
         <button id="startBtn">START</button>
         <div class="hint">WASD / Arrows to move &middot; stand still to auto-shoot<br/>1 = Tower (60)  &middot;  2 = Wall (5)  &middot;  Click to build  &middot;  X to sell</div>
+        <div class="loader">
+          <div class="load-text">Generating world...</div>
+          <div class="loader-bar"><div class="loader-fill"></div></div>
+        </div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
