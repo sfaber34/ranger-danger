@@ -10,8 +10,8 @@ export const CFG = {
   player: {
     hp: 100,
     speed: 150,
-    fireRate: 380,
-    range: 260,
+    fireRate: 480,
+    range: 240,
     projectileSpeed: 520,
     damage: 10
   },
@@ -23,16 +23,16 @@ export const CFG = {
         cost: 60,
         levels: [
           { hp: 120, fireRate: 620, range: 240, damage: 16, projectileSpeed: 480, splashRadius: 0, upgradeCost: 60 },
-          { hp: 170, fireRate: 520, range: 270, damage: 24, projectileSpeed: 520, splashRadius: 0, upgradeCost: 110 },
-          { hp: 240, fireRate: 430, range: 300, damage: 34, projectileSpeed: 560, splashRadius: 0, upgradeCost: 0 }
+          { hp: 170, fireRate: 460, range: 270, damage: 24, projectileSpeed: 580, splashRadius: 0, upgradeCost: 110 },
+          { hp: 240, fireRate: 320, range: 300, damage: 34, projectileSpeed: 700, splashRadius: 0, upgradeCost: 0 }
         ]
       },
       cannon: {
         cost: 100,
         levels: [
           { hp: 180, fireRate: 1400, range: 220, damage: 15, projectileSpeed: 200, splashRadius: 48, upgradeCost: 110 },
-          { hp: 250, fireRate: 1250, range: 240, damage: 22, projectileSpeed: 220, splashRadius: 58, upgradeCost: 200 },
-          { hp: 340, fireRate: 1100, range: 260, damage: 32, projectileSpeed: 240, splashRadius: 72, upgradeCost: 0 }
+          { hp: 250, fireRate: 1100, range: 240, damage: 22, projectileSpeed: 280, splashRadius: 58, upgradeCost: 200 },
+          { hp: 340, fireRate: 850, range: 260, damage: 32, projectileSpeed: 360, splashRadius: 72, upgradeCost: 0 }
         ]
       }
     }

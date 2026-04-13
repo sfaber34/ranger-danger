@@ -785,12 +785,13 @@ export class GameScene extends Phaser.Scene {
         // Cannon: aim at the spot that hits the most enemies
         const aim = this.findBestCannonTarget(tower.x, tower.y, st.range, st.splashRadius, st.projectileSpeed);
         if (!aim) continue;
-        const angle = Math.atan2(aim.y - tower.y, aim.x - tower.x);
+        const launchY = tower.top.y; // fire from the barrel position, not base center
+        const angle = Math.atan2(aim.y - launchY, aim.x - tower.x);
         tower.top.setRotation(angle);
         if (time > tower.lastShot + st.fireRate) {
           tower.lastShot = time;
           tower.top.play('cannon-top-shoot', true);
-          this.spawnProjectile(tower.x, tower.y, aim.x, aim.y, st.projectileSpeed, st.damage, st.splashRadius);
+          this.spawnProjectile(tower.x, launchY, aim.x, aim.y, st.projectileSpeed, st.damage, st.splashRadius);
         }
       } else {
         // Arrow: shoot at nearest enemy with lead targeting
@@ -804,12 +805,13 @@ export class GameScene extends Phaser.Scene {
           aimX = tgt.x + tb.velocity.x * travelTime;
           aimY = tgt.y + tb.velocity.y * travelTime;
         }
-        const angle = Math.atan2(aimY - tower.y, aimX - tower.x);
+        const launchY = tower.top.y; // fire from the bow/archer position, not base center
+        const angle = Math.atan2(aimY - launchY, aimX - tower.x);
         tower.top.setRotation(angle);
         if (time > tower.lastShot + st.fireRate) {
           tower.lastShot = time;
           tower.top.setTexture('t_top_1');
-          this.spawnProjectile(tower.x, tower.y, aimX, aimY, st.projectileSpeed, st.damage);
+          this.spawnProjectile(tower.x, launchY, aimX, aimY, st.projectileSpeed, st.damage);
         } else if (time > tower.lastShot + 150) {
           tower.top.setTexture('t_top_0');
         }

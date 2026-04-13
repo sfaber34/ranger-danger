@@ -110,6 +110,16 @@ export class Tower extends Phaser.Physics.Arcade.Sprite {
     if (this.kind === 'cannon') this.top.clearTint();
     else this.top.setTint(tint);
     if (this.stand) this.stand.setTint(tint);
+
+    // Swap arrow tower base sprite per upgrade level
+    if (this.kind === 'arrow') {
+      const baseKey = this.level === 2 ? 't_base_2' :
+                      this.level === 1 ? 't_base_1' : 't_base';
+      if (this.scene.textures.exists(baseKey)) {
+        this.setTexture(baseKey);
+        this.setTint(tint);
+      }
+    }
   }
 
   hurt(amount: number) {

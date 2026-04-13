@@ -1727,20 +1727,29 @@ export function generateAllArt(scene: Phaser.Scene) {
   for (const f of eFrames) add(scene, `eb_${f}`, makeCanvas(32, drawEnemyBasic(f)));
   for (const f of eFrames) add(scene, `eh_${f}`, makeCanvas(32, drawEnemyHeavy(f)));
 
+  // Shared helper to copy a loaded PNG texture to a new key
+  const copyTex = (src: string, dst: string) => {
+    if (scene.textures.exists(dst)) scene.textures.remove(dst);
+    const srcTex = scene.textures.get(src);
+    const srcImg = srcTex.getSourceImage() as HTMLImageElement;
+    const c = document.createElement('canvas');
+    c.width = srcImg.width; c.height = srcImg.height;
+    c.getContext('2d')!.drawImage(srcImg, 0, 0);
+    scene.textures.addCanvas(dst, c);
+  };
+
   // Tower — PNG base + procedural ballista top
   if (scene.textures.exists('t_base_png')) {
-    const copyTex = (src: string, dst: string) => {
-      if (scene.textures.exists(dst)) scene.textures.remove(dst);
-      const srcTex = scene.textures.get(src);
-      const srcImg = srcTex.getSourceImage() as HTMLImageElement;
-      const c = document.createElement('canvas');
-      c.width = srcImg.width; c.height = srcImg.height;
-      c.getContext('2d')!.drawImage(srcImg, 0, 0);
-      scene.textures.addCanvas(dst, c);
-    };
     copyTex('t_base_png', 't_base');
   } else {
     add(scene, 't_base',  makeCanvas(64, drawTowerBase));
+  }
+  // Arrow tower upgrade bases (level 1 = sprite #7, level 2 = sprite #0)
+  if (scene.textures.exists('t_base_1_png')) {
+    copyTex('t_base_1_png', 't_base_1');
+  }
+  if (scene.textures.exists('t_base_2_png')) {
+    copyTex('t_base_2_png', 't_base_2');
   }
   // Cannon tower — PNG base (sprite #29)
   if (scene.textures.exists('c_base_png')) {
