@@ -60,18 +60,6 @@ export class LevelSelectScene extends Phaser.Scene {
       stroke: '#000', strokeThickness: 2
     }).setOrigin(0.5).setDepth(2);
 
-    // Player name — top left
-    const name = (window as any).__playerName || 'hero';
-    const nameBg = this.add.graphics();
-    nameBg.fillStyle(0x11172a, 0.85);
-    nameBg.fillRoundedRect(12, 6, 130, 36, 8);
-    nameBg.lineStyle(1, 0x2a3760, 0.8);
-    nameBg.strokeRoundedRect(12, 6, 130, 36, 8);
-    this.add.text(77, 24, name, {
-      fontFamily: 'monospace', fontSize: '14px', color: '#7cc4ff',
-      stroke: '#000', strokeThickness: 2
-    }).setOrigin(0.5).setDepth(2);
-
     // Hide loading overlay
     this.game.events.emit('game-ready');
   }
@@ -545,9 +533,7 @@ export class LevelSelectScene extends Phaser.Scene {
 
   startMission() {
     if (!this.selectedLevel || !this.selectedDiff) return;
-    const playerName = (window as any).__playerName || 'hero';
     this.scene.start('Game', {
-      playerName,
       levelId: this.selectedLevel.id,
       difficulty: this.selectedDiff
     });

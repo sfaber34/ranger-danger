@@ -13,12 +13,11 @@
       .panel { background:#11172a; padding:24px 32px; border:2px solid #2a3760; border-radius:8px; text-align:center; min-width:280px; }
       .panel h1 { margin:0 0 8px; font-size:28px; letter-spacing:2px; color:#7cc4ff; }
       .panel p { margin:4px 0 16px; color:#aab; font-size:13px; }
-      .panel input { background:#0b0f1a; color:#fff; border:1px solid #2a3760; padding:8px 10px; border-radius:4px; font-size:14px; width:80%; text-align:center; }
       .panel button { margin-top:14px; background:#2a3760; color:#fff; border:none; padding:10px 20px; border-radius:4px; font-size:14px; cursor:pointer; }
       .panel button:hover { background:#3b4d84; }
       .hint { color:#556; font-size:11px; margin-top:14px; line-height:1.5; }
       /* Loading state */
-      .panel.loading input, .panel.loading button, .panel.loading .hint, .panel.loading p { display:none; }
+      .panel.loading button, .panel.loading .hint, .panel.loading p { display:none; }
       .loader { display:none; margin:18px auto 0; }
       .panel.loading .loader { display:block; }
       .loader-spinner { width:32px; height:32px; border:3px solid #2a3760; border-top-color:#7cc4ff; border-radius:50%; margin:16px auto 0; animation:spin 0.8s linear infinite; }
@@ -31,11 +30,9 @@
     <div id="overlay">
       <div class="panel">
         <h1>TD SURVIVAL</h1>
-        <p>Enter your name and survive the horde</p>
-        <input id="playerName" maxlength="14" placeholder="hero" />
-        <br/>
+        <p>Survive the horde</p>
         <button id="startBtn">START</button>
-        <div class="hint">WASD / Arrows to move &middot; stand still to auto-shoot<br/>1 = Tower (60)  &middot;  2 = Wall (5)  &middot;  Click to build  &middot;  X to sell</div>
+        <div class="hint">WASD / Arrows to move &middot; auto-shoot nearby enemies (half speed while moving)<br/>1 = Arrow Tower &middot; 2 = Cannon Tower &middot; 3 = Wall &middot; Click to build &middot; X+Click to sell</div>
         <div class="loader">
           <div class="load-text">Generating world...</div>
           <div class="loader-spinner"></div>

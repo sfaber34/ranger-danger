@@ -6,7 +6,6 @@ import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
 
 const overlay = document.getElementById('overlay') as HTMLDivElement;
-const nameInput = document.getElementById('playerName') as HTMLInputElement;
 const startBtn = document.getElementById('startBtn') as HTMLButtonElement;
 
 let started = false;
@@ -35,8 +34,6 @@ document.addEventListener('visibilitychange', () => {
 function start() {
   if (started) return;
   started = true;
-  const name = (nameInput.value || 'hero').trim().slice(0, 14);
-  (window as any).__playerName = name;
 
   // Switch overlay to loading state (keep it visible)
   const panel = overlay.querySelector('.panel') as HTMLDivElement;
@@ -68,4 +65,3 @@ function start() {
 }
 
 startBtn.addEventListener('click', start);
-nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });

@@ -59,6 +59,7 @@ export class GameScene extends Phaser.Scene {
   towerPanelBounds = { x: 0, y: 0, w: 0, h: 0 };
   towerIndicators = new Map<Tower, { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite }>();
   gapBlockers: Phaser.Physics.Arcade.StaticGroup | null = null;
+  sellTimers = new Map<Tower | Wall, { startTime: number; duration: number; gfx: Phaser.GameObjects.Graphics }>();
   bossIndicator: { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite } | null = null;
 
   boss: Boss | null = null;
@@ -67,7 +68,6 @@ export class GameScene extends Phaser.Scene {
 
   killsTarget = CFG.winKills;
   gameOver = false;
-  playerName = 'hero';
   levelId = 1;
   difficulty: Difficulty = 'easy';
   enemyHpMult = 1;
@@ -76,7 +76,6 @@ export class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
 
   init(data: any) {
-    this.playerName = data?.playerName || 'hero';
     this.levelId = data?.levelId ?? 1;
     this.difficulty = data?.difficulty ?? 'easy';
 
@@ -105,6 +104,7 @@ export class GameScene extends Phaser.Scene {
     this.vTime = 0;
     this.selectedTower = null;
     this.towerIndicators = new Map();
+    this.sellTimers = new Map();
     this.bossIndicator = null;
     this.boss = null;
     this.bossSpawned = false;
@@ -219,7 +219,7 @@ export class GameScene extends Phaser.Scene {
 
   hudState() {
     return {
-      name: this.playerName,
+      name: 'hero',
       hp: this.player?.hp ?? CFG.player.hp,
       maxHp: this.player?.maxHp ?? CFG.player.hp,
       money: this.player?.money ?? 0,
@@ -353,31 +353,97 @@ export class GameScene extends Phaser.Scene {
   }
 
   sellAt(tx: number, ty: number) {
-    // tower: click anywhere inside the 3x3 footprint
+    // tower: click anywhere inside the footprint
     const ti = this.towers.findIndex(t =>
       tx >= t.tileX && tx < t.tileX + t.size &&
       ty >= t.tileY && ty < t.tileY + t.size);
     if (ti >= 0) {
-      const t = this.towers[ti];
-      this.player.money += Math.floor(t.totalSpent * 0.5);
-      for (let j = 0; j < t.size; j++) for (let i = 0; i < t.size; i++) gridSet(this.grid, t.tileX + i, t.tileY + j, 0);
-      t.destroyTower();
-      this.towers.splice(ti, 1);
-      this.gridVersion++; this.rebuildGapBlockers(); this.rebuildGapBlockers();
-      this.pushHud();
+      this.startSellTimer(this.towers[ti]);
       return;
     }
     const wi = this.walls.findIndex(w => w.tileX === tx && w.tileY === ty);
     if (wi >= 0) {
-      const w = this.walls[wi];
-      this.player.money += Math.floor(CFG.wall.cost * 0.5);
-      w.destroy();
-      this.walls.splice(wi, 1);
-      gridSet(this.grid, tx, ty, 0);
-      this.updateWallNeighbors(tx, ty);
-      this.gridVersion++; this.rebuildGapBlockers(); this.rebuildGapBlockers();
-      this.pushHud();
+      this.startSellTimer(this.walls[wi]);
     }
+  }
+
+  startSellTimer(target: Tower | Wall) {
+    // If already pending, cancel instead (click again to cancel)
+    if (this.sellTimers.has(target)) {
+      this.cancelSellTimer(target);
+      return;
+    }
+    const gfx = this.add.graphics().setDepth(200);
+    this.sellTimers.set(target, { startTime: this.vTime, duration: 3000, gfx });
+  }
+
+  cancelSellTimer(target: Tower | Wall) {
+    const timer = this.sellTimers.get(target);
+    if (timer) {
+      timer.gfx.destroy();
+      this.sellTimers.delete(target);
+    }
+  }
+
+  updateSellTimers() {
+    for (const [target, timer] of this.sellTimers) {
+      const elapsed = this.vTime - timer.startTime;
+      const progress = Math.min(elapsed / timer.duration, 1);
+
+      if (progress >= 1) {
+        // Timer complete — execute sell
+        timer.gfx.destroy();
+        this.sellTimers.delete(target);
+        this.executeSell(target);
+        continue;
+      }
+
+      // Draw red pie countdown over the target
+      const remaining = 1 - progress;
+      const cx = target.x, cy = target.y;
+      const radius = target instanceof Tower ? CFG.tile * 0.9 : CFG.tile * 0.45;
+      const startAngle = -Math.PI / 2; // 12 o'clock
+      const endAngle = startAngle + remaining * Math.PI * 2;
+
+      timer.gfx.clear();
+      timer.gfx.fillStyle(0xff2222, 0.3);
+      timer.gfx.beginPath();
+      timer.gfx.moveTo(cx, cy);
+      timer.gfx.arc(cx, cy, radius, startAngle, endAngle, false);
+      timer.gfx.closePath();
+      timer.gfx.fillPath();
+      // Thin red border
+      timer.gfx.lineStyle(2, 0xff4444, 0.6);
+      timer.gfx.beginPath();
+      timer.gfx.arc(cx, cy, radius, startAngle, endAngle, false);
+      timer.gfx.strokePath();
+    }
+  }
+
+  executeSell(target: Tower | Wall) {
+    if (target instanceof Tower) {
+      const t = target;
+      if (this.selectedTower === t) this.deselectTower();
+      this.player.money += Math.floor(t.totalSpent * 0.5);
+      for (let j = 0; j < t.size; j++)
+        for (let i = 0; i < t.size; i++)
+          gridSet(this.grid, t.tileX + i, t.tileY + j, 0);
+      const ind = this.towerIndicators.get(t);
+      if (ind) { ind.bg.destroy(); ind.ptr.destroy(); this.towerIndicators.delete(t); }
+      const idx = this.towers.indexOf(t);
+      if (idx >= 0) this.towers.splice(idx, 1);
+      t.destroyTower();
+    } else {
+      const w = target;
+      this.player.money += Math.floor(CFG.wall.cost * 0.5);
+      const idx = this.walls.indexOf(w);
+      if (idx >= 0) this.walls.splice(idx, 1);
+      gridSet(this.grid, w.tileX, w.tileY, 0);
+      this.updateWallNeighbors(w.tileX, w.tileY);
+      w.destroy();
+    }
+    this.gridVersion++; this.rebuildGapBlockers();
+    this.pushHud();
   }
 
   selectTower(t: Tower) {
@@ -514,16 +580,7 @@ export class GameScene extends Phaser.Scene {
   doSellSelected() {
     const t = this.selectedTower;
     if (!t) return;
-    this.player.money += Math.floor(t.totalSpent * 0.5);
-    for (let j = 0; j < t.size; j++)
-      for (let i = 0; i < t.size; i++)
-        gridSet(this.grid, t.tileX + i, t.tileY + j, 0);
-    const idx = this.towers.indexOf(t);
-    if (idx >= 0) this.towers.splice(idx, 1);
-    t.destroyTower();
-    this.gridVersion++; this.rebuildGapBlockers();
-    this.deselectTower();
-    this.pushHud();
+    this.startSellTimer(t);
   }
 
   floatText(x: number, y: number, msg: string, color: string) {
@@ -661,6 +718,7 @@ export class GameScene extends Phaser.Scene {
     this.updateSpawning(time, vd);
     this.updateDepthSort();
     this.updateTowerIndicators();
+    this.updateSellTimers();
     this.checkEndConditions();
   }
 
@@ -1630,6 +1688,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   destroyTower(t: Tower) {
+    this.cancelSellTimer(t);
     if (this.selectedTower === t) this.deselectTower();
     const ind = this.towerIndicators.get(t);
     if (ind) { ind.bg.destroy(); ind.ptr.destroy(); this.towerIndicators.delete(t); }
@@ -1645,6 +1704,7 @@ export class GameScene extends Phaser.Scene {
     t.destroyTower();
   }
   destroyWall(w: Wall) {
+    this.cancelSellTimer(w);
     const idx = this.walls.indexOf(w);
     if (idx >= 0) this.walls.splice(idx, 1);
     const tx = w.tileX, ty = w.tileY;
@@ -2306,7 +2366,7 @@ export class GameScene extends Phaser.Scene {
       this.gameOver = true;
       this.physics.pause();
       this.game.events.emit('game-end', {
-        win: false, name: this.playerName,
+        win: false, name: 'hero',
         kills: this.player.kills, money: this.player.money
       });
     }, 3500);
@@ -2315,7 +2375,7 @@ export class GameScene extends Phaser.Scene {
     if (this.gameOver) return;
     this.gameOver = true;
     this.physics.pause();
-    this.game.events.emit('game-end', { win: true, name: this.playerName, kills: this.player.kills, money: this.player.money });
+    this.game.events.emit('game-end', { win: true, name: 'hero', kills: this.player.kills, money: this.player.money });
   }
 
   shutdown() {
