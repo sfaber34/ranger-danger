@@ -59,6 +59,8 @@ export class GameScene extends Phaser.Scene {
   towerPanelBounds = { x: 0, y: 0, w: 0, h: 0 };
   towerIndicators = new Map<Tower, { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite }>();
   gapBlockers: Phaser.Physics.Arcade.StaticGroup | null = null;
+  wallTilemap!: Phaser.Tilemaps.Tilemap;
+  wallLayer!: Phaser.Tilemaps.TilemapLayer;
   sellTimers = new Map<Tower | Wall, { startTime: number; duration: number; gfx: Phaser.GameObjects.Graphics }>();
   bossIndicator: { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite } | null = null;
 
@@ -144,6 +146,27 @@ export class GameScene extends Phaser.Scene {
     this.towerGroup = this.physics.add.staticGroup();
     this.gapBlockers = this.physics.add.staticGroup();
 
+    // Collision tilemap for player-wall collision (no seam issues unlike individual bodies)
+    const mapSize = 200; // 200x200 tiles centered on origin
+    this.wallTilemap = this.make.tilemap({
+      tileWidth: CFG.tile, tileHeight: CFG.tile,
+      width: mapSize, height: mapSize
+    });
+    // 1px transparent + 1px solid tileset
+    const canvas = document.createElement('canvas');
+    canvas.width = CFG.tile * 2; canvas.height = CFG.tile;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#ff00ff';
+    ctx.fillRect(CFG.tile, 0, CFG.tile, CFG.tile); // tile index 1 = solid
+    const tilesetKey = 'wall_collision_tileset';
+    this.textures.addCanvas(tilesetKey, canvas);
+    const tileset = this.wallTilemap.addTilesetImage(tilesetKey, tilesetKey, CFG.tile, CFG.tile)!;
+    this.wallLayer = this.wallTilemap.createBlankLayer('walls', tileset,
+      -(mapSize / 2) * CFG.tile, -(mapSize / 2) * CFG.tile)!;
+    this.wallLayer.setCollision(1);
+    this.wallLayer.setVisible(false); // invisible — walls have their own sprites
+    this.wallLayer.setDepth(-1);
+
     // player — starts at origin, camera follows
     this.player = new Player(this, 0, 0);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
@@ -160,8 +183,8 @@ export class GameScene extends Phaser.Scene {
     this.generateChunksAround(0, 0);
     this.processChunkQueue(this.pendingChunks.length);
 
-    // collisions
-    this.physics.add.collider(this.player, this.wallGroup);
+    // collisions — player uses tilemap layer (no seams) instead of individual wall bodies
+    this.physics.add.collider(this.player, this.wallLayer);
     this.physics.add.collider(this.player, this.towerGroup);
     this.physics.add.collider(this.player, this.gapBlockers);
     this.physics.add.collider(this.enemies, this.wallGroup, (e, w) => this.enemyHitsWall(e as Enemy, w as Wall));
@@ -347,6 +370,7 @@ export class GameScene extends Phaser.Scene {
     this.walls.push(w);
     this.wallGroup.add(w);
     gridSet(this.grid, tx, ty, 1);
+    this.syncWallTile(tx, ty, true);
     this.updateWallNeighbors(tx, ty);
     this.gridVersion++; this.rebuildGapBlockers();
     this.pushHud();
@@ -439,6 +463,7 @@ export class GameScene extends Phaser.Scene {
       const idx = this.walls.indexOf(w);
       if (idx >= 0) this.walls.splice(idx, 1);
       gridSet(this.grid, w.tileX, w.tileY, 0);
+      this.syncWallTile(w.tileX, w.tileY, false);
       this.updateWallNeighbors(w.tileX, w.tileY);
       w.destroy();
     }
@@ -860,6 +885,15 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // Sync a single tile in the collision tilemap (wall placed or removed)
+  syncWallTile(tx: number, ty: number, blocked: boolean) {
+    const mapOffset = (this.wallTilemap.width / 2);
+    const mx = tx + mapOffset, my = ty + mapOffset;
+    if (mx >= 0 && mx < this.wallTilemap.width && my >= 0 && my < this.wallTilemap.height) {
+      this.wallLayer.putTileAt(blocked ? 1 : -1, mx, my);
+    }
+  }
+
   // Place invisible physics rectangles at diagonal gaps between walls and towers
   // so the player can't squeeze through. Rebuilds from scratch each call.
   rebuildGapBlockers() {
@@ -883,12 +917,13 @@ export class GameScene extends Phaser.Scene {
         const bl = gridGet(this.grid, cx - 1, cy);
         const br = gridGet(this.grid, cx,     cy);
 
-        // TL↔BR diagonal: blocked if tr===1 || bl===1 || (tr>=1 && bl>=1)
-        const tlbrBlocked = tr === 1 || bl === 1 || (tr >= 1 && bl >= 1);
-        // TR↔BL diagonal: blocked if tl===1 || br===1 || (tl>=1 && br>=1)
-        const trblBlocked = tl === 1 || br === 1 || (tl >= 1 && br >= 1);
+        // Only block corners where a wall (1) meets a tower (2) diagonally.
+        // Wall-to-wall corners don't need blockers (both are full-tile rectangles).
+        // Tower-to-tower corners are intentional gaps (gameplay feature).
+        const tlbrNeedBlock = (tr === 1 && bl === 2) || (tr === 2 && bl === 1);
+        const trblNeedBlock = (tl === 1 && br === 2) || (tl === 2 && br === 1);
 
-        if (!tlbrBlocked && !trblBlocked) continue;
+        if (!tlbrNeedBlock && !trblNeedBlock) continue;
 
         // Place a small square blocker at this corner
         const wx = cx * t, wy = cy * t;
@@ -972,7 +1007,7 @@ export class GameScene extends Phaser.Scene {
           aimX = target.x + tb.velocity.x * travelTime;
           aimY = target.y + tb.velocity.y * travelTime;
         }
-        this.spawnProjectile(this.player.x, this.player.y, aimX, aimY, CFG.player.projectileSpeed, CFG.player.damage);
+        this.spawnProjectile(this.player.x, this.player.y, aimX, aimY, CFG.player.projectileSpeed, CFG.player.damage, 0, 0.5, 0, target);
       }
     } else {
       // No target — bow points in the direction the player faces, held out to the side
@@ -1022,7 +1057,7 @@ export class GameScene extends Phaser.Scene {
           tower.top.setTexture('t_top_1');
           const aScale = 0.5 + tower.level * 0.12;
           const aTint = tower.level === 2 ? 0xffd67a : tower.level === 1 ? 0x9fd9ff : 0;
-          this.spawnProjectile(tower.x, launchY, aimX, aimY, st.projectileSpeed, st.damage, 0, aScale, aTint);
+          this.spawnProjectile(tower.x, launchY, aimX, aimY, st.projectileSpeed, st.damage, 0, aScale, aTint, tgt);
         } else if (time > tower.lastShot + 150) {
           tower.top.setTexture('t_top_0');
         }
@@ -1709,6 +1744,7 @@ export class GameScene extends Phaser.Scene {
     if (idx >= 0) this.walls.splice(idx, 1);
     const tx = w.tileX, ty = w.tileY;
     gridSet(this.grid, tx, ty, 0);
+    this.syncWallTile(tx, ty, false);
     this.gridVersion++; this.rebuildGapBlockers();
     w.destroy();
     this.updateWallNeighbors(tx, ty);
@@ -1809,10 +1845,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------- PROJECTILES ----------
-  spawnProjectile(x: number, y: number, tx: number, ty: number, speed: number, dmg: number, splashRadius = 0, scale = 0.5, tint = 0) {
+  spawnProjectile(x: number, y: number, tx: number, ty: number, speed: number, dmg: number, splashRadius = 0, scale = 0.5, tint = 0, homingTarget: Phaser.GameObjects.Sprite | null = null) {
     const pr = new Projectile(this, x, y);
     this.projectiles.add(pr);
-    pr.fire(tx, ty, speed, dmg, splashRadius, scale, tint);
+    pr.fire(tx, ty, speed, dmg, splashRadius, scale, tint, homingTarget);
   }
 
   updateProjectiles(time: number) {
@@ -1820,6 +1856,16 @@ export class GameScene extends Phaser.Scene {
       const p = c as Projectile;
       if (!p || !p.active) return true;
       if (time - p.born > p.lifetime) { p.destroy(); return true; }
+
+      // Homing arrows: steer toward target each frame
+      if (p.homingTarget && p.homingTarget.active && !p.groundTarget) {
+        const dx = p.homingTarget.x - p.x;
+        const dy = p.homingTarget.y - p.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const angle = Math.atan2(dy, dx);
+        p.setVelocity((dx / d) * p.speed, (dy / d) * p.speed);
+        p.setRotation(angle);
+      }
 
       if (p.groundTarget) {
         // Undo previous arc offset so physics position is correct

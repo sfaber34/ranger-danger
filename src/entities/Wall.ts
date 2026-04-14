@@ -15,7 +15,7 @@ export class Wall extends Phaser.Physics.Arcade.Sprite {
     this.setScale(0.5);
     scene.add.existing(this);
     scene.physics.add.existing(this, true);
-    // Full tile body; diagonal gap enforcement handled by GameScene.enforcePlayerGrid()
+    // Full tile body
     const wallBody = CFG.tile;
     const body = this.body as Phaser.Physics.Arcade.StaticBody;
     body.setSize(wallBody, wallBody);
