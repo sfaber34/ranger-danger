@@ -76,7 +76,6 @@ export const CFG = {
   },
 
   forest: {
-    treeClusterCount: 8,
     wolfPackSize: 4,
     wolfPackCooldownMin: 8000,
     wolfPackCooldownMax: 14000,

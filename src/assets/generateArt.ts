@@ -1738,8 +1738,10 @@ function drawGroundWorld(tileX: number, tileY: number) {
     let s = ((tileX * 73856093 + tileY * 19349669) >>> 0) % 2147483647;
     const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
 
-    // Transition band width (fraction of each shade's range)
-    const bandW = 0.08;
+    // Transition: fade-out, solid mid band, fade-in (each as fraction of shade range)
+    const fadeW = 0.06;  // fade from current shade to midpoint
+    const midW  = 0.03;  // thin solid band of the midpoint color
+    const totalW = fadeW + midW + fadeW; // full transition zone width
 
     for (let py = 0; py < 32; py++) {
       for (let px = 0; px < 32; px++) {
@@ -1753,15 +1755,22 @@ function drawGroundWorld(tileX: number, tileY: number) {
         const idx = Math.floor(pos);
         const frac = pos - idx; // 0..1 within this shade
 
-        // Check if we're near a boundary and blend
-        if (idx < 3 && frac > (1 - bandW)) {
-          // Near upper boundary — blend toward next shade
-          const t = (frac - (1 - bandW)) / bandW;
-          put(px, py, lerpCol(shades[idx], shades[idx + 1], t));
-        } else if (idx > 0 && frac < bandW) {
-          // Near lower boundary — blend from previous shade
-          const t = frac / bandW;
-          put(px, py, lerpCol(shades[idx - 1], shades[idx], t));
+        // Two-layer transition at boundaries between shades
+        // Layout: [solid shade] [fade→mid] [solid mid] [fade→next] [solid next shade]
+        const bandStart = 1 - totalW;
+        if (idx < 3 && frac > bandStart) {
+          const mid = shades[idx].map((c, i) => Math.round((c + shades[idx + 1][i]) / 2));
+          const t = frac - bandStart; // 0..totalW
+          if (t < fadeW) {
+            // Fade from current shade toward midpoint
+            put(px, py, lerpCol(shades[idx], mid, t / fadeW));
+          } else if (t < fadeW + midW) {
+            // Thin solid midpoint band
+            put(px, py, lerpCol(mid, mid, 0)); // just mid color
+          } else {
+            // Fade from midpoint toward next shade
+            put(px, py, lerpCol(mid, shades[idx + 1], (t - fadeW - midW) / fadeW));
+          }
         } else {
           put(px, py, shadeHex[idx]);
         }
@@ -1802,32 +1811,78 @@ function drawGroundWorld(tileX: number, tileY: number) {
 // Forest ground — darker greens with brown dirt patches, leaf litter, mushrooms, moss
 function drawGroundForest(tileX: number, tileY: number) {
   return (put: Put) => {
-    // Forest green shades — darker than meadow but not too dark
-    const greenShades = ['#243e22', '#2c482a', '#345232', '#2a4428'];
-    // Brown dirt transition band (5 colors)
-    const dirtBand = ['#2a4226', '#3e5028', '#4e4e26', '#5e482e', '#4a3420'];
+    // Forest green shades — tighter range so transitions are subtle
+    const greenHex = ['#2a4626', '#2e4c2c', '#324f30', '#365434'];
+
+    // Dirt shades — earthy browns
+    const dirtHex = ['#4a3828', '#3e2e20', '#32261a'];
 
     let s = ((tileX * 73856093 + tileY * 19349669) >>> 0) % 2147483647;
     const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+
+    // Per-pixel hash for dithering — use two rounds to break diagonal patterns
+    const pxHash = (x: number, y: number) => {
+      let h = ((x * 374761393 + y * 668265263 + 1274126177) >>> 0);
+      h = ((h ^ (h >> 13)) * 1103515245 + 12345) >>> 0;
+      return (h & 0xffff) / 0xffff;
+    };
+
+    // Dither zone width (fraction of shade range where mixing occurs)
+    const ditherW = 0.06;
 
     for (let py = 0; py < 32; py++) {
       for (let px = 0; px < 32; px++) {
         const wx = tileX * 32 + px;
         const wy = tileY * 32 + py;
 
-        // Base green noise
         const n = wnoise(wx + 8000, wy + 1000, 400);
-        // Dirt patch noise (different offset for variety)
         const dirtN = wnoise(wx + 5000, wy + 2000, 300);
+        const h = pxHash(wx, wy); // 0..1 random per pixel
 
-        if (dirtN > 0.62) {
-          // Dirt transition bands
-          const t = (dirtN - 0.62) / 0.38; // 0..1
-          const idx = Math.min(4, Math.floor(t * 5));
-          put(px, py, dirtBand[idx]);
+        // Jitter the dirt threshold per-pixel for ragged edges
+        const dirtThresh = 0.62 + (h - 0.5) * 0.03;
+
+        if (dirtN > dirtThresh) {
+          // Green-to-dirt edge dithering
+          const edgeDither = 0.025;
+          if (dirtN < dirtThresh + edgeDither) {
+            // Mix green and dirt pixels randomly at the border
+            const mixChance = (dirtN - dirtThresh) / edgeDither;
+            if (h > mixChance) {
+              // Green pixel
+              const gPos = Math.min(3.999, n * 4);
+              put(px, py, greenHex[Math.floor(gPos)]);
+            } else {
+              put(px, py, dirtHex[0]); // lightest dirt
+            }
+          } else {
+            // Inner dirt — dithered shade transitions
+            const inner = (dirtN - dirtThresh - edgeDither) / (1.0 - dirtThresh - edgeDither);
+            const dPos = Math.min(2.999, Math.max(0, inner * 3));
+            const dIdx = Math.floor(dPos);
+            const dFrac = dPos - dIdx;
+            // Dither near boundaries
+            if (dIdx < 2 && dFrac > (1 - ditherW) && h > (dFrac - (1 - ditherW)) / ditherW) {
+              put(px, py, dirtHex[dIdx]);
+            } else if (dIdx < 2 && dFrac > (1 - ditherW)) {
+              put(px, py, dirtHex[dIdx + 1]);
+            } else {
+              put(px, py, dirtHex[dIdx]);
+            }
+          }
         } else {
-          const idx = Math.min(3, Math.floor(n * 4));
-          put(px, py, greenShades[idx]);
+          // Green shades — dithered transitions
+          const gPos = Math.min(3.999, n * 4);
+          const gIdx = Math.floor(gPos);
+          const gFrac = gPos - gIdx;
+          // Dither near shade boundaries
+          if (gIdx < 3 && gFrac > (1 - ditherW) && h > (gFrac - (1 - ditherW)) / ditherW) {
+            put(px, py, greenHex[gIdx]);
+          } else if (gIdx < 3 && gFrac > (1 - ditherW)) {
+            put(px, py, greenHex[gIdx + 1]);
+          } else {
+            put(px, py, greenHex[gIdx]);
+          }
         }
       }
     }
@@ -1861,13 +1916,32 @@ function drawGroundForest(tileX: number, tileY: number) {
       put(mx, my + 1, '#4a8a30');
     }
 
-    // Rare rock (~4%)
+    // Rare rock (~4%) on any ground
     if (rnd() < 0.04) {
       const rx = 2 + Math.floor(rnd() * 28);
       const ry = 2 + Math.floor(rnd() * 28);
       put(rx, ry, '#5a6270');
       put(rx + 1, ry, '#4a5260');
       put(rx, ry + 1, '#3e4654');
+    }
+
+    // Small rocks/pebbles in dirt patches (~30% of tiles, placed only if in dirt)
+    if (rnd() < 0.30) {
+      const rockColors = ['#6a6260', '#5a5450', '#7a7068', '#4e4844'];
+      const count = 1 + Math.floor(rnd() * 3);
+      for (let i = 0; i < count; i++) {
+        const rx = 2 + Math.floor(rnd() * 28);
+        const ry = 2 + Math.floor(rnd() * 28);
+        // Only place if this pixel is in a dirt region
+        const wx = tileX * 32 + rx;
+        const wy = tileY * 32 + ry;
+        const dn = wnoise(wx + 5000, wy + 2000, 300);
+        if (dn > 0.68) {
+          const col = rockColors[Math.floor(rnd() * rockColors.length)];
+          put(rx, ry, col);
+          if (rnd() > 0.5) put(rx + 1, ry, col); // sometimes 2px wide
+        }
+      }
     }
 
     // Rare grass tuft (~8%)

@@ -77,6 +77,8 @@ export class GameScene extends Phaser.Scene {
   enemySpeedMult = 1;
   webs: { x: number; y: number; sprite: Phaser.GameObjects.Sprite; expireAt: number }[] = [];
   treeSprites: Phaser.GameObjects.GameObject[] = [];
+  treeChunksGenerated = new Set<string>();
+  treeSeed = 0;
 
   constructor() { super('Game'); }
 
@@ -120,6 +122,8 @@ export class GameScene extends Phaser.Scene {
     this.gameOver = false;
     this.webs = [];
     this.treeSprites = [];
+    this.treeChunksGenerated = new Set();
+    this.treeSeed = Math.floor(Math.random() * 2147483647) || 1;
     this.dying = false;
     this.winDelayUntil = 0;
     this.winCollectedAt = 0;
@@ -190,11 +194,17 @@ export class GameScene extends Phaser.Scene {
     this.generateChunksAround(0, 0);
     this.processChunkQueue(this.pendingChunks.length);
 
-    // Place biome-specific obstacles
-    if (this.biome === 'forest') this.placeTreeClusters();
+    // Place trees in the initial chunks around spawn
+    if (this.biome === 'forest') {
+      this.generatedChunks.forEach(key => {
+        const [cx, cy] = key.split(',').map(Number);
+        this.placeTreesInChunk(cx, cy);
+      });
+    }
 
-    // collisions — player uses tilemap layer (no seams) instead of individual wall bodies
+    // collisions — player uses tilemap layer for walls (no seams) + wallGroup for tree blockers
     this.physics.add.collider(this.player, this.wallLayer);
+    this.physics.add.collider(this.player, this.wallGroup);
     this.physics.add.collider(this.player, this.towerGroup);
     this.physics.add.collider(this.player, this.gapBlockers);
     this.physics.add.collider(this.enemies, this.wallGroup, (e, w) => this.enemyHitsWall(e as Enemy, w as Wall));
@@ -718,6 +728,8 @@ export class GameScene extends Phaser.Scene {
       const { cx: ccx, cy: ccy } = this.pendingChunks.shift()!;
       const texKey = createGroundChunk(this, ccx, ccy, cs, 32, this.biome);
       this.add.image(ccx * chunkPx + chunkPx / 2, ccy * chunkPx + chunkPx / 2, texKey).setDepth(0);
+      // Generate trees for this chunk if forest biome
+      if (this.biome === 'forest') this.placeTreesInChunk(ccx, ccy);
       n++;
     }
   }
@@ -999,61 +1011,73 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------- TREE OBSTACLES (forest biome) ----------
-  placeTreeClusters() {
+  /** Place tree clusters in a single chunk. Deterministic per chunk coords + treeSeed. */
+  placeTreesInChunk(cx: number, cy: number) {
+    const chunkKey = `${cx},${cy}`;
+    if (this.treeChunksGenerated.has(chunkKey)) return;
+    this.treeChunksGenerated.add(chunkKey);
+
     const t = CFG.tile;
-    const count = CFG.forest.treeClusterCount;
-    // Random seed each playthrough so tree placement varies
-    let seed = (this.levelId * 54321 + Math.floor(Math.random() * 2147483647)) >>> 0 || 1;
+    const cs = CFG.chunkSize; // tiles per chunk
+    const clustersPerChunk = 2; // target clusters per chunk
+    const maxAttempts = clustersPerChunk * 6;
+
+    // Deterministic RNG for this chunk (same treeSeed + chunk coords = same trees)
+    let seed = ((this.treeSeed + cx * 73856093 + cy * 19349669) >>> 0) || 1;
     const rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
 
     const ptx = Math.floor(this.player.x / t);
     const pty = Math.floor(this.player.y / t);
+    // Only do pathfinding checks near spawn (within spawnDist + margin)
+    const nearSpawn = Math.abs(cx * cs) < CFG.spawnDist + cs && Math.abs(cy * cs) < CFG.spawnDist + cs;
+
+    // Chunk tile origin
+    const chunkTileX = cx * cs;
+    const chunkTileY = cy * cs;
+
     let placed = 0;
     let attempts = 0;
-
-    while (placed < count && attempts < count * 8) {
+    while (placed < clustersPerChunk && attempts < maxAttempts) {
       attempts++;
       const pattern = TREE_PATTERNS[Math.floor(rng() * TREE_PATTERNS.length)];
-      // Random position within 12 tiles of origin, but not too close (>3 tiles)
-      const ox = Math.floor(rng() * 24 - 12);
-      const oy = Math.floor(rng() * 24 - 12);
-      if (Math.abs(ox) < 3 && Math.abs(oy) < 3) continue; // too close to spawn
+      // Random tile within this chunk
+      const ox = chunkTileX + Math.floor(rng() * (cs - pattern.w));
+      const oy = chunkTileY + Math.floor(rng() * (cs - pattern.h));
+
+      // Don't place too close to player spawn
+      if (Math.abs(ox) < 3 && Math.abs(oy) < 3) continue;
 
       // Check all tiles in pattern are free
       let blocked = false;
       for (const tile of pattern.tiles) {
         const gx = ox + tile.dx, gy = oy + tile.dy;
         if (gridGet(this.grid, gx, gy) !== 0) { blocked = true; break; }
-        // Don't place on player's tile or immediate neighbors
         if (Math.abs(gx - ptx) <= 1 && Math.abs(gy - pty) <= 1) { blocked = true; break; }
       }
       if (blocked) continue;
 
-      // Tentatively place
+      // Tentatively place on grid
       for (const tile of pattern.tiles) {
         gridSet(this.grid, ox + tile.dx, oy + tile.dy, 3);
       }
 
-      // Verify enemies can still reach from most spawn directions (stricter for trees)
-      if (!canReachFromSpawnDirections(this.grid, ptx, pty, CFG.spawnDist, 3)) {
-        // Revert
+      // Pathfinding check only near spawn area
+      if (nearSpawn && !canReachFromSpawnDirections(this.grid, ptx, pty, CFG.spawnDist, 3)) {
         for (const tile of pattern.tiles) {
           gridSet(this.grid, ox + tile.dx, oy + tile.dy, 0);
         }
         continue;
       }
 
-      // Place cluster sprite — one image for the whole cluster
+      // Place cluster sprite
       const patIdx = TREE_PATTERNS.indexOf(pattern);
-      const pad = 40; // matches padding in drawTreeClusterCanvas
       const sprX = ox * t + (pattern.w * t) / 2;
       const sprY = oy * t + (pattern.h * t) / 2;
-      // Depth based on bottom edge of cluster so entities behind trees get occluded
       const bottomY = oy * t + pattern.h * t;
       const spr = this.add.image(sprX, sprY, `tree_cluster_${patIdx}`).setDepth(100 + bottomY * 0.1);
       this.treeSprites.push(spr);
 
-      // Place per-tile collision blockers (invisible)
+      // Place per-tile collision blockers
       for (const tile of pattern.tiles) {
         const gx = ox + tile.dx, gy = oy + tile.dy;
         const wx = gx * t + t / 2;
