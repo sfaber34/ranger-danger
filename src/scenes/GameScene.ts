@@ -52,7 +52,7 @@ export class GameScene extends Phaser.Scene {
 
   // Virtual / scalable game time so the "speed up" button affects all
   // cooldown / spawn logic, not just physics and animations.
-  timeMult = 1;
+  timeMult = 1.25;
   vTime = 0;
 
   selectedTower: Tower | null = null;
@@ -113,7 +113,7 @@ export class GameScene extends Phaser.Scene {
     this.waveSpawned = 0;
     this.waveKills = 0;
     this.waveBreakUntil = 0;
-    this.timeMult = 1;
+    this.timeMult = 1.25;
     this.vTime = 0;
     this.selectedTower = null;
     this.towerIndicators = new Map();
@@ -245,6 +245,9 @@ export class GameScene extends Phaser.Scene {
     this.game.events.on('ui-build', (k: BuildKind, tk?: TowerKind) => this.setBuild(k, tk));
     this.game.events.on('ui-sell', () => this.setBuild('none'));
     this.game.events.on('ui-speed', (mult: number) => this.setTimeScale(mult));
+
+    // Apply default game speed (1.25x base)
+    this.setTimeScale(this.timeMult);
 
     // initial UI update
     this.scene.get('UI').events.emit('hud', this.hudState());

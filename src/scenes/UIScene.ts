@@ -60,7 +60,7 @@ export class UIScene extends Phaser.Scene {
     this.btnWall = this.makeButton(W - 78, 34, 70, 28, `WALL ${CFG.wall.cost}`, () => this.game.events.emit('ui-build', 'wall'));
 
     // speed toggle (top-right, above build buttons)
-    this.btnSpeed = this.makeButton(W - 46, 10, 40, 18, '> 1x', () => this.cycleSpeed());
+    this.btnSpeed = this.makeButton(W - 46, 10, 40, 18, '>', () => this.cycleSpeed());
     this.speedLabel = this.btnSpeed.list[1] as Phaser.GameObjects.Text;
     this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
       .on('down', () => this.cycleSpeed());
@@ -100,8 +100,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   cycleSpeed() {
-    const speeds = [1, 2, 4];
-    const labels = ['> 1x', '>> 2x', '>>> 4x'];
+    const speeds = [1.25, 2, 3.75];
+    const labels = ['>', '>>', '>>>'];
     this.speedIdx = (this.speedIdx + 1) % speeds.length;
     this.speedLabel.setText(labels[this.speedIdx]);
     this.game.events.emit('ui-speed', speeds[this.speedIdx]);
