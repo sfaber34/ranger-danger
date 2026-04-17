@@ -1925,7 +1925,7 @@ export class GameScene extends Phaser.Scene {
       // Damage player if overlapping
       if (time > gc.dmgCd) {
         const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, gc.x, gc.y);
-        if (dist < 24) {
+        if (dist < 36) {
           const dmg = 3;
           this.player.hurt(dmg, this);
           this.pushHud();
