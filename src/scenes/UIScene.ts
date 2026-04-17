@@ -49,8 +49,6 @@ export class UIScene extends Phaser.Scene {
     this.nameText = this.add.text(12, T, '', { fontFamily: 'monospace', fontSize: '14px', color: '#7cc4ff' });
     this.hpBarBg = this.add.rectangle(12, T + 22, 180, 14, 0x111826).setOrigin(0, 0).setStrokeStyle(1, 0x2a3760);
     this.hpBar = this.add.rectangle(13, T + 23, 178, 12, 0xd94a4a).setOrigin(0, 0);
-    const arrowCost = CFG.tower.kinds.arrow.cost;
-    const cannonCost = CFG.tower.kinds.cannon.cost;
     const H = this.scale.height;
 
     // Top-right gold badge (WoW-style)
@@ -70,30 +68,92 @@ export class UIScene extends Phaser.Scene {
       stroke: '#0b0f1a', strokeThickness: 3,
     }).setOrigin(1, 0.5);
 
-    // Bottom-center hotbar
-    const slotW = 72;
-    const slotH = 52;
+    // Bottom-center Royal Banner hotbar
+    const slotSize = 48;
     const slotGap = 6;
-    const slots = 4; // arrow, cannon, wall, speed
-    const barTotalW = slots * slotW + (slots - 1) * slotGap;
-    const barStartX = (W - barTotalW) / 2;
-    const hotbarY = H - slotH - 10;
+    const slots = 4;
+    const hbTotalW = slots * slotSize + (slots - 1) * slotGap + 28;
+    const hotbarY = H - slotSize - 18;
+    const barCenterX = W / 2;
+    const hbX = barCenterX - hbTotalW / 2;
+    const hbY = hotbarY - 10;
+    const hbH = slotSize + 20;
+    const endW = 18;
 
-    // Hotbar background
-    this.add.rectangle(W / 2, hotbarY + slotH / 2, barTotalW + 16, slotH + 8, 0x0b0f1a, 0.7)
-      .setStrokeStyle(1, 0x2a3760);
+    const banner = this.add.graphics();
 
-    const slotX = (i: number) => barStartX + i * (slotW + slotGap) + slotW / 2;
+    // Banner body — deep navy
+    banner.fillStyle(0x0e1428, 1);
+    banner.fillRect(hbX + endW, hbY, hbTotalW - endW * 2, hbH);
 
-    this.btnTower = this.makeHotbarSlot(slotX(0), hotbarY, slotW, slotH, '1', `ARROW`, `$${arrowCost}`,
+    // Left pennant cap
+    banner.fillStyle(0x0e1428, 1);
+    banner.beginPath();
+    banner.moveTo(hbX + endW, hbY);
+    banner.lineTo(hbX, hbY + hbH / 2);
+    banner.lineTo(hbX + endW, hbY + hbH);
+    banner.closePath();
+    banner.fillPath();
+
+    // Right pennant cap
+    banner.beginPath();
+    banner.moveTo(hbX + hbTotalW - endW, hbY);
+    banner.lineTo(hbX + hbTotalW, hbY + hbH / 2);
+    banner.lineTo(hbX + hbTotalW - endW, hbY + hbH);
+    banner.closePath();
+    banner.fillPath();
+
+    // Gold trim — outer border following banner shape
+    banner.lineStyle(2, 0xa08030, 1);
+    banner.beginPath();
+    banner.moveTo(hbX + endW, hbY);
+    banner.lineTo(hbX, hbY + hbH / 2);
+    banner.lineTo(hbX + endW, hbY + hbH);
+    banner.lineTo(hbX + hbTotalW - endW, hbY + hbH);
+    banner.lineTo(hbX + hbTotalW, hbY + hbH / 2);
+    banner.lineTo(hbX + hbTotalW - endW, hbY);
+    banner.closePath();
+    banner.strokePath();
+
+    // Inner gold accent lines (top + bottom)
+    banner.lineStyle(1, 0xa08030, 0.3);
+    banner.lineBetween(hbX + endW + 4, hbY + 3, hbX + hbTotalW - endW - 4, hbY + 3);
+    banner.lineBetween(hbX + endW + 4, hbY + hbH - 3, hbX + hbTotalW - endW - 4, hbY + hbH - 3);
+
+    // Crimson accent stripe top
+    banner.fillStyle(0x8c1e1e, 0.3);
+    banner.fillRect(hbX + endW, hbY + 1, hbTotalW - endW * 2, 3);
+
+    // Fleur-de-lis on end caps
+    const drawFleurDeLis = (g: Phaser.GameObjects.Graphics, fx: number, fy: number) => {
+      g.fillStyle(0xa08030, 1);
+      // center petal
+      g.fillEllipse(fx, fy - 4, 4, 10);
+      // side petals
+      g.fillEllipse(fx - 3, fy - 1, 3, 8);
+      g.fillEllipse(fx + 3, fy - 1, 3, 8);
+      // base stem
+      g.fillRect(fx - 1, fy + 3, 2, 4);
+    };
+    drawFleurDeLis(banner, hbX + endW / 2 + 2, hbY + hbH / 2);
+    drawFleurDeLis(banner, hbX + hbTotalW - endW / 2 - 2, hbY + hbH / 2);
+
+    const slotX = (i: number) => barCenterX - (slots * slotSize + (slots - 1) * slotGap) / 2 + i * (slotSize + slotGap) + slotSize / 2;
+
+    this.btnTower = this.makeHotbarSlot(slotX(0), hotbarY, slotSize, slotSize, '1', 'arrow', '',
       () => this.game.events.emit('ui-build', 'tower', 'arrow'));
-    this.btnCannon = this.makeHotbarSlot(slotX(1), hotbarY, slotW, slotH, '2', `CANNON`, `$${cannonCost}`,
+    this.btnCannon = this.makeHotbarSlot(slotX(1), hotbarY, slotSize, slotSize, '2', 'cannon', '',
       () => this.game.events.emit('ui-build', 'tower', 'cannon'));
-    this.btnWall = this.makeHotbarSlot(slotX(2), hotbarY, slotW, slotH, '3', `WALL`, `$${CFG.wall.cost}`,
+    this.btnWall = this.makeHotbarSlot(slotX(2), hotbarY, slotSize, slotSize, '3', 'wall', '',
       () => this.game.events.emit('ui-build', 'wall'));
-    this.btnSpeed = this.makeHotbarSlot(slotX(3), hotbarY, slotW, slotH, 'SPC', '>', '',
+    this.btnSpeed = this.makeHotbarSlot(slotX(3), hotbarY, slotSize, slotSize, 'SPC', 'speed', '',
       () => this.cycleSpeed());
-    this.speedLabel = this.btnSpeed.getAt(2) as Phaser.GameObjects.Text; // the name label
+    // Speed cycle text overlay
+    this.speedLabel = this.add.text(0, 0, '>', {
+      fontFamily: 'monospace', fontSize: '16px', fontStyle: 'bold', color: '#c4a850',
+      stroke: '#0a0e1a', strokeThickness: 3,
+    }).setOrigin(0.5);
+    this.btnSpeed.add(this.speedLabel);
     this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
       .on('down', () => this.cycleSpeed());
 
@@ -161,7 +221,7 @@ export class UIScene extends Phaser.Scene {
     const x = (W - barW) / 2;
     const y = 58; // 20 (top pad) + 38
     if (this.bossBarBg) return;
-    const bossName = s?.biome === 'forest' ? 'THE FOREST GUARDIAN' : 'THE BROOD MOTHER';
+    const bossName = s?.biome === 'forest' ? 'THE FOREST GUARDIAN' : s?.biome === 'infected' ? 'THE BLIGHTED ONE' : 'THE BROOD MOTHER';
     this.bossLabel = this.add.text(W / 2, y - 16, bossName, {
       fontFamily: 'monospace', fontSize: '14px', color: '#ff6a6a',
       stroke: '#0b0f1a', strokeThickness: 3
@@ -202,29 +262,102 @@ export class UIScene extends Phaser.Scene {
     return c;
   }
 
-  makeHotbarSlot(cx: number, topY: number, w: number, h: number, key: string, name: string, cost: string, onClick: () => void) {
+  makeHotbarSlot(cx: number, topY: number, w: number, h: number, key: string, icon: string, _cost: string, onClick: () => void) {
     const my = topY + h / 2;
     const c = this.add.container(cx, my);
-    // slot background
-    const bg = this.add.rectangle(0, 0, w, h, 0x1a2240).setStrokeStyle(1, 0x3a4a80);
-    bg.setInteractive({ useHandCursor: true });
-    bg.on('pointerdown', onClick);
-    bg.on('pointerover', () => bg.setFillStyle(0x2a3a60));
-    bg.on('pointerout', () => bg.setFillStyle(0x1a2240));
-    // keybind badge (top-left corner)
-    const badge = this.add.text(-w / 2 + 4, -h / 2 + 2, key, {
-      fontFamily: 'monospace', fontSize: '9px', color: '#8899bb',
-    }).setOrigin(0, 0);
-    // name label (center)
-    const nameT = this.add.text(0, -2, name, {
-      fontFamily: 'monospace', fontSize: '12px', color: '#fff',
+
+    const g = this.add.graphics();
+    const drawSlot = (hover: boolean) => {
+      g.clear();
+      // Slot fill
+      g.fillStyle(hover ? 0x141c30 : 0x0a0e1a, 1);
+      g.fillRoundedRect(-w / 2, -h / 2, w, h, 3);
+      // Gold border
+      g.lineStyle(1.5, hover ? 0xc4a030 : 0x8a6a20, 1);
+      g.strokeRoundedRect(-w / 2, -h / 2, w, h, 3);
+      // Inner glow
+      g.lineStyle(1, hover ? 0xa08830 : 0xa08030, hover ? 0.2 : 0.12);
+      g.strokeRoundedRect(-w / 2 + 2, -h / 2 + 2, w - 4, h - 4, 2);
+    };
+    drawSlot(false);
+
+    // Hit area
+    const hitRect = this.add.rectangle(0, 0, w, h, 0x000000, 0).setInteractive({ useHandCursor: true });
+    hitRect.on('pointerdown', onClick);
+    hitRect.on('pointerover', () => drawSlot(true));
+    hitRect.on('pointerout', () => drawSlot(false));
+
+    // Draw icon
+    const iconG = this.add.graphics();
+    this.drawSlotIcon(iconG, icon);
+
+    // Keybind badge (top-left corner)
+    const badgeW = key.length > 2 ? 22 : 13;
+    const badgeBg = this.add.rectangle(-w / 2 + badgeW / 2 + 1, -h / 2 + 7, badgeW, 12, 0x0a0e1a, 0.9)
+      .setStrokeStyle(0.5, 0x8a6a20, 0.5);
+    const badge = this.add.text(-w / 2 + badgeW / 2 + 1, -h / 2 + 7, key, {
+      fontFamily: 'monospace', fontSize: '8px', color: '#a08830',
     }).setOrigin(0.5);
-    // cost label (below name)
-    const costT = this.add.text(0, 12, cost, {
-      fontFamily: 'monospace', fontSize: '10px', color: '#ffd84a',
-    }).setOrigin(0.5);
-    c.add([bg, badge, nameT, costT]);
+
+    c.add([g, hitRect, iconG, badgeBg, badge]);
     return c;
+  }
+
+  drawSlotIcon(g: Phaser.GameObjects.Graphics, icon: string) {
+    const cx = 0, cy = 0;
+    switch (icon) {
+      case 'arrow': {
+        // Arrow shaft (diagonal)
+        g.lineStyle(2.5, 0xc4a850, 1);
+        g.lineBetween(cx + 10, cy + 10, cx - 8, cy - 8);
+        // Arrowhead
+        g.fillStyle(0xc4a850, 1);
+        g.fillTriangle(cx - 12, cy - 12, cx - 4, cy - 10, cx - 10, cy - 2);
+        // Fletching
+        g.lineStyle(1.5, 0xa08830, 0.8);
+        g.lineBetween(cx + 10, cy + 10, cx + 12, cy + 6);
+        g.lineBetween(cx + 10, cy + 10, cx + 6, cy + 12);
+        break;
+      }
+      case 'cannon': {
+        // Cannonball
+        g.fillStyle(0x222222, 1);
+        g.fillCircle(cx, cy + 1, 9);
+        g.fillStyle(0x3a3a3a, 1);
+        g.fillCircle(cx - 1, cy, 9);
+        // Metallic highlight
+        g.fillStyle(0x555555, 0.6);
+        g.fillCircle(cx - 3, cy - 3, 4);
+        // Explosion sparks
+        g.fillStyle(0xff9930, 0.9);
+        g.fillCircle(cx + 7, cy - 7, 2.5);
+        g.fillStyle(0xffcc44, 0.8);
+        g.fillCircle(cx + 5, cy - 10, 1.8);
+        g.fillCircle(cx + 10, cy - 3, 1.8);
+        break;
+      }
+      case 'wall': {
+        // Brick wall pattern
+        const bw = 11, bh = 6;
+        const colors = [0xb0a080, 0x8a7a60];
+        for (let row = 0; row < 3; row++) {
+          const yy = cy - 10 + row * (bh + 1);
+          const shift = row % 2 === 0 ? 0 : (bw + 1) / 2;
+          for (let col = 0; col < 3; col++) {
+            const xx = cx - 17 + shift + col * (bw + 1);
+            g.fillStyle(colors[(row + col) % 2], 1);
+            g.fillRect(xx, yy, bw, bh);
+            g.lineStyle(0.5, 0x4a3a2a, 0.5);
+            g.strokeRect(xx, yy, bw, bh);
+          }
+        }
+        break;
+      }
+      case 'speed': {
+        // Drawn via text overlay (speedLabel)
+        break;
+      }
+    }
   }
 
   updateHud(s: any) {
