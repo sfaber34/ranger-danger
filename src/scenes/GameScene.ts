@@ -79,6 +79,7 @@ export class GameScene extends Phaser.Scene {
   enemyHpMult = 1;
   enemySpeedMult = 1;
   webs: { x: number; y: number; sprite: Phaser.GameObjects.Sprite; expireAt: number }[] = [];
+  gasClouds: { x: number; y: number; sprites: Phaser.GameObjects.Arc[]; expireAt: number; dmgCd: number }[] = [];
   treeSprites: Phaser.GameObjects.GameObject[] = [];
   treeChunksGenerated = new Set<string>();
   treeSeed = 0;
@@ -126,6 +127,7 @@ export class GameScene extends Phaser.Scene {
     this.killsTarget = CFG.winKills;
     this.gameOver = false;
     this.webs = [];
+    this.gasClouds = [];
     this.treeSprites = [];
     this.treeChunksGenerated = new Set();
     this.treeSeed = Math.floor(Math.random() * 2147483647) || 1;
@@ -208,7 +210,7 @@ export class GameScene extends Phaser.Scene {
     this.processChunkQueue(0);
 
     // Place trees in the initial chunks around spawn
-    if (this.biome === 'forest') {
+    if (this.biome === 'forest' || this.biome === 'infected') {
       this.generatedChunks.forEach(key => {
         const [cx, cy] = key.split(',').map(Number);
         this.placeTreesInChunk(cx, cy);
@@ -282,6 +284,34 @@ export class GameScene extends Phaser.Scene {
       fireflyEmitter.addEmitZone({ type: 'random', source: new Phaser.Geom.Rectangle(-400, -300, 800, 600) } as any);
 
       // removed vignette — was too distracting
+    }
+
+    if (this.biome === 'infected') {
+      // Purple infection spores — dense, drifting slowly, fade in then out
+      const sporeEmitter = this.add.particles(0, 0, 'infection_spore', {
+        follow: this.player,
+        lifespan: 6000,
+        speed: { min: 2, max: 14 },
+        scale: { start: 0.6, end: 0.15 },
+        alpha: { values: [0, 0.85, 0.85, 0] },
+        frequency: 60,
+        blendMode: 'ADD'
+      });
+      sporeEmitter.setDepth(15);
+      sporeEmitter.addEmitZone({ type: 'random', source: new Phaser.Geom.Rectangle(-500, -400, 1000, 800) } as any);
+
+      // Green infection spores — medium density, slightly faster
+      const sporeGreenEmitter = this.add.particles(0, 0, 'infection_spore_green', {
+        follow: this.player,
+        lifespan: 5000,
+        speed: { min: 3, max: 20 },
+        scale: { start: 0.5, end: 0.1 },
+        alpha: { values: [0, 0.7, 0.7, 0] },
+        frequency: 100,
+        blendMode: 'ADD'
+      });
+      sporeGreenEmitter.setDepth(15);
+      sporeGreenEmitter.addEmitZone({ type: 'random', source: new Phaser.Geom.Rectangle(-500, -400, 1000, 800) } as any);
     }
 
     // Delay a few frames so the browser can composite and UI scene finishes create()
@@ -760,7 +790,7 @@ export class GameScene extends Phaser.Scene {
       const texKey = createGroundChunk(this, ccx, ccy, cs, 32, this.biome);
       this.add.image(ccx * chunkPx + chunkPx / 2, ccy * chunkPx + chunkPx / 2, texKey).setDepth(0);
       // Generate trees for this chunk if forest biome
-      if (this.biome === 'forest') this.placeTreesInChunk(ccx, ccy);
+      if (this.biome === 'forest' || this.biome === 'infected') this.placeTreesInChunk(ccx, ccy);
     }
   }
 
@@ -840,6 +870,7 @@ export class GameScene extends Phaser.Scene {
     this.updateTowers(time);
     this.updateEnemies(time, vd);
     this.updateBoss(time);
+    this.updateGasClouds(time);
     this.updateProjectiles(time);
     this.updateCoins(vd);
     this.updateSpawning(time, vd);
@@ -1104,7 +1135,8 @@ export class GameScene extends Phaser.Scene {
       const sprX = ox * t + (pattern.w * t) / 2;
       const sprY = oy * t + (pattern.h * t) / 2;
       const bottomY = oy * t + pattern.h * t;
-      const spr = this.add.image(sprX, sprY, `tree_cluster_${patIdx}`).setDepth(100 + bottomY * 0.1);
+      const texKey = this.biome === 'infected' ? `infected_plant_${patIdx}` : `tree_cluster_${patIdx}`;
+      const spr = this.add.image(sprX, sprY, texKey).setDepth(100 + bottomY * 0.1);
       this.treeSprites.push(spr);
 
       // Place per-tile collision blockers
@@ -1817,10 +1849,12 @@ export class GameScene extends Phaser.Scene {
       const jx = Phaser.Math.Between(-6, 6);
       const jy = Phaser.Math.Between(-4, 4);
       const r = Phaser.Math.Between(8, 12);
-      const shade = [0x9a9aa8, 0xb8b8c4, 0x7e7e8a][i % 3];
+      const shade = this.biome === 'infected'
+        ? [0xd060a0, 0xe080c0, 0xc04890][i % 3]
+        : [0x9a9aa8, 0xb8b8c4, 0x7e7e8a][i % 3];
       const puff = this.add.circle(baseX + jx, baseY + jy, r, shade, 0.7)
         .setDepth(8)
-        .setStrokeStyle(1, 0x5a5a66, 0.5);
+        .setStrokeStyle(1, this.biome === 'infected' ? 0x8a2060 : 0x5a5a66, 0.5);
       // lazy drift opposite to charge + upward
       const driftX = -b.chargeDirX * 14 + Phaser.Math.Between(-6, 6);
       const driftY = -b.chargeDirY * 14 + Phaser.Math.Between(-14, -6);
@@ -1834,6 +1868,71 @@ export class GameScene extends Phaser.Scene {
         ease: 'Sine.Out',
         onComplete: () => puff.destroy()
       });
+    }
+
+    // Infected biome: leave lingering toxic gas clouds
+    if (this.biome === 'infected') {
+      this.spawnGasCloud(baseX, baseY);
+    }
+  }
+
+  spawnGasCloud(x: number, y: number) {
+    const now = this.vTime ?? this.time.now;
+    // Don't stack clouds too close together
+    for (const gc of this.gasClouds) {
+      if (Phaser.Math.Distance.Between(x, y, gc.x, gc.y) < 20) return;
+    }
+    // Create 3-4 overlapping circles for a blobby cloud look
+    const sprites: Phaser.GameObjects.Arc[] = [];
+    const count = Phaser.Math.Between(3, 4);
+    for (let i = 0; i < count; i++) {
+      const jx = Phaser.Math.Between(-10, 10);
+      const jy = Phaser.Math.Between(-8, 8);
+      const r = Phaser.Math.Between(12, 18);
+      const shade = [0xd060a0, 0xe878b8, 0xc04888, 0xd06898][i % 4];
+      const c = this.add.circle(x + jx, y + jy, r, shade, 0.35).setDepth(7);
+      sprites.push(c);
+      // Constant slow wobble
+      this.tweens.add({
+        targets: c,
+        x: c.x + Phaser.Math.Between(-6, 6),
+        y: c.y + Phaser.Math.Between(-6, 6),
+        scale: { from: 0.9, to: 1.15 },
+        alpha: { from: 0.35, to: 0.2 },
+        duration: Phaser.Math.Between(1500, 2500),
+        ease: 'Sine.InOut',
+        yoyo: true,
+        repeat: -1
+      });
+    }
+    this.gasClouds.push({ x, y, sprites, expireAt: Infinity, dmgCd: 0 });
+  }
+
+  updateGasClouds(time: number) {
+    for (let i = this.gasClouds.length - 1; i >= 0; i--) {
+      const gc = this.gasClouds[i];
+      if (time >= gc.expireAt) {
+        // Fade out and destroy
+        for (const s of gc.sprites) {
+          this.tweens.add({
+            targets: s, alpha: 0, duration: 500,
+            onComplete: () => s.destroy()
+          });
+        }
+        this.gasClouds.splice(i, 1);
+        continue;
+      }
+      // Damage player if overlapping
+      if (time > gc.dmgCd) {
+        const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, gc.x, gc.y);
+        if (dist < 24) {
+          const dmg = 3;
+          this.player.hurt(dmg, this);
+          this.pushHud();
+          gc.dmgCd = time + 500; // tick damage every 500ms
+          if (this.player.hp <= 0) this.lose();
+        }
+      }
     }
   }
 
@@ -1923,6 +2022,8 @@ export class GameScene extends Phaser.Scene {
       const ey = b.y + Math.sin(a) * dist - 6;
       const kind: EnemyKind = this.biome === 'forest'
         ? (Math.random() < 0.4 ? 'spider' : 'wolf')
+        : this.biome === 'infected'
+        ? (Math.random() < 0.4 ? 'infected_heavy' : 'infected_basic')
         : (Math.random() < 0.4 ? 'heavy' : 'basic');
       const e = new Enemy(this, ex, ey, kind);
       e.noCoinDrop = true;
@@ -2029,7 +2130,9 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.boss, this.wallGroup, onStructureHit);
     this.physics.add.collider(this.boss, this.towerGroup, onStructureHit);
     this.game.events.emit('boss-spawn', { hp: this.boss.hp, maxHp: this.boss.maxHp, biome: this.biome });
-    const bossTitle = this.biome === 'forest' ? 'THE FOREST GUARDIAN' : 'THE BROOD MOTHER';
+    const bossTitle = this.biome === 'forest' ? 'THE FOREST GUARDIAN'
+                    : this.biome === 'infected' ? 'THE BLIGHTED ONE'
+                    : 'THE BROOD MOTHER';
     this.countdownMsg = `${bossTitle} APPROACHES`;
     this.countdownColor = '#ff5050';
     this.pushHud();
@@ -2162,7 +2265,7 @@ export class GameScene extends Phaser.Scene {
     if (e.hp <= 0) {
       if (!e.noCoinDrop) {
         const tier =
-          e.kind === 'heavy' || e.kind === 'bear' ? 'silver' :
+          e.kind === 'heavy' || e.kind === 'bear' || e.kind === 'infected_heavy' ? 'silver' :
                                                      'bronze';
         const coin = new Coin(this, e.x + Phaser.Math.Between(-4, 4), e.y + Phaser.Math.Between(-4, 4), tier);
         this.coins.add(coin);
@@ -2457,8 +2560,12 @@ export class GameScene extends Phaser.Scene {
 
     // Runner/wolf pack bursts, independent of the normal spawn cadence.
     if (this.wave >= CFG.spawn.runnerPackStartWave && this.waveSpawned < waveSize) {
-      const cdMin = this.biome === 'forest' ? CFG.forest.wolfPackCooldownMin : CFG.spawn.runnerPackCooldownMin;
-      const cdMax = this.biome === 'forest' ? CFG.forest.wolfPackCooldownMax : CFG.spawn.runnerPackCooldownMax;
+      const cdMin = this.biome === 'forest' ? CFG.forest.wolfPackCooldownMin
+                  : this.biome === 'infected' ? CFG.infected.runnerPackCooldownMin
+                  : CFG.spawn.runnerPackCooldownMin;
+      const cdMax = this.biome === 'forest' ? CFG.forest.wolfPackCooldownMax
+                  : this.biome === 'infected' ? CFG.infected.runnerPackCooldownMax
+                  : CFG.spawn.runnerPackCooldownMax;
       if (this.nextRunnerPack === 0) {
         this.nextRunnerPack = time + Phaser.Math.Between(cdMin, cdMax);
       } else if (time >= this.nextRunnerPack) {
@@ -2479,9 +2586,12 @@ export class GameScene extends Phaser.Scene {
     if (side === 2) { cx = px - spawnR; cy = py + Phaser.Math.Between(-spawnR, spawnR); }
     if (side === 3) { cx = px + spawnR; cy = py + Phaser.Math.Between(-spawnR, spawnR); }
     const isForest = this.biome === 'forest';
-    const base = isForest ? CFG.forest.wolfPackSize : CFG.spawn.runnerPackSize;
+    const isInfected = this.biome === 'infected';
+    const base = isForest ? CFG.forest.wolfPackSize
+               : isInfected ? CFG.infected.runnerPackSize
+               : CFG.spawn.runnerPackSize;
     const n = isForest ? base + Phaser.Math.Between(0, 5) : base;
-    const packKind: EnemyKind = isForest ? 'wolf' : 'runner';
+    const packKind: EnemyKind = isForest ? 'wolf' : isInfected ? 'infected_runner' : 'runner';
     // Stagger spawns with small delays to create a snake-line formation
     const delay = 150; // ms between each mob in the pack
     const toSpawn = Math.min(n, waveSize - this.waveSpawned);
@@ -2527,6 +2637,8 @@ export class GameScene extends Phaser.Scene {
     let kind: EnemyKind;
     if (this.biome === 'forest') {
       kind = Math.random() < this.heavyChance ? 'bear' : 'spider';
+    } else if (this.biome === 'infected') {
+      kind = Math.random() < this.heavyChance ? 'infected_heavy' : 'infected_basic';
     } else {
       kind = Math.random() < this.heavyChance ? 'heavy' : 'basic';
     }

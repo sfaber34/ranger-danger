@@ -1,5 +1,5 @@
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'oneHP';
-export type Biome = 'grasslands' | 'forest' | 'desert' | 'tundra' | 'volcanic';
+export type Biome = 'grasslands' | 'forest' | 'infected' | 'desert' | 'tundra' | 'volcanic';
 
 export interface LevelDef {
   id: number;
@@ -16,7 +16,7 @@ export const LEVELS: LevelDef[] = [
   // Grasslands — top-left (castle & forest area)
   { id: 1,  name: 'The Meadow',    biome: 'grasslands', x: 210, y: 530, connectsTo: [2],    unlockCost: 0,  implemented: true },
   { id: 2,  name: 'Forest',        biome: 'forest',     x: 265, y: 425, connectsTo: [3],    unlockCost: 1,  implemented: true },
-  { id: 3,  name: 'Riverside',     biome: 'grasslands', x: 290, y: 310, connectsTo: [4],    unlockCost: 3,  implemented: false },
+  { id: 3,  name: 'Riverside',     biome: 'infected', x: 290, y: 310, connectsTo: [4],    unlockCost: 3,  implemented: true },
   { id: 4,  name: 'The Castle',    biome: 'grasslands', x: 153, y: 300, connectsTo: [5],    unlockCost: 5,  implemented: false },
   // Desert — top-center/right (ruins & dunes)
   { id: 5,  name: 'Oasis',         biome: 'desert',     x: 430, y: 170, connectsTo: [6],    unlockCost: 7,  implemented: false },
@@ -48,6 +48,7 @@ export const MEDAL_COLORS: Record<Difficulty, { label: string; fill: number; hex
 export const BIOME_COLORS: Record<Biome, { fill: number; label: string; textHex: string }> = {
   grasslands: { fill: 0x2a4a1e, label: 'Grasslands', textHex: '#5eaa3e' },
   forest:     { fill: 0x1a3a14, label: 'Forest',     textHex: '#3a7a2e' },
+  infected:   { fill: 0x2a1a3a, label: 'Infected',    textHex: '#a040d0' },
   desert:     { fill: 0x5a4a28, label: 'Desert',     textHex: '#d4a84a' },
   tundra:     { fill: 0x2a3a4e, label: 'Tundra',     textHex: '#8ab4d0' },
   volcanic:   { fill: 0x4a1a1a, label: 'Volcanic',   textHex: '#d45a3a' },

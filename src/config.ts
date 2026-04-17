@@ -83,6 +83,12 @@ export const CFG = {
     spiderWebSlowFactor: 0.5
   },
 
+  infected: {
+    runnerPackSize: 5,
+    runnerPackCooldownMin: 6000,
+    runnerPackCooldownMax: 11000,
+  },
+
   winKills: 200, // kills needed to trigger the boss; defeating the boss wins
 
   boss: {

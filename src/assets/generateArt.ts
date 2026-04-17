@@ -74,6 +74,21 @@ const P = {
   grassM:  '#243d22',
   grassL:  '#3e5f38',
 
+  // infected enemy colors
+  infect:  '#9040d0',   // main purple body
+  infectD: '#4a1870',   // dark purple
+  infectM: '#6a28a0',   // mid purple
+  infectL: '#c070ff',   // light purple highlight
+
+  infectH:  '#d08020',  // infected heavy — orange
+  infectHD: '#6a3808',  // dark orange
+  infectHM: '#a06018',  // mid orange
+  infectHL: '#ffb040',  // light orange
+
+  infectR:  '#e0d020',  // infected runner — yellow
+  infectRD: '#6a6008',  // dark yellow
+  infectRL: '#fff060',  // light yellow
+
   // boss belly
   belly:   '#d89080',
   bellyD:  '#7a3a2a',
@@ -557,6 +572,152 @@ function drawEnemyHeavy(f: EFrame) {
     }
 
     // big shoulders
+    rect(put, 5, 15, 3, 3, bodyD);
+    rect(put, 24, 15, 3, 3, bodyD);
+    put(6, 15, bodyM);
+    put(25, 15, bodyM);
+  };
+}
+
+// ==================================================================
+//  INFECTED BASIC (32x32) — purple infected variant of basic enemy
+// ==================================================================
+function drawEnemyInfectedBasic(f: EFrame) {
+  return (put: Put) => {
+    if (f.startsWith('die')) {
+      const step = parseInt(f.slice(3));
+      const r = 8 - step * 2;
+      if (r <= 0) return;
+      disc(put, 16, 18, r, P.infect);
+      disc(put, 16, 18, Math.max(0, r - 1), P.infectL);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + step * 0.4;
+        const d = step * 3 + 3;
+        const px = Math.round(16 + Math.cos(a) * d);
+        const py = Math.round(18 + Math.sin(a) * d);
+        put(px, py, P.infectD);
+        put(px + 1, py, P.infect);
+      }
+      return;
+    }
+    const flash = f === 'hit';
+    const body = flash ? P.white : P.infect;
+    const bodyD = flash ? P.white : P.infectD;
+    const bodyM = flash ? P.white : P.infectM;
+    const bodyL = flash ? P.white : P.infectL;
+
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -6; dx <= 6; dx++)
+        if ((dx * dx) / 36 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+
+    let footY = 0;
+    if (f === 'move1') footY = -1;
+    if (f === 'move3') footY = 1;
+    rect(put, 11, 25 + footY, 3, 2, bodyD);
+    rect(put, 18, 25 - footY, 3, 2, bodyD);
+    put(10, 26 + footY, P.outline);
+    put(21, 26 - footY, P.outline);
+    put(13, 27 + footY, P.outline);
+    put(18, 27 - footY, P.outline);
+
+    disc(put, 16, 17, 8, bodyD);
+    disc(put, 16, 17, 7, body);
+    disc(put, 16, 16, 5, bodyL);
+    // pustules instead of spines
+    put(10, 12, '#40e060'); put(11, 11, bodyD);
+    put(13, 10, '#40e060'); put(14, 9, bodyD);
+    put(18, 9, '#40e060'); put(19, 10, bodyD);
+    put(21, 11, '#40e060'); put(22, 12, bodyD);
+
+    // glowing yellow-green eyes
+    put(12, 16, '#e0ff40'); put(13, 16, '#e0ff40');
+    put(19, 16, '#e0ff40'); put(20, 16, '#e0ff40');
+    put(12, 16, P.outline); put(20, 16, P.outline);
+    rect(put, 11, 15, 3, 1, bodyM);
+    rect(put, 18, 15, 3, 1, bodyM);
+
+    if (f === 'atk0') {
+      rect(put, 13, 19, 6, 2, P.outline);
+      put(14, 20, '#40e060'); put(17, 20, '#40e060');
+    } else if (f === 'atk1') {
+      rect(put, 13, 18, 6, 4, P.outline);
+      put(14, 19, '#40e060'); put(17, 19, '#40e060');
+      put(15, 21, '#40e060'); put(16, 21, '#40e060');
+    } else {
+      rect(put, 14, 19, 4, 1, P.outline);
+      put(14, 20, '#40e060'); put(17, 20, '#40e060');
+    }
+
+    put(7, 18, bodyD); put(8, 19, bodyD); put(8, 18, body);
+    put(25, 18, bodyD); put(24, 19, bodyD); put(24, 18, body);
+  };
+}
+
+// ==================================================================
+//  INFECTED HEAVY (32x32) — orange infected armored brute
+// ==================================================================
+function drawEnemyInfectedHeavy(f: EFrame) {
+  return (put: Put) => {
+    if (f.startsWith('die')) {
+      const step = parseInt(f.slice(3));
+      const r = 10 - step * 2;
+      if (r <= 0) return;
+      disc(put, 16, 18, r, P.infectH);
+      disc(put, 16, 18, Math.max(0, r - 1), P.infectHL);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + step * 0.3;
+        const d = step * 3 + 4;
+        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), P.infectHD);
+      }
+      return;
+    }
+    const flash = f === 'hit';
+    const body = flash ? P.white : P.infectH;
+    const bodyD = flash ? P.white : P.infectHD;
+    const bodyM = flash ? P.white : P.infectHM;
+    const bodyL = flash ? P.white : P.infectHL;
+
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -8; dx <= 8; dx++)
+        if ((dx * dx) / 64 + (dy * dy) / 1.5 <= 1) put(16 + dx, 29 + dy, P.shadow);
+
+    let footY = 0;
+    if (f === 'move1') footY = -1;
+    if (f === 'move3') footY = 1;
+    rect(put, 9, 26 + footY, 5, 3, bodyD);
+    rect(put, 18, 26 - footY, 5, 3, bodyD);
+    rect(put, 9, 28 + footY, 5, 1, P.outline);
+    rect(put, 18, 28 - footY, 5, 1, P.outline);
+
+    disc(put, 16, 17, 10, bodyD);
+    disc(put, 16, 17, 9, body);
+    disc(put, 16, 16, 7, bodyL);
+    // infected plates with green ooze
+    rect(put, 10, 18, 12, 1, bodyD);
+    rect(put, 10, 21, 12, 1, bodyD);
+    rect(put, 14, 13, 4, 1, bodyD);
+    put(11, 18, '#40e060'); put(15, 18, '#40e060'); put(20, 18, '#40e060');
+    put(11, 21, '#40e060'); put(15, 21, '#40e060'); put(20, 21, '#40e060');
+
+    // horns with green tips
+    put(9, 8, '#40e060'); put(10, 9, bodyD); put(11, 10, body);
+    put(23, 8, '#40e060'); put(22, 9, bodyD); put(21, 10, body);
+
+    // glowing yellow-green eyes
+    put(11, 14, '#e0ff40'); put(12, 14, '#e0ff40');
+    put(20, 14, '#e0ff40'); put(21, 14, '#e0ff40');
+    put(11, 15, bodyD); put(21, 15, bodyD);
+
+    if (f === 'atk0' || f === 'atk1') {
+      rect(put, 12, 18, 9, 3, P.outline);
+      put(12, 20, '#40e060'); put(14, 20, '#40e060'); put(17, 20, '#40e060'); put(19, 20, '#40e060');
+      if (f === 'atk1') put(16, 21, P.infect);
+    } else {
+      rect(put, 13, 19, 7, 1, P.outline);
+      put(13, 20, '#40e060');
+      put(19, 20, '#40e060');
+    }
+
     rect(put, 5, 15, 3, 3, bodyD);
     rect(put, 24, 15, 3, 3, bodyD);
     put(6, 15, bodyM);
@@ -1985,6 +2146,81 @@ function drawGroundForest(tileX: number, tileY: number) {
   };
 }
 
+// Infected riverside ground — dark purples with toxic green patches, sickly vegetation
+function drawGroundInfected(tileX: number, tileY: number) {
+  return (put: Put) => {
+    // Base shades: dark purples to sickly greens
+    const shades = [
+      [0x22, 0x18, 0x30],  // deep purple
+      [0x2a, 0x20, 0x38],  // medium purple
+      [0x28, 0x30, 0x22],  // dark infected green
+      [0x30, 0x3a, 0x28],  // sickly green
+    ];
+    const shadeHex = shades.map(([r, g, b]) =>
+      '#' + r.toString(16).padStart(2, '0') + g.toString(16).padStart(2, '0') + b.toString(16).padStart(2, '0')
+    );
+    const lerpCol = (a: number[], b: number[], t: number): string => {
+      const r = Math.round(a[0] + (b[0] - a[0]) * t);
+      const g = Math.round(a[1] + (b[1] - a[1]) * t);
+      const bl = Math.round(a[2] + (b[2] - a[2]) * t);
+      return '#' + r.toString(16).padStart(2, '0') + g.toString(16).padStart(2, '0') + bl.toString(16).padStart(2, '0');
+    };
+
+    let s = ((tileX * 73856093 + tileY * 19349669) >>> 0) % 2147483647;
+    const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+
+    const fadeW = 0.06;
+    const midW  = 0.03;
+    const totalW = fadeW + midW + fadeW;
+
+    const sampleN = precomputeNoise(tileX, tileY, 6000, 800, 350);
+
+    for (let py = 0; py < 32; py++) {
+      for (let px = 0; px < 32; px++) {
+        const n = sampleN(px, py);
+        const pos = Math.min(3.999, n * 4);
+        const idx = Math.floor(pos);
+        const frac = pos - idx;
+
+        const bandStart = 1 - totalW;
+        if (idx < 3 && frac > bandStart) {
+          const mid = shades[idx].map((c, i) => Math.round((c + shades[idx + 1][i]) / 2));
+          const t = frac - bandStart;
+          if (t < fadeW) {
+            put(px, py, lerpCol(shades[idx], mid, t / fadeW));
+          } else if (t < fadeW + midW) {
+            put(px, py, lerpCol(mid, mid, 0));
+          } else {
+            put(px, py, lerpCol(mid, shades[idx + 1], (t - fadeW - midW) / fadeW));
+          }
+        } else {
+          put(px, py, shadeHex[idx]);
+        }
+      }
+    }
+
+    // Toxic puddle (~3% of tiles)
+    if (rnd() < 0.03) {
+      const px0 = 4 + Math.floor(rnd() * 24);
+      const py0 = 4 + Math.floor(rnd() * 24);
+      const sz = 2 + Math.floor(rnd() * 2);
+      for (let dy = 0; dy < sz; dy++) {
+        for (let dx = 0; dx < sz; dx++) {
+          if (rnd() > 0.4) put(px0 + dx, py0 + dy, rnd() > 0.5 ? '#40e060' : '#30b848');
+        }
+      }
+    }
+
+    // Infected moss (~4% of tiles)
+    if (rnd() < 0.04) {
+      const mx = 2 + Math.floor(rnd() * 26);
+      const my = 2 + Math.floor(rnd() * 26);
+      put(mx, my, '#6040a0');
+      put(mx + 1, my, '#5a38a0');
+    }
+  };
+}
+
 // Tree cluster patterns — each defines which tiles are occupied
 // Coordinates are relative (dx, dy) from the top-left of the cluster
 export const TREE_PATTERNS: { tiles: { dx: number; dy: number }[]; w: number; h: number }[] = [
@@ -2150,6 +2386,112 @@ function drawTreeClusterCanvas(patternIdx: number): HTMLCanvasElement {
       const hy = cy - rnd() * h * 0.8 - 3;
       ctx.fillStyle = rnd() > 0.5 ? p.bright : p.highlight;
       ctx.fillRect(Math.floor(hx), Math.floor(hy), 1, 1);
+    }
+  }
+
+  return canvas;
+}
+
+// Draw infected plant cluster — bulbous, sickly purple/green growths
+function drawInfectedPlantCanvas(patternIdx: number): HTMLCanvasElement {
+  const pattern = TREE_PATTERNS[patternIdx];
+  const T = 32;
+  const pad = 30;
+  const cw = pattern.w * T + pad * 2;
+  const ch = pattern.h * T + pad * 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+
+  let seed = (patternIdx * 48271 + 99991) >>> 0;
+  const rnd = () => { seed = (seed * 16807 + 1) % 2147483647; return seed / 2147483647; };
+
+  type PlantDef = { cx: number; cy: number; h: number; w: number; variant: number };
+  const plants: PlantDef[] = [];
+
+  for (const t of pattern.tiles) {
+    const tileCx = t.dx * T + T / 2 + pad;
+    const tileCy = t.dy * T + T * 0.85 + pad;
+    const plantsPerTile = 2 + (rnd() > 0.6 ? 1 : 0);
+    for (let i = 0; i < plantsPerTile; i++) {
+      plants.push({
+        cx: tileCx + (rnd() - 0.5) * T * 0.6,
+        cy: tileCy + (rnd() - 0.5) * T * 0.3,
+        h: 30 + Math.floor(rnd() * 20),
+        w: 18 + Math.floor(rnd() * 10),
+        variant: Math.floor(rnd() * 3)
+      });
+    }
+  }
+
+  plants.sort((a, b) => a.cy - b.cy);
+
+  const palettes = [
+    { stem: '#2a1040', dark: '#4a2070', mid: '#6a30a0', light: '#8a48c0', glow: '#50e070' },
+    { stem: '#1a2030', dark: '#2a4038', mid: '#3a6050', light: '#4a8068', glow: '#80ff90' },
+    { stem: '#2a1838', dark: '#5a2880', mid: '#7a38b0', light: '#9a50d0', glow: '#60e880' },
+  ];
+
+  for (const plant of plants) {
+    const p = palettes[plant.variant];
+    const { cx, cy, h, w } = plant;
+
+    // Thick stem
+    const stemW = 3 + Math.floor(rnd() * 2);
+    ctx.fillStyle = p.stem;
+    ctx.fillRect(Math.floor(cx - stemW / 2), Math.floor(cy - h * 0.4), stemW, Math.floor(h * 0.4));
+
+    // Bulbous infected growth — stacked ovals
+    const layers = 2 + Math.floor(rnd() * 2);
+    for (let l = 0; l < layers; l++) {
+      const ly = cy - h * 0.3 - l * h * 0.2;
+      const lw = w * (1 - l * 0.2) / 2;
+      const lh = h * 0.25;
+
+      // Dark outline
+      ctx.fillStyle = p.dark;
+      ctx.beginPath();
+      ctx.ellipse(cx, ly, lw + 1, lh / 2 + 1, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Main body
+      ctx.fillStyle = p.mid;
+      ctx.beginPath();
+      ctx.ellipse(cx, ly, lw, lh / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Highlight
+      ctx.fillStyle = p.light;
+      ctx.beginPath();
+      ctx.ellipse(cx - lw * 0.2, ly - lh * 0.15, lw * 0.5, lh * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Glowing spore tips
+    const sporeCount = 3 + Math.floor(rnd() * 4);
+    for (let i = 0; i < sporeCount; i++) {
+      const sx = cx + (rnd() - 0.5) * w * 0.8;
+      const sy = cy - h * 0.5 - rnd() * h * 0.4;
+      ctx.fillStyle = p.glow;
+      ctx.fillRect(Math.floor(sx), Math.floor(sy), 2, 2);
+      // Subtle glow around spore
+      ctx.globalAlpha = 0.3;
+      ctx.fillRect(Math.floor(sx) - 1, Math.floor(sy) - 1, 4, 4);
+      ctx.globalAlpha = 1;
+    }
+
+    // Dripping tendrils from bottom
+    const tendrils = 2 + Math.floor(rnd() * 3);
+    for (let i = 0; i < tendrils; i++) {
+      const tx = cx + (rnd() - 0.5) * w * 0.5;
+      const tLen = 4 + Math.floor(rnd() * 8);
+      ctx.fillStyle = rnd() > 0.5 ? '#40c060' : '#6030a0';
+      for (let j = 0; j < tLen; j++) {
+        ctx.fillRect(Math.floor(tx + (rnd() - 0.5) * 2), Math.floor(cy + j), 1, 1);
+      }
     }
   }
 
@@ -2425,6 +2767,186 @@ function drawBossDie(put: Put, step: number) {
   }
   // central flash
   if (step < 2) disc(put, cx, cy, 6, P.sparkL);
+}
+
+// ==================================================================
+//  INFECTED BOSS — The Blighted One (purple/orange/yellow)
+// ==================================================================
+function drawInfectedBossBody(put: Put, opts: BossOpts) {
+  const cx = 32;
+  const baseCy = 34 + (opts.bob ?? 0) + (opts.rearUp ? -2 : 0);
+
+  const col = {
+    out: opts.flash ? P.white : P.outline,
+    d:   opts.flash ? P.white : P.infectD,
+    m:   opts.flash ? P.white : P.infectM,
+    b:   opts.flash ? P.white : P.infect,
+    l:   opts.flash ? P.white : P.infectL
+  };
+
+  // drop shadow
+  for (let dy = -2; dy <= 2; dy++)
+    for (let dx = -26; dx <= 26; dx++)
+      if ((dx * dx) / 676 + (dy * dy) / 5 <= 1) put(cx + dx, 59 + dy, P.shadow);
+
+  // stubby legs (4)
+  const legStep = opts.legStep ?? 0;
+  rect(put, cx - 22, baseCy + 12 + legStep, 4, 6, col.d);
+  rect(put, cx - 14, baseCy + 17 - legStep, 4, 5, col.d);
+  rect(put, cx + 10, baseCy + 17 - legStep, 4, 5, col.d);
+  rect(put, cx + 18, baseCy + 12 + legStep, 4, 6, col.d);
+  put(cx - 22, baseCy + 17 + legStep, P.outline);
+  put(cx - 14, baseCy + 21 - legStep, P.outline);
+  put(cx + 13, baseCy + 21 - legStep, P.outline);
+  put(cx + 21, baseCy + 17 + legStep, P.outline);
+
+  // main bulbous body
+  disc(put, cx, baseCy, 24, col.out);
+  disc(put, cx, baseCy, 23, col.d);
+  disc(put, cx, baseCy, 22, col.b);
+
+  // upper back (darker, textured)
+  for (let y = -22; y <= -3; y++)
+    for (let x = -22; x <= 22; x++)
+      if (x * x + y * y <= 484) put(cx + x, baseCy + y, col.d);
+  for (let y = -20; y <= -5; y++)
+    for (let x = -20; x <= 20; x++)
+      if (x * x + y * y <= 400) put(cx + x, baseCy + y, col.b);
+  // highlight arc upper-left
+  for (let y = -20; y <= -10; y++)
+    for (let x = -18; x <= -2; x++)
+      if (x * x + y * y <= 324) put(cx + x, baseCy + y, col.m);
+  for (let y = -18; y <= -14; y++)
+    for (let x = -10; x <= -4; x++)
+      if (x * x + y * y <= 256) put(cx + x, baseCy + y, col.l);
+
+  // orange/yellow infected underbelly
+  const bellyCol  = opts.flash ? P.white : '#d08020';
+  const bellyColM = opts.flash ? P.white : '#a06018';
+  const bellyColD = opts.flash ? P.white : '#6a3808';
+  for (let y = 4; y <= 22; y++)
+    for (let x = -20; x <= 20; x++)
+      if (x * x + y * y <= 476) put(cx + x, baseCy + y, bellyCol);
+  for (let y = 10; y <= 22; y++)
+    for (let x = -17; x <= 17; x++)
+      if (x * x + y * y <= 400) put(cx + x, baseCy + y, bellyColM);
+  // segmentation lines
+  for (let x = -17; x <= 17; x++) {
+    if (Math.abs(x) < 16) put(cx + x, baseCy + 8, bellyColD);
+    if (Math.abs(x) < 14) put(cx + x, baseCy + 14, bellyColD);
+    if (Math.abs(x) < 10) put(cx + x, baseCy + 19, bellyColD);
+  }
+
+  // glowing green pustule spines along top
+  const spinePositions: Array<[number, number]> = [
+    [-16, -16], [-10, -19], [-4, -21], [2, -21], [8, -20], [14, -17]
+  ];
+  for (const [sx, sy] of spinePositions) {
+    put(cx + sx, baseCy + sy + 1, '#40e060');
+    put(cx + sx, baseCy + sy, '#40e060');
+    put(cx + sx, baseCy + sy - 1, col.out);
+  }
+
+  // eye cluster — glowing yellow eyes
+  const eyes: Array<[number, number]> = [
+    [-12, -4], [-6, -8], [0, -10], [6, -8], [12, -4]
+  ];
+  for (const [ex, ey] of eyes) {
+    const glow = opts.chargeGlow ? P.sparkL : '#e0ff40';
+    put(cx + ex - 1, baseCy + ey, P.outline);
+    put(cx + ex,     baseCy + ey, glow);
+    put(cx + ex + 1, baseCy + ey, opts.chargeGlow ? P.spark : '#ffff80');
+    put(cx + ex,     baseCy + ey + 1, P.infectD);
+  }
+
+  // mouth — green ooze drip
+  rect(put, cx - 5, baseCy + 1, 10, 1, P.outline);
+  put(cx - 6, baseCy + 1, '#40e060');
+  put(cx + 5, baseCy + 1, '#40e060');
+  put(cx - 3, baseCy + 2, '#40e060');
+  put(cx + 2, baseCy + 2, '#40e060');
+
+  // birth pockets
+  if (opts.pockets !== undefined) {
+    const stage = opts.pockets;
+    const pockets: Array<[number, number]> = [
+      [-10, -13], [-2, -15], [6, -14]
+    ];
+    for (const [px, py] of pockets) {
+      const ox = cx + px, oy = baseCy + py;
+      if (stage === 0) {
+        disc(put, ox, oy, 3, col.l);
+        disc(put, ox, oy, 2, col.b);
+      } else if (stage === 1) {
+        disc(put, ox, oy, 3, col.d);
+        disc(put, ox, oy, 2, P.outline);
+        put(ox, oy, '#40e060');
+      } else if (stage === 2) {
+        disc(put, ox, oy, 3, col.d);
+        disc(put, ox, oy, 2, P.infect);
+        put(ox - 1, oy, '#e0ff40');
+        put(ox + 1, oy, '#e0ff40');
+        put(ox, oy + 1, P.outline);
+      } else if (stage === 3) {
+        disc(put, ox, oy - 1, 4, col.d);
+        disc(put, ox, oy - 1, 3, P.infect);
+        disc(put, ox, oy - 2, 2, P.infectL);
+        put(ox - 1, oy - 1, '#e0ff40');
+        put(ox + 1, oy - 1, '#e0ff40');
+        put(ox, oy, P.outline);
+      } else if (stage === 4) {
+        disc(put, ox, oy, 3, P.outline);
+        disc(put, ox, oy, 2, col.d);
+      }
+    }
+  }
+}
+
+function drawInfectedBossDie(put: Put, step: number) {
+  const cx = 32, cy = 36;
+  const r = Math.max(0, 24 - step * 5);
+  if (r > 0) {
+    disc(put, cx, cy, r, P.infectD);
+    disc(put, cx, cy, Math.max(0, r - 1), P.infect);
+    disc(put, cx, cy, Math.max(0, r - 3), P.infectL);
+  }
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 + step * 0.3;
+    const d = step * 6 + 6;
+    const x = Math.round(cx + Math.cos(a) * d);
+    const y = Math.round(cy + Math.sin(a) * d);
+    put(x, y, P.infectD);
+    put(x + 1, y, '#d08020');
+    if (i % 3 === 0) put(x, y + 1, '#40e060');
+  }
+  if (step < 2) disc(put, cx, cy, 6, P.sparkL);
+}
+
+function drawInfectedBoss(frame: BossFrame) {
+  return (put: Put) => {
+    switch (frame) {
+      case 'idle0':      return drawInfectedBossBody(put, { bob: 0 });
+      case 'idle1':      return drawInfectedBossBody(put, { bob: 1 });
+      case 'move0':      return drawInfectedBossBody(put, { bob: 0, legStep: 1 });
+      case 'move1':      return drawInfectedBossBody(put, { bob: 1, legStep: 0 });
+      case 'move2':      return drawInfectedBossBody(put, { bob: 0, legStep: -1 });
+      case 'move3':      return drawInfectedBossBody(put, { bob: 1, legStep: 0 });
+      case 'atk0':       return drawInfectedBossBody(put, { rearUp: true, bob: -1 });
+      case 'atk1':       return drawInfectedBossBody(put, { bob: 2 });
+      case 'chargeWind': return drawInfectedBossBody(put, { chargeGlow: true, bob: 0 });
+      case 'hit':        return drawInfectedBossBody(put, { flash: true });
+      case 'birth0':     return drawInfectedBossBody(put, { pockets: 0 });
+      case 'birth1':     return drawInfectedBossBody(put, { pockets: 1 });
+      case 'birth2':     return drawInfectedBossBody(put, { pockets: 2 });
+      case 'birth3':     return drawInfectedBossBody(put, { pockets: 3 });
+      case 'birth4':     return drawInfectedBossBody(put, { pockets: 4 });
+      case 'die0':       return drawInfectedBossDie(put, 0);
+      case 'die1':       return drawInfectedBossDie(put, 1);
+      case 'die2':       return drawInfectedBossDie(put, 2);
+      case 'die3':       return drawInfectedBossDie(put, 3);
+      case 'die4':       return drawInfectedBossDie(put, 4);
+    }
+  };
 }
 
 // ==================================================================
@@ -2797,7 +3319,9 @@ export function createGroundChunk(scene: Phaser.Scene, chunkX: number, chunkY: n
     for (let tx = 0; tx < chunkSize; tx++) {
       const worldTX = startTX + tx;
       const worldTY = startTY + ty;
-      const draw = biome === 'forest' ? drawGroundForest(worldTX, worldTY) : drawGroundWorld(worldTX, worldTY);
+      const draw = biome === 'forest' ? drawGroundForest(worldTX, worldTY)
+                 : biome === 'infected' ? drawGroundInfected(worldTX, worldTY)
+                 : drawGroundWorld(worldTX, worldTY);
       const ox = tx * tileSize;
       const oy = ty * tileSize;
       const put: Put = (x, y, col) => {
@@ -2844,6 +3368,8 @@ export function generateAllArt(scene: Phaser.Scene) {
   const eFrames: EFrame[] = ['move0','move1','move2','move3','atk0','atk1','hit','die0','die1','die2','die3'];
   for (const f of eFrames) add(scene, `eb_${f}`, makeCanvas(32, drawEnemyBasic(f)));
   for (const f of eFrames) add(scene, `eh_${f}`, makeCanvas(32, drawEnemyHeavy(f)));
+  for (const f of eFrames) add(scene, `eib_${f}`, makeCanvas(32, drawEnemyInfectedBasic(f)));
+  for (const f of eFrames) add(scene, `eih_${f}`, makeCanvas(32, drawEnemyInfectedHeavy(f)));
   for (const f of eFrames) add(scene, `ew_${f}`, makeCanvas(32, drawEnemyWolf(f)));
   // Bear: extract frames from sprite sheet, strip grey bg, register as textures
   extractBearFrames(scene);
@@ -2984,6 +3510,9 @@ export function generateAllArt(scene: Phaser.Scene) {
   // Tree cluster sprites (one per pattern)
   for (let i = 0; i < TREE_PATTERNS.length; i++) add(scene, `tree_cluster_${i}`, drawTreeClusterCanvas(i));
 
+  // Infected plant cluster sprites (one per pattern)
+  for (let i = 0; i < TREE_PATTERNS.length; i++) add(scene, `infected_plant_${i}`, drawInfectedPlantCanvas(i));
+
   // Firefly particle (tiny yellow-green glow, 4x4 logical)
   {
     const c = document.createElement('canvas');
@@ -2994,6 +3523,30 @@ export function generateAllArt(scene: Phaser.Scene) {
     x.fillStyle = '#b0ff60';
     x.fillRect(1, 1, 2, 2);
     add(scene, 'firefly', c);
+  }
+
+  // Infection spore particle (4x4 — purple/green glow)
+  {
+    const c = document.createElement('canvas');
+    c.width = 4; c.height = 4;
+    const x = c.getContext('2d')!;
+    x.fillStyle = '#6030a0';
+    x.fillRect(0, 0, 4, 4);
+    x.fillStyle = '#a060e0';
+    x.fillRect(1, 1, 2, 2);
+    add(scene, 'infection_spore', c);
+  }
+
+  // Infection spore green variant (4x4)
+  {
+    const c = document.createElement('canvas');
+    c.width = 4; c.height = 4;
+    const x = c.getContext('2d')!;
+    x.fillStyle = '#208040';
+    x.fillRect(0, 0, 4, 4);
+    x.fillStyle = '#40e060';
+    x.fillRect(1, 1, 2, 2);
+    add(scene, 'infection_spore_green', c);
   }
 
   // Spider web texture (16x16 semi-transparent white circle)
@@ -3033,6 +3586,7 @@ export function generateAllArt(scene: Phaser.Scene) {
     'die0','die1','die2','die3','die4'
   ];
   for (const f of bossFrames) add(scene, `boss_${f}`, makeCanvas(64, drawBoss(f)));
+  for (const f of bossFrames) add(scene, `iboss_${f}`, makeCanvas(64, drawInfectedBoss(f)));
 
   // Forest boss (Ent) textures
   for (const f of forestBossFrames) add(scene, `fboss_${f}`, makeCanvas(64, drawForestBoss(f)));
@@ -3065,6 +3619,16 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('eh-atk',  ['eh_atk0','eh_atk1'], 6, -1);
   mk('eh-hit',  ['eh_hit'], 8, 0);
   mk('eh-die',  ['eh_die0','eh_die1','eh_die2','eh_die3'], 8, 0);
+
+  mk('eib-move', ['eib_move0','eib_move1','eib_move2','eib_move3'], 8, -1);
+  mk('eib-atk',  ['eib_atk0','eib_atk1'], 8, -1);
+  mk('eib-hit',  ['eib_hit'], 10, 0);
+  mk('eib-die',  ['eib_die0','eib_die1','eib_die2','eib_die3'], 10, 0);
+
+  mk('eih-move', ['eih_move0','eih_move1','eih_move2','eih_move3'], 6, -1);
+  mk('eih-atk',  ['eih_atk0','eih_atk1'], 6, -1);
+  mk('eih-hit',  ['eih_hit'], 8, 0);
+  mk('eih-die',  ['eih_die0','eih_die1','eih_die2','eih_die3'], 8, 0);
 
   mk('ew-move', ['ew_move0','ew_move1','ew_move2','ew_move3'], 10, -1);
   mk('ew-atk',  ['ew_atk0','ew_atk1'], 10, -1);
@@ -3113,6 +3677,15 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('boss-hit',        ['boss_hit'], 10, 0);
   mk('boss-birth',      ['boss_birth0','boss_birth1','boss_birth2','boss_birth3','boss_birth4'], 4, 0);
   mk('boss-die',        ['boss_die0','boss_die1','boss_die2','boss_die3','boss_die4'], 6, 0);
+
+  // Infected boss animations
+  mk('iboss-idle',       ['iboss_idle0','iboss_idle1'], 2, -1);
+  mk('iboss-move',       ['iboss_move0','iboss_move1','iboss_move2','iboss_move3'], 5, -1);
+  mk('iboss-atk',        ['iboss_atk0','iboss_atk1'], 4, 0);
+  mk('iboss-chargewind', ['iboss_chargeWind','iboss_idle0'], 6, -1);
+  mk('iboss-hit',        ['iboss_hit'], 10, 0);
+  mk('iboss-birth',      ['iboss_birth0','iboss_birth1','iboss_birth2','iboss_birth3','iboss_birth4'], 4, 0);
+  mk('iboss-die',        ['iboss_die0','iboss_die1','iboss_die2','iboss_die3','iboss_die4'], 6, 0);
 
   // Forest boss (Ent) animations
   mk('fboss-idle',       ['fboss_idle0','fboss_idle1'], 2, -1);

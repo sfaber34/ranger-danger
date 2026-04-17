@@ -304,7 +304,7 @@ export class UIScene extends Phaser.Scene {
     } else {
       const maxW = 416; // barW - 4
       const wavePct = s.waveSize > 0 ? Math.min(1, s.waveKills / s.waveSize) : 0;
-      this.waveBar.width = maxW * wavePct;
+      this.waveBar.width = maxW * (1 - wavePct);
 
       if (s.waveBreakUntil > 0 && s.vTime < s.waveBreakUntil) {
         const secs = Math.ceil((s.waveBreakUntil - s.vTime) / 1000);

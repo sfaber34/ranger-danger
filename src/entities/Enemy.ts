@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { CFG } from '../config';
 
-export type EnemyKind = 'basic' | 'heavy' | 'runner' | 'wolf' | 'bear' | 'spider';
+export type EnemyKind = 'basic' | 'heavy' | 'runner' | 'wolf' | 'bear' | 'spider' | 'infected_basic' | 'infected_heavy' | 'infected_runner';
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   kind: EnemyKind;
@@ -23,7 +23,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   constructor(scene: Phaser.Scene, x: number, y: number, kind: EnemyKind) {
     const dataMap: Record<EnemyKind, typeof CFG.enemy.basic> = {
       basic: CFG.enemy.basic, heavy: CFG.enemy.heavy, runner: CFG.enemy.runner,
-      wolf: CFG.enemy.wolf, bear: CFG.enemy.bear, spider: CFG.enemy.spider
+      wolf: CFG.enemy.wolf, bear: CFG.enemy.bear, spider: CFG.enemy.spider,
+      infected_basic: CFG.enemy.basic, infected_heavy: CFG.enemy.heavy, infected_runner: CFG.enemy.runner,
     };
     const data = dataMap[kind];
     const texPrefix = Enemy.texPrefix(kind);
@@ -66,12 +67,29 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.setScale(0.45).setSize(24, 22).setOffset(20, 24);
         this.play('es-move');
         break;
+      case 'infected_basic':
+        this.setScale(0.5).setSize(24, 24).setOffset(20, 24);
+        this.play('eib-move');
+        break;
+      case 'infected_heavy':
+        this.setScale(0.5).setSize(32, 32).setOffset(16, 20);
+        this.play('eih-move');
+        break;
+      case 'infected_runner':
+        this.setScale(0.425).setSize(20, 20).setOffset(22, 26);
+        this.play('eib-move');
+        this.baseTint = 0xe0d020; // yellow tint for infected runners
+        this.setTint(this.baseTint);
+        break;
     }
   }
 
   static texPrefix(kind: EnemyKind): string {
     switch (kind) {
       case 'heavy': return 'eh';
+      case 'infected_basic': return 'eib';
+      case 'infected_heavy': return 'eih';
+      case 'infected_runner': return 'eib'; // reuses infected basic sprites
       case 'wolf': return 'ew';
       case 'bear': return 'ear'; // default to right-facing
       case 'spider': return 'es';
