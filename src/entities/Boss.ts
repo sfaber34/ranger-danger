@@ -19,6 +19,7 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
   nextSlam = 0;
   nextBirth = 0;
   nextCharge = 0;
+  nextBoulder = 0;
   contactCd = 0;
   dying = false;
 
@@ -38,7 +39,7 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
   animPrefix: string;
 
   constructor(scene: Phaser.Scene, x: number, y: number, biome: Biome = 'grasslands') {
-    const prefix = biome === 'forest' ? 'fboss' : biome === 'infected' ? 'iboss' : 'boss';
+    const prefix = biome === 'forest' ? 'fboss' : biome === 'infected' ? 'iboss' : biome === 'river' ? 'rboss' : 'ram';
     super(scene, x, y, `${prefix}_idle0`);
     this.animPrefix = prefix;
     this.setScale(0.5);
@@ -54,6 +55,7 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     this.nextBirth = now + 4000;
     this.nextCharge = now + 7500;
     this.nextSlam = now + 1500;
+    this.nextBoulder = now + 3000;
   }
 
   drawHpBar() {

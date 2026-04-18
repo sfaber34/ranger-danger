@@ -8,7 +8,7 @@ import { Projectile } from '../entities/Projectile';
 import { Coin } from '../entities/Coin';
 import { Boss } from '../entities/Boss';
 import { createSparseGrid, findPath, canReachFromSpawnDirections, gridGet, gridSet, SparseGrid } from '../systems/Pathfinding';
-import { createGroundChunk, TREE_PATTERNS, generateAllArt, registerAnimations } from '../assets/generateArt';
+import { createGroundChunk, TREE_PATTERNS, generateAllArt, registerAnimations, getRiverTileGrid, riverCenterPx, RIVER_HALF_W, riverHorizontalCenterY } from '../assets/generateArt';
 import { Difficulty, Biome, LEVELS } from '../levels';
 
 type BuildKind = 'none' | 'tower' | 'wall';
@@ -17,6 +17,7 @@ export class GameScene extends Phaser.Scene {
   player!: Player;
   enemies!: Phaser.Physics.Arcade.Group;
   projectiles!: Phaser.Physics.Arcade.Group;
+  enemyDarts!: Phaser.Physics.Arcade.Group;
   coins!: Phaser.Physics.Arcade.Group;
   walls: Wall[] = [];
   towers: Tower[] = [];
@@ -26,6 +27,7 @@ export class GameScene extends Phaser.Scene {
   grid: SparseGrid = createSparseGrid();
   gridVersion = 0;
   generatedChunks = new Set<string>();
+  chunkImages = new Map<string, Phaser.GameObjects.Image>();
   pendingChunks: { cx: number; cy: number }[] = [];
   lastChunkCx = -9999;
   lastChunkCy = -9999;
@@ -48,6 +50,7 @@ export class GameScene extends Phaser.Scene {
   wave = 0;               // 0-indexed current wave
   waveSpawned = 0;        // enemies spawned in the current wave
   waveKills = 0;          // kills counted for the current wave
+  pathsThisFrame = 0;     // BFS pathfinding budget per frame
   waveBreakUntil = 0;     // timestamp when the inter-wave build break ends
   countdownMsg = '';
   countdownColor = '#7cc4ff';
@@ -79,10 +82,14 @@ export class GameScene extends Phaser.Scene {
   biome: Biome = 'grasslands';
   enemyHpMult = 1;
   enemySpeedMult = 1;
+  boulders: { sprite: Phaser.GameObjects.Sprite; shadow: Phaser.GameObjects.Sprite; sx: number; sy: number; tx: number; ty: number; totalDist: number; speed: number; dmg: number; splashRadius: number; born: number }[] = [];
   webs: { x: number; y: number; sprite: Phaser.GameObjects.Sprite; expireAt: number }[] = [];
   gasClouds: { x: number; y: number; sprites: Phaser.GameObjects.Arc[]; expireAt: number; dmgCd: number }[] = [];
   treeSprites: Phaser.GameObjects.GameObject[] = [];
   treeChunksGenerated = new Set<string>();
+  riverChunksGenerated = new Set<string>();
+  riverSquiggles: { sprite: Phaser.GameObjects.Image; age: number; life: number; dx: number; dy: number }[] = [];
+  squiggleTimer = 0;
   treeSeed = 0;
 
   constructor() { super('Game'); }
@@ -99,6 +106,7 @@ export class GameScene extends Phaser.Scene {
     this.grid = createSparseGrid();
     this.gridVersion = 0;
     this.generatedChunks = new Set();
+    this.chunkImages = new Map();
     this.pendingChunks = [];
     this.lastChunkCx = -9999;
     this.lastChunkCy = -9999;
@@ -128,10 +136,14 @@ export class GameScene extends Phaser.Scene {
     this.bossCountdownUntil = 0;
     this.killsTarget = CFG.winKills;
     this.gameOver = false;
+    this.boulders = [];
     this.webs = [];
     this.gasClouds = [];
     this.treeSprites = [];
     this.treeChunksGenerated = new Set();
+    this.riverChunksGenerated = new Set();
+    this.riverSquiggles = [];
+    this.squiggleTimer = 0;
     this.treeSeed = Math.floor(Math.random() * 2147483647) || 1;
     this.dying = false;
     this.winDelayUntil = 0;
@@ -159,8 +171,9 @@ export class GameScene extends Phaser.Scene {
     this.scale.scaleMode = Phaser.Scale.ScaleModes.ENVELOP;
     this.scale.refresh();
 
-    // Resume physics in case previous run ended with physics.pause()
+    // Resume systems in case previous run ended while paused
     this.physics.resume();
+    this.anims.resumeAll();
 
     // Infinite world — no physics bounds, no camera bounds
     this.physics.world.setBounds(-1e6, -1e6, 2e6, 2e6);
@@ -169,13 +182,14 @@ export class GameScene extends Phaser.Scene {
     // groups
     this.enemies = this.physics.add.group({ classType: Enemy, runChildUpdate: false });
     this.projectiles = this.physics.add.group({ classType: Projectile, runChildUpdate: false });
+    this.enemyDarts = this.physics.add.group({ runChildUpdate: false });
     this.coins = this.physics.add.group({ classType: Coin, runChildUpdate: false });
     this.wallGroup = this.physics.add.staticGroup();
     this.towerGroup = this.physics.add.staticGroup();
     this.gapBlockers = this.physics.add.staticGroup();
 
     // Collision tilemap for player-wall collision (no seam issues unlike individual bodies)
-    const mapSize = 200; // 200x200 tiles centered on origin
+    const mapSize = 400; // 400x400 tiles centered on origin
     this.wallTilemap = this.make.tilemap({
       tileWidth: CFG.tile, tileHeight: CFG.tile,
       width: mapSize, height: mapSize
@@ -224,10 +238,11 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.player, this.wallGroup);
     this.physics.add.collider(this.player, this.towerGroup);
     this.physics.add.collider(this.player, this.gapBlockers);
-    this.physics.add.collider(this.enemies, this.wallGroup, (e, w) => this.enemyHitsWall(e as Enemy, w as Wall));
-    this.physics.add.collider(this.enemies, this.towerGroup, (e, t) => this.enemyHitsTower(e as Enemy, t as Tower));
+    this.physics.add.collider(this.enemies, this.wallGroup, (e, w) => this.enemyHitsWall(e as Enemy, w as Wall), (_e, _w) => !((_e as Enemy).flying));
+    this.physics.add.collider(this.enemies, this.towerGroup, (e, t) => this.enemyHitsTower(e as Enemy, t as Tower), (_e, _t) => !((_e as Enemy).flying));
     this.physics.add.overlap(this.player, this.enemies, (_p, e) => this.enemyHitsPlayer(e as Enemy));
     this.physics.add.overlap(this.projectiles, this.enemies, (pr, en) => this.projectileHitsEnemy(pr as Projectile, en as Enemy));
+    this.physics.add.overlap(this.player, this.enemyDarts, (_p, d) => this.enemyDartHitsPlayer(d as Phaser.Physics.Arcade.Sprite));
     // boss overlaps set up when boss spawns (since it's created later)
 
     // input
@@ -392,10 +407,12 @@ export class GameScene extends Phaser.Scene {
       this.buildPaused = true;
       this.physics.pause();
       this.tweens.pauseAll();
+      this.anims.pauseAll();
     } else if (k === 'none' && this.buildPaused) {
       this.buildPaused = false;
       this.physics.resume();
       this.tweens.resumeAll();
+      this.anims.resumeAll();
     }
 
     this.pushHud();
@@ -409,7 +426,6 @@ export class GameScene extends Phaser.Scene {
     for (let j = 0; j < s; j++) {
       for (let i = 0; i < s; i++) {
         if (gridGet(this.grid, tx + i, ty + j) !== 0) return false;
-        if (pt.x === tx + i && pt.y === ty + j) return false;
       }
     }
     // Temporarily block tiles and check spawn directions can still reach the player
@@ -473,9 +489,8 @@ export class GameScene extends Phaser.Scene {
 
     // wall
     if (gridGet(this.grid, tx, ty) !== 0) return;
-    const pt = this.worldToTile(this.player.x, this.player.y);
-    if (pt.x === tx && pt.y === ty) return;
     if (this.player.money < CFG.wall.cost) return;
+    const pt = this.worldToTile(this.player.x, this.player.y);
     // Check placing this wall won't block all paths from spawn directions to player
     gridSet(this.grid, tx, ty, 1);
     const wallOk = canReachFromSpawnDirections(this.grid, pt.x, pt.y, CFG.spawnDist);
@@ -623,6 +638,13 @@ export class GameScene extends Phaser.Scene {
     this.selectedTower = t;
     this.drawSelectionRing(t);
     this.buildTowerPanel(t);
+    // Freeze game while tower panel is open
+    if (!this.buildPaused) {
+      this.buildPaused = true;
+      this.physics.pause();
+      this.tweens.pauseAll();
+      this.anims.pauseAll();
+    }
   }
 
   deselectTower() {
@@ -630,6 +652,13 @@ export class GameScene extends Phaser.Scene {
     this.selectionRing.clear().setVisible(false);
     this.towerPanel.removeAll(true);
     this.towerPanel.setVisible(false);
+    // Unfreeze if no build mode active either
+    if (this.buildPaused && this.buildKind === 'none') {
+      this.buildPaused = false;
+      this.physics.resume();
+      this.tweens.resumeAll();
+      this.anims.resumeAll();
+    }
   }
 
   drawSelectionRing(t: Tower) {
@@ -753,7 +782,7 @@ export class GameScene extends Phaser.Scene {
   doSellSelected() {
     const t = this.selectedTower;
     if (!t) return;
-    this.startSellTimer(t);
+    this.executeSell(t);
   }
 
   floatText(x: number, y: number, msg: string, color: string) {
@@ -785,19 +814,43 @@ export class GameScene extends Phaser.Scene {
     if (!force && cx === this.lastChunkCx && cy === this.lastChunkCy) return;
     this.lastChunkCx = cx;
     this.lastChunkCy = cy;
-    const radius = 5; // generate well ahead of viewport
+    const cs2 = CFG.chunkSize;
+    const tile2 = CFG.tile;
+    const chunkPx = cs2 * tile2;
+    const radius = 3; // generate around viewport
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
-        const key = `${cx + dx},${cy + dy}`;
-        if (this.generatedChunks.has(key)) continue;
-        this.generatedChunks.add(key);
-        this.pendingChunks.push({ cx: cx + dx, cy: cy + dy });
+        const ck = `${cx + dx},${cy + dy}`;
+        // Already have a display image? skip
+        if (this.chunkImages.has(ck)) continue;
+        // Texture already cached from a previous visit? Just create image, no re-render
+        const texKey = `gnd_chunk_${this.biome}_${cx + dx}_${cy + dy}`;
+        if (this.generatedChunks.has(ck) && this.textures.exists(texKey)) {
+          const img = this.add.image((cx + dx) * chunkPx + chunkPx / 2, (cy + dy) * chunkPx + chunkPx / 2, texKey).setDepth(-1000);
+          this.chunkImages.set(ck, img);
+          continue;
+        }
+        // New chunk — queue for generation
+        if (!this.generatedChunks.has(ck)) {
+          this.generatedChunks.add(ck);
+          this.pendingChunks.push({ cx: cx + dx, cy: cy + dy });
+        }
       }
     }
     // Sort by distance to player chunk so nearest chunks render first
     this.pendingChunks.sort((a, b) =>
       ((a.cx - cx) ** 2 + (a.cy - cy) ** 2) - ((b.cx - cx) ** 2 + (b.cy - cy) ** 2)
     );
+
+    // Destroy distant chunk images (textures stay cached for instant re-creation)
+    const cullRadius = radius + 3;
+    for (const [key, img] of this.chunkImages) {
+      const [kcx, kcy] = key.split(',').map(Number);
+      if (Math.abs(kcx - cx) > cullRadius || Math.abs(kcy - cy) > cullRadius) {
+        img.destroy();
+        this.chunkImages.delete(key);
+      }
+    }
   }
 
   /**
@@ -809,14 +862,21 @@ export class GameScene extends Phaser.Scene {
     const tile = CFG.tile;
     const chunkPx = cs * tile;
     const start = performance.now();
-    while (this.pendingChunks.length > 0) {
+    // Hard cap: at most 1 chunk per frame when budgeted (river chunks are expensive)
+    const maxPerFrame = budgetMs > 0 ? 1 : Infinity;
+    let processed = 0;
+    while (this.pendingChunks.length > 0 && processed < maxPerFrame) {
       // Time-budget check (skip on unlimited/startup)
       if (budgetMs > 0 && performance.now() - start >= budgetMs) break;
       const { cx: ccx, cy: ccy } = this.pendingChunks.shift()!;
       const texKey = createGroundChunk(this, ccx, ccy, cs, 32, this.biome);
-      this.add.image(ccx * chunkPx + chunkPx / 2, ccy * chunkPx + chunkPx / 2, texKey).setDepth(0);
+      const chunkImg = this.add.image(ccx * chunkPx + chunkPx / 2, ccy * chunkPx + chunkPx / 2, texKey).setDepth(-1000);
+      this.chunkImages.set(`${ccx},${ccy}`, chunkImg);
       // Generate trees for this chunk if forest biome
       if (this.biome === 'forest' || this.biome === 'infected') this.placeTreesInChunk(ccx, ccy);
+      // Generate river terrain blockers
+      if (this.biome === 'river') this.placeRiverInChunk(ccx, ccy);
+      processed++;
     }
   }
 
@@ -878,6 +938,9 @@ export class GameScene extends Phaser.Scene {
     this.generateChunksAround(this.player.x, this.player.y);
     this.processChunkQueue(4);
 
+    // River squiggle animation
+    if (this.biome === 'river') this.updateRiverSquiggles(delta);
+
     // Redraw grid overlay around the camera if building
     if (this.buildKind !== 'none') this.redrawGridOverlay();
 
@@ -892,12 +955,15 @@ export class GameScene extends Phaser.Scene {
     // While dying, keep the world alive for the death animation but skip player input
     if (this.dying) return;
 
+    this.pathsThisFrame = 0;
     this.updatePlayer(time, vd);
     this.updateTowers(time);
     this.updateEnemies(time, vd);
     this.updateBoss(time);
     this.updateGasClouds(time);
     this.updateProjectiles(time);
+    this.updateEnemyDarts();
+    this.updateBoulders(time);
     this.updateCoins(vd);
     this.updateSpawning(time, vd);
     this.updateDepthSort();
@@ -1079,7 +1145,7 @@ export class GameScene extends Phaser.Scene {
         // Only block corners where a wall/tree (solid) meets a tower (2) diagonally.
         // Wall-to-wall corners don't need blockers (both are full-tile rectangles).
         // Tower-to-tower corners are intentional gaps (gameplay feature).
-        const isSolid = (v: number) => v === 1 || v === 3; // wall or tree
+        const isSolid = (v: number) => v === 1 || v === 3 || v === 4; // wall, tree, or water/rock
         const tlbrNeedBlock = (isSolid(tr) && bl === 2) || (tr === 2 && isSolid(bl));
         const trblNeedBlock = (isSolid(tl) && br === 2) || (tl === 2 && isSolid(br));
 
@@ -1094,6 +1160,125 @@ export class GameScene extends Phaser.Scene {
         (blocker.body as Phaser.Physics.Arcade.StaticBody).position.set(wx - size/2, wy - size/2);
         this.gapBlockers!.add(blocker);
       }
+    }
+  }
+
+  /** Destroy a tree tile at grid coords, removing its blocker and sprite. */
+  destroyTreeTile(gx: number, gy: number) {
+    const t = CFG.tile;
+    gridSet(this.grid, gx, gy, 0);
+    this.syncWallTile(gx, gy, false);
+
+    // Remove the physics blocker zone at this tile
+    const wx = gx * t + t / 2;
+    const wy = gy * t + t / 2;
+    for (const child of this.wallGroup.getChildren()) {
+      if (Math.abs((child as any).x - wx) < 2 && Math.abs((child as any).y - wy) < 2) {
+        child.destroy();
+        break;
+      }
+    }
+
+    // Destroy any tree sprite overlapping this tile
+    const px = gx * t + t / 2;
+    const py = gy * t + t / 2;
+    for (let i = this.treeSprites.length - 1; i >= 0; i--) {
+      const spr = this.treeSprites[i] as Phaser.GameObjects.Image;
+      const hw = spr.width * spr.scaleX / 2;
+      const hh = spr.height * spr.scaleY / 2;
+      if (px >= spr.x - hw && px <= spr.x + hw && py >= spr.y - hh && py <= spr.y + hh) {
+        spr.destroy();
+        this.treeSprites.splice(i, 1);
+      }
+    }
+
+    this.gridVersion++;
+  }
+
+  // ---------- RIVER TERRAIN (river biome) ----------
+  placeRiverInChunk(cx: number, cy: number) {
+    const chunkKey = `${cx},${cy}`;
+    if (this.riverChunksGenerated.has(chunkKey)) return;
+    this.riverChunksGenerated.add(chunkKey);
+
+    const t = CFG.tile;
+    const cs = CFG.chunkSize;
+    const chunkTileX = cx * cs;
+    const chunkTileY = cy * cs;
+
+    for (let ty = 0; ty < cs; ty++) {
+      for (let tx = 0; tx < cs; tx++) {
+        const gx = chunkTileX + tx;
+        const gy = chunkTileY + ty;
+        const gridVal = getRiverTileGrid(gx, gy);
+        if (gridVal === 4) {
+          gridSet(this.grid, gx, gy, 4);
+          this.syncWallTile(gx, gy, true);
+        } else if (gridVal === 5) {
+          gridSet(this.grid, gx, gy, 5);
+          // No physics blocker — bridges are walkable
+        }
+      }
+    }
+    // Don't bump gridVersion here — river terrain is static and shouldn't
+    // force all enemies to recalculate paths on every chunk load.
+  }
+
+  // ---------- RIVER SQUIGGLES (animated water flow lines) ----------
+  updateRiverSquiggles(delta: number) {
+    const cam = this.cameras.main;
+    const camL = cam.scrollX - 50;
+    const camR = cam.scrollX + cam.width + 50;
+    const camT = cam.scrollY - 50;
+    const camB = cam.scrollY + cam.height + 50;
+    const MAX_SQUIGGLES = 12;
+
+    // Spawn new squiggles periodically
+    this.squiggleTimer -= delta;
+    if (this.squiggleTimer <= 0 && this.riverSquiggles.length < MAX_SQUIGGLES) {
+      this.squiggleTimer = 200 + Math.random() * 250;
+      const vertical = Math.random() < 0.5;
+      const texKey = `river_squig_${Math.floor(Math.random() * 5)}`;
+      const speed = 0.005 + Math.random() * 0.006;
+
+      if (vertical) {
+        // Vertical river: spawn at random Y, position on river center X
+        const spawnY = camT + Math.random() * (camB - camT);
+        const cx = riverCenterPx(0, spawnY);
+        if (cx > camL && cx < camR) {
+          const ox = (Math.random() - 0.5) * RIVER_HALF_W * 1.2;
+          const sprite = this.add.image(cx + ox, spawnY, texKey).setDepth(-999).setAlpha(0);
+          this.riverSquiggles.push({ sprite, age: 0, life: 1500 + Math.random() * 1000, dx: 0, dy: speed });
+        }
+      } else {
+        // Horizontal river: spawn at random X, position on river center Y
+        const spawnX = camL + Math.random() * (camR - camL);
+        const cy = riverHorizontalCenterY(spawnX);
+        if (cy > camT && cy < camB) {
+          const oy = (Math.random() - 0.5) * RIVER_HALF_W * 1.2;
+          const sprite = this.add.image(spawnX, cy + oy, texKey).setDepth(-999).setAlpha(0);
+          this.riverSquiggles.push({ sprite, age: 0, life: 1500 + Math.random() * 1000, dx: speed, dy: 0 });
+        }
+      }
+    }
+
+    // Update sprites
+    for (let i = this.riverSquiggles.length - 1; i >= 0; i--) {
+      const sq = this.riverSquiggles[i];
+      sq.age += delta;
+      sq.sprite.x += sq.dx * delta;
+      sq.sprite.y += sq.dy * delta;
+
+      const sx = sq.sprite.x, sy = sq.sprite.y;
+      if (sq.age >= sq.life || sx < camL - 80 || sx > camR + 80 || sy < camT - 80 || sy > camB + 80) {
+        sq.sprite.destroy();
+        this.riverSquiggles.splice(i, 1);
+        continue;
+      }
+
+      const t = sq.age / sq.life;
+      const alpha = t < 0.2 ? t / 0.2 : t > 0.7 ? (1 - t) / 0.3 : 1.0;
+      sq.sprite.setAlpha(alpha * 0.15);
     }
   }
 
@@ -1179,7 +1364,6 @@ export class GameScene extends Phaser.Scene {
 
         this.syncWallTile(gx, gy, true);
       }
-      this.gridVersion++;
       placed++;
     }
   }
@@ -1431,7 +1615,9 @@ export class GameScene extends Phaser.Scene {
     let safety = 200;
     while (safety-- > 0) {
       if (x === tx1 && y === ty1) return false;
-      if (gridGet(this.grid, x, y) >= 1 && !(x === tx0 && y === ty0)) return true;
+      const v = gridGet(this.grid, x, y);
+      // Water/rock (4) doesn't block line of sight — enemies can see over water
+      if (v >= 1 && v !== 4 && !(x === tx0 && y === ty0)) return true;
       const prevX = x, prevY = y;
       const e2 = 2 * err;
       if (e2 > -dy) { err -= dy; x += sx; }
@@ -1459,17 +1645,46 @@ export class GameScene extends Phaser.Scene {
       const prefix = e.dirPrefix();
       const dist2 = (tx - e.x) ** 2 + (ty - e.y) ** 2;
 
+      // Mosquito ranged attack — stops at range and fires darts
+      if (e.kind === 'mosquito') {
+        const mqRange = CFG.river.mosquitoRange;
+        const dist = Math.sqrt(dist2);
+        e.setFlipX(tx - e.x < 0);
+        if (dist < mqRange) {
+          // In range — stop and shoot
+          // Orbit slightly instead of standing still
+          const perpX = -(ty - e.y), perpY = tx - e.x;
+          const pLen = Math.hypot(perpX, perpY) || 1;
+          e.setVelocity((perpX / pLen) * e.speed * 0.3, (perpY / pLen) * e.speed * 0.3);
+          if (e.anims.currentAnim?.key !== `${prefix}-atk`) e.play(`${prefix}-atk`);
+          if (time > e.attackCd) {
+            e.attackCd = time + CFG.river.mosquitoFireRate;
+            this.spawnMosquitoDart(e.x, e.y, tx, ty);
+          }
+          return true;
+        }
+        // Too far — chase closer
+        const dx = tx - e.x, dy = ty - e.y;
+        const d = dist || 1;
+        e.setVelocity((dx / d) * e.speed, (dy / d) * e.speed);
+        if (e.anims.currentAnim?.key !== `${prefix}-move`) e.play(`${prefix}-move`);
+        return true;
+      }
+
       // Melee attack when close to player
       if (dist2 < 30 * 30) {
         e.setVelocity(0, 0);
         // Face the player while attacking
-        if (e.kind === 'bear') {
+        if (e.rotates) {
+          e.rotateToward(tx - e.x, ty - e.y);
+        } else if (e.kind === 'bear') {
           const dirChanged = e.updateFacing(tx - e.x);
           const atkAnim = `${e.dirPrefix()}-atk`;
           if (dirChanged || e.anims.currentAnim?.key !== atkAnim) e.play(atkAnim);
         } else {
-          if (e.anims.currentAnim?.key !== `${prefix}-atk`) e.play(`${prefix}-atk`);
+          e.setFlipX(tx - e.x < 0);
         }
+        if (e.anims.currentAnim?.key !== `${prefix}-atk`) e.play(`${prefix}-atk`);
         if (time > e.attackCd) {
           e.attackCd = time + 800;
           this.player.hurt(e.dmg, this);
@@ -1479,26 +1694,32 @@ export class GameScene extends Phaser.Scene {
         return true;
       }
 
-      // Direct chase if line-of-sight is clear
-      const clear = !this.lineBlocked(e.x, e.y, tx, ty);
+      // Flying enemies always do direct chase — no pathfinding needed
+      // Grounded enemies check line-of-sight first
+      const clear = e.flying || !this.lineBlocked(e.x, e.y, tx, ty);
       if (clear) {
         const dx = tx - e.x, dy = ty - e.y;
         const d = Math.hypot(dx, dy) || 1;
         e.setVelocity((dx / d) * e.speed, (dy / d) * e.speed);
-        if (e.kind === 'bear') {
+        if (e.rotates) {
+          e.rotateToward(dx, dy);
+        } else if (e.kind === 'bear') {
           const dirChanged = e.updateFacing(dx);
           const moveAnim = `${e.dirPrefix()}-move`;
           if (dirChanged || e.anims.currentAnim?.key !== moveAnim) e.play(moveAnim);
         } else {
           e.setFlipX(dx < 0);
-          if (e.anims.currentAnim?.key !== `${prefix}-move`) e.play(`${prefix}-move`);
         }
+        if (e.anims.currentAnim?.key !== `${prefix}-move`) e.play(`${prefix}-move`);
         e.path = [];
         return true;
       }
 
       // Blocked — BFS pathfind around walls/towers toward the player
+      // Budget: max 3 BFS operations per frame to prevent lag with many enemies
       if (time > e.lastPath + 400 || (e as any)._pv !== this.gridVersion || !e.path || e.path.length === 0) {
+        if (this.pathsThisFrame < 3) {
+        this.pathsThisFrame++;
         e.lastPath = time;
         (e as any)._pv = this.gridVersion;
         const start = this.worldToTile(e.x, e.y);
@@ -1529,6 +1750,7 @@ export class GameScene extends Phaser.Scene {
         }
 
         e.pathIdx = 0;
+        } // end pathsThisFrame budget
       }
 
       let moveX = 0, moveY = 0;
@@ -1580,7 +1802,9 @@ export class GameScene extends Phaser.Scene {
         moveX /= ml; moveY /= ml;
       }
       e.setVelocity(moveX * e.speed, moveY * e.speed);
-      if (e.kind === 'bear') {
+      if (e.rotates) {
+        e.rotateToward(moveX, moveY);
+      } else if (e.kind === 'bear') {
         if (moveX !== 0) {
           const dirChanged = e.updateFacing(moveX);
           const moveAnim = `${e.dirPrefix()}-move`;
@@ -1588,8 +1812,8 @@ export class GameScene extends Phaser.Scene {
         }
       } else {
         e.setFlipX(moveX < 0);
-        if (e.anims.currentAnim?.key !== `${prefix}-move`) e.play(`${prefix}-move`);
       }
+      if (e.anims.currentAnim?.key !== `${prefix}-move`) e.play(`${prefix}-move`);
       return true;
     });
   }
@@ -1646,10 +1870,32 @@ export class GameScene extends Phaser.Scene {
         b.contactCd = time + 600; // don't double-tap within the same charge
         if (this.player.hp <= 0) this.lose();
       }
-      // Instantly destroy any tower she barrels into
-      for (const t of [...this.towers]) {
-        if (Phaser.Math.Distance.Between(b.x, b.y, t.x, t.y) < 50) {
-          this.destroyTower(t);
+      // Stop charge on tower/wall collision — apply AoE impact
+      let chargeHit = false;
+      for (const t of this.towers) {
+        if (Phaser.Math.Distance.Between(b.x, b.y, t.x, t.y) < 50) { chargeHit = true; break; }
+      }
+      if (!chargeHit) {
+        for (const w of this.walls) {
+          if (Phaser.Math.Distance.Between(b.x, b.y, w.x, w.y) < 40) { chargeHit = true; break; }
+        }
+      }
+      if (chargeHit) {
+        b.setVelocity(0, 0);
+        this.bossChargeImpact(b);
+        b.state = 'chase';
+        b.nextCharge = time + 9500;
+        b.play(`${ap}-idle`);
+      }
+      // Bulldoze trees during charge (boss plows through without stopping)
+      const bt = CFG.tile;
+      const bgx = Math.floor(b.x / bt);
+      const bgy = Math.floor(b.y / bt);
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (gridGet(this.grid, bgx + dx, bgy + dy) === 3) {
+            this.destroyTreeTile(bgx + dx, bgy + dy);
+          }
         }
       }
     }
@@ -1675,6 +1921,26 @@ export class GameScene extends Phaser.Scene {
       b.play(`${ap}-chargewind`);
       return;
     }
+    // Boulder throw — targets nearest tower or wall in range (forest boss only, but available to all)
+    if (time >= b.nextBoulder && onScreen) {
+      const boulderRange = 280;
+      let bestDist = boulderRange;
+      let target: { x: number; y: number } | null = null;
+      for (const t of this.towers) {
+        const d = Phaser.Math.Distance.Between(b.x, b.y, t.x, t.y);
+        if (d < bestDist) { bestDist = d; target = { x: t.x, y: t.y }; }
+      }
+      for (const w of this.walls) {
+        const d = Phaser.Math.Distance.Between(b.x, b.y, w.x, w.y);
+        if (d < bestDist) { bestDist = d; target = { x: w.x, y: w.y }; }
+      }
+      if (target) {
+        this.bossThrowBoulder(b, target.x, target.y);
+        b.nextBoulder = time + 3500;
+      } else {
+        b.nextBoulder = time + 1000; // retry soon if no targets
+      }
+    }
     if (distToPlayer < 62 && time >= b.nextSlam) {
       b.state = 'slam_wind';
       b.stateEnd = time + 600;
@@ -1684,8 +1950,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Pathfind toward the player (same logic as regular enemies)
+    // River biome: boss flies — skip pathfinding entirely
     let moveX = 0, moveY = 0;
-    const clear = !this.lineBlocked(b.x, b.y, px, py);
+    const clear = this.biome === 'river' || !this.lineBlocked(b.x, b.y, px, py);
     if (clear) {
       const dx = px - b.x, dy = py - b.y;
       const d = Math.hypot(dx, dy) || 1;
@@ -2050,7 +2317,9 @@ export class GameScene extends Phaser.Scene {
         ? (Math.random() < 0.4 ? 'spider' : 'wolf')
         : this.biome === 'infected'
         ? (Math.random() < 0.4 ? 'infected_heavy' : 'infected_basic')
-        : (Math.random() < 0.4 ? 'heavy' : 'basic');
+        : this.biome === 'river'
+        ? (Math.random() < 0.4 ? 'bat' : 'crow')
+        : (Math.random() < 0.4 ? 'deer' : 'snake');
       const e = new Enemy(this, ex, ey, kind);
       e.noCoinDrop = true;
       this.applyEnemyDifficulty(e);
@@ -2062,6 +2331,103 @@ export class GameScene extends Phaser.Scene {
       pop.play('fx-pop');
       pop.once('animationcomplete', () => pop.destroy());
     }
+  }
+
+  bossThrowBoulder(b: Boss, tx: number, ty: number) {
+    const speed = 180;
+    const dist = Math.hypot(tx - b.x, ty - b.y) || 1;
+    const angle = Math.atan2(ty - b.y, tx - b.x);
+    const vx = Math.cos(angle) * speed;
+    const vy = Math.sin(angle) * speed;
+
+    const sprite = this.add.sprite(b.x, b.y, 'boulder_0').setDepth(14).setScale(0.6);
+    sprite.play('boulder-spin');
+    const shadowSprite = this.add.sprite(b.x, b.y, 'boulder_shadow').setDepth(5).setScale(0.3).setAlpha(0.35);
+
+    this.boulders.push({
+      sprite, shadow: shadowSprite,
+      sx: b.x, sy: b.y, tx, ty,
+      totalDist: dist, speed, dmg: 40, splashRadius: 48,
+      born: this.vTime
+    });
+
+    // Brief atk anim
+    b.play(`${b.animPrefix}-atk`);
+    this.time.delayedCall(300, () => {
+      if (b.active && !b.dying && b.state === 'chase')
+        b.play(`${b.animPrefix}-move`);
+    });
+  }
+
+  updateBoulders(time: number) {
+    for (let i = this.boulders.length - 1; i >= 0; i--) {
+      const bl = this.boulders[i];
+      if (!bl.sprite.active) { this.boulders.splice(i, 1); continue; }
+
+      // Move boulder toward target
+      const elapsed = time - bl.born;
+      const travelTime = bl.totalDist / bl.speed;
+      const t = Math.min(elapsed / (travelTime * 1000), 1);
+
+      const cx = bl.sx + (bl.tx - bl.sx) * t;
+      const cy = bl.sy + (bl.ty - bl.sy) * t;
+      const arcHeight = Math.sin(t * Math.PI) * 30;
+
+      bl.sprite.setPosition(cx, cy - arcHeight);
+      bl.shadow.setPosition(cx, cy);
+      bl.shadow.setScale(0.2 + Math.sin(t * Math.PI) * 0.3);
+      bl.shadow.setAlpha(0.4 - Math.sin(t * Math.PI) * 0.2);
+
+      // Check arrival
+      if (t >= 1) {
+        this.boulderImpact(bl.tx, bl.ty, bl.splashRadius, bl.dmg);
+        bl.sprite.destroy();
+        bl.shadow.destroy();
+        this.boulders.splice(i, 1);
+      }
+      // Timeout safety
+      else if (elapsed > 5000) {
+        bl.sprite.destroy();
+        bl.shadow.destroy();
+        this.boulders.splice(i, 1);
+      }
+    }
+  }
+
+  boulderImpact(x: number, y: number, radius: number, dmg: number) {
+    // Damage towers in radius
+    for (const t of [...this.towers]) {
+      if (Phaser.Math.Distance.Between(x, y, t.x, t.y) < radius + 16) {
+        t.hp -= dmg;
+        if (t.hp <= 0) this.destroyTower(t);
+      }
+    }
+    // Damage walls in radius
+    for (const w of [...this.walls]) {
+      if (Phaser.Math.Distance.Between(x, y, w.x, w.y) < radius + 8) {
+        w.hp -= dmg;
+        if (w.hp <= 0) this.destroyWall(w);
+      }
+    }
+    // Damage player if close
+    if (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < radius) {
+      this.player.hurt(15, this);
+      this.pushHud();
+      if (this.player.hp <= 0) this.lose();
+    }
+
+    // VFX — sprite-based boulder impact
+    const fx = this.add.sprite(x, y, 'fx_boulder_0').setDepth(500).setScale(1.5);
+    fx.play('fx-boulder');
+    fx.once('animationcomplete', () => fx.destroy());
+
+    // Scorch mark
+    const scorch = this.add.circle(x, y, radius * 0.4, 0x3a3028, 0.3).setDepth(1);
+    this.tweens.add({
+      targets: scorch, alpha: 0, duration: 3000, onComplete: () => scorch.destroy()
+    });
+
+    this.cameras.main.shake(180, 0.008);
   }
 
   destroyTower(t: Tower) {
@@ -2153,12 +2519,13 @@ export class GameScene extends Phaser.Scene {
         this.boss.stateEnd = 0; // updateBoss will fire bossChargeImpact next frame
       }
     };
-    this.physics.add.collider(this.boss, this.wallGroup, onStructureHit);
-    this.physics.add.collider(this.boss, this.towerGroup, onStructureHit);
+    this.physics.add.collider(this.boss, this.wallGroup, onStructureHit, () => this.biome !== 'river');
+    this.physics.add.collider(this.boss, this.towerGroup, onStructureHit, () => this.biome !== 'river');
     this.game.events.emit('boss-spawn', { hp: this.boss.hp, maxHp: this.boss.maxHp, biome: this.biome });
     const bossTitle = this.biome === 'forest' ? 'THE FOREST GUARDIAN'
                     : this.biome === 'infected' ? 'THE BLIGHTED ONE'
-                    : 'THE BROOD MOTHER';
+                    : this.biome === 'river' ? 'THE FOG PHANTOM'
+                    : 'THE ANCIENT RAM';
     this.countdownMsg = `${bossTitle} APPROACHES`;
     this.countdownColor = '#ff5050';
     this.pushHud();
@@ -2185,6 +2552,37 @@ export class GameScene extends Phaser.Scene {
 
   enemyHitsTower(_e: Enemy, _t: Tower) {
     // Enemies no longer attack structures — collider just blocks movement
+  }
+
+  // ---------- ENEMY DARTS (mosquito ranged attack) ----------
+  spawnMosquitoDart(x: number, y: number, tx: number, ty: number) {
+    const dart = this.physics.add.sprite(x, y, 'mdart_0').setScale(0.5).setDepth(9);
+    dart.play('mdart-spin');
+    dart.setSize(10, 10).setOffset(3, 3);
+    const angle = Math.atan2(ty - y, tx - x);
+    const spd = CFG.river.mosquitoDartSpeed;
+    dart.setVelocity(Math.cos(angle) * spd, Math.sin(angle) * spd);
+    dart.setRotation(angle);
+    (dart as any)._born = this.vTime;
+    (dart as any)._dmg = CFG.river.mosquitoDartDmg;
+    this.enemyDarts.add(dart);
+  }
+
+  enemyDartHitsPlayer(dart: Phaser.Physics.Arcade.Sprite) {
+    if (!dart.active) return;
+    const dmg = (dart as any)._dmg ?? CFG.river.mosquitoDartDmg;
+    this.player.hurt(dmg, this);
+    this.pushHud();
+    if (this.player.hp <= 0) this.lose();
+    dart.destroy();
+  }
+
+  updateEnemyDarts() {
+    this.enemyDarts.children.iterate((c: any) => {
+      if (!c || !c.active) return true;
+      if (this.vTime - c._born > CFG.river.mosquitoDartLifetime) { c.destroy(); return true; }
+      return true;
+    });
   }
 
   // ---------- PROJECTILES ----------
@@ -2291,7 +2689,7 @@ export class GameScene extends Phaser.Scene {
     if (e.hp <= 0) {
       if (!e.noCoinDrop) {
         const tier =
-          e.kind === 'heavy' || e.kind === 'bear' || e.kind === 'infected_heavy' ? 'silver' :
+          e.kind === 'heavy' || e.kind === 'deer' || e.kind === 'bear' || e.kind === 'infected_heavy' ? 'silver' :
                                                      'bronze';
         const coin = new Coin(this, e.x + Phaser.Math.Between(-4, 4), e.y + Phaser.Math.Between(-4, 4), tier);
         this.coins.add(coin);
@@ -2550,7 +2948,7 @@ export class GameScene extends Phaser.Scene {
           return;
         }
         const secs = Math.ceil((this.bossCountdownUntil - time) / 1000);
-        const bossName = this.biome === 'forest' ? 'FOREST GUARDIAN' : 'BROOD MOTHER';
+        const bossName = this.biome === 'forest' ? 'FOREST GUARDIAN' : this.biome === 'infected' ? 'BLIGHTED ONE' : this.biome === 'river' ? 'FOG PHANTOM' : 'ANCIENT RAM';
         this.countdownMsg = `${bossName} SPAWNING IN ${secs}`;
         this.countdownColor = '#ff5050';
         this.pushHud();
@@ -2588,9 +2986,11 @@ export class GameScene extends Phaser.Scene {
     if (this.wave >= CFG.spawn.runnerPackStartWave && this.waveSpawned < waveSize) {
       const cdMin = this.biome === 'forest' ? CFG.forest.wolfPackCooldownMin
                   : this.biome === 'infected' ? CFG.infected.runnerPackCooldownMin
+                  : this.biome === 'river' ? CFG.river.dragonflyPackCooldownMin
                   : CFG.spawn.runnerPackCooldownMin;
       const cdMax = this.biome === 'forest' ? CFG.forest.wolfPackCooldownMax
                   : this.biome === 'infected' ? CFG.infected.runnerPackCooldownMax
+                  : this.biome === 'river' ? CFG.river.dragonflyPackCooldownMax
                   : CFG.spawn.runnerPackCooldownMax;
       if (this.nextRunnerPack === 0) {
         this.nextRunnerPack = time + Phaser.Math.Between(cdMin, cdMax);
@@ -2613,11 +3013,13 @@ export class GameScene extends Phaser.Scene {
     if (side === 3) { cx = px + spawnR; cy = py + Phaser.Math.Between(-spawnR, spawnR); }
     const isForest = this.biome === 'forest';
     const isInfected = this.biome === 'infected';
+    const isRiver = this.biome === 'river';
     const base = isForest ? CFG.forest.wolfPackSize
                : isInfected ? CFG.infected.runnerPackSize
+               : isRiver ? CFG.river.dragonflyPackSize
                : CFG.spawn.runnerPackSize;
     const n = isForest ? base + Phaser.Math.Between(0, 5) : base;
-    const packKind: EnemyKind = isForest ? 'wolf' : isInfected ? 'infected_runner' : 'runner';
+    const packKind: EnemyKind = isForest ? 'wolf' : isInfected ? 'infected_runner' : isRiver ? 'dragonfly' : 'rat';
     // Stagger spawns with small delays to create a snake-line formation
     const delay = 150; // ms between each mob in the pack
     const toSpawn = Math.min(n, waveSize - this.waveSpawned);
@@ -2665,8 +3067,13 @@ export class GameScene extends Phaser.Scene {
       kind = Math.random() < this.heavyChance ? 'bear' : 'spider';
     } else if (this.biome === 'infected') {
       kind = Math.random() < this.heavyChance ? 'infected_heavy' : 'infected_basic';
+    } else if (this.biome === 'river') {
+      const r = Math.random();
+      if (r < this.heavyChance) kind = 'bat';
+      else if (r < 0.4) kind = 'mosquito';
+      else kind = 'crow';
     } else {
-      kind = Math.random() < this.heavyChance ? 'heavy' : 'basic';
+      kind = Math.random() < this.heavyChance ? 'deer' : 'snake';
     }
     const e = new Enemy(this, x, y, kind);
     this.applyEnemyDifficulty(e);

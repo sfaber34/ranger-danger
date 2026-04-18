@@ -221,7 +221,7 @@ export class UIScene extends Phaser.Scene {
     const x = (W - barW) / 2;
     const y = 58; // 20 (top pad) + 38
     if (this.bossBarBg) return;
-    const bossName = s?.biome === 'forest' ? 'THE FOREST GUARDIAN' : s?.biome === 'infected' ? 'THE BLIGHTED ONE' : 'THE BROOD MOTHER';
+    const bossName = s?.biome === 'forest' ? 'THE FOREST GUARDIAN' : s?.biome === 'infected' ? 'THE BLIGHTED ONE' : 'THE ANCIENT RAM';
     this.bossLabel = this.add.text(W / 2, y - 16, bossName, {
       fontFamily: 'monospace', fontSize: '14px', color: '#ff6a6a',
       stroke: '#0b0f1a', strokeThickness: 3

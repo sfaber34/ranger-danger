@@ -5,7 +5,7 @@ import arrowBase2Img from '../assets/sprites/arrow_base_2.png';
 import cannonBaseImg from '../assets/sprites/cannon_base.png';
 import cannonBase1Img from '../assets/sprites/cannon_base_1.png';
 import cannonBase2Img from '../assets/sprites/cannon_base_2.png';
-import levelMapBgImg from '../assets/sprites/level_map_bg.png';
+import levelMapBgImg from '../assets/sprites/level_map_bg.jpg';
 import greenCheckImg from '../assets/sprites/green_check.png';
 
 export class BootScene extends Phaser.Scene {

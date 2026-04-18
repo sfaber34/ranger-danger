@@ -61,23 +61,25 @@ export function findPath(
       if (!inRange(nx, ny)) continue;
       const ni = idx(nx, ny);
       if (visited[ni]) continue;
-      if (gridGet(g, nx, ny) >= 1) continue;
+      const nv = gridGet(g, nx, ny);
+      if (nv >= 1 && nv !== 5) continue; // 5 = bridge, walkable
       visited[ni] = 1;
       prev[ni] = cur;
       queue.push(ni);
     }
-    // Diagonals — walls (1) and trees (3) block, towers (2) allow squeeze-through at corners
+    // Diagonals — walls (1), trees (3), water (4) block; towers (2) and bridges (5) allow squeeze-through
     for (const [dx, dy] of diagonals) {
       const nx = cx + dx, ny = cy + dy;
       if (!inRange(nx, ny)) continue;
       const ni = idx(nx, ny);
       if (visited[ni]) continue;
-      if (gridGet(g, nx, ny) >= 1) continue;
+      const dv = gridGet(g, nx, ny);
+      if (dv >= 1 && dv !== 5) continue;
       const c1 = gridGet(g, cx + dx, cy);
       const c2 = gridGet(g, cx, cy + dy);
-      // Both blocked = no gap; wall (1) or tree (3) = full-tile, no squeeze
-      const solid1 = c1 === 1 || c1 === 3;
-      const solid2 = c2 === 1 || c2 === 3;
+      // Both blocked = no gap; wall (1), tree (3), water (4) = full-tile, no squeeze
+      const solid1 = c1 === 1 || c1 === 3 || c1 === 4;
+      const solid2 = c2 === 1 || c2 === 3 || c2 === 4;
       if (solid1 || solid2 || (c1 >= 1 && c2 >= 1)) continue;
       visited[ni] = 1;
       prev[ni] = cur;
@@ -119,7 +121,8 @@ export function canReachFromSpawnDirections(
         for (let dx = -r; dx <= r && !found; dx++) {
           if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
           const sx = tp.x + dx, sy = tp.y + dy;
-          if (gridGet(g, sx, sy) === 0) {
+          const sv = gridGet(g, sx, sy);
+          if (sv === 0 || sv === 5) {
             const path = findPath(g, sx, sy, px, py);
             if (path.length > 0) found = true;
           }

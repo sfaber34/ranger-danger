@@ -7,6 +7,7 @@
 import Phaser from 'phaser';
 
 type Put = (x: number, y: number, c: string | null) => void;
+type PutRGB = (x: number, y: number, r: number, g: number, b: number) => void;
 
 // ------------------------------------------------------------------
 //  Palette
@@ -94,6 +95,29 @@ const P = {
   bellyD:  '#7a3a2a',
   bellyM:  '#a8604a',
 
+  // snake colors
+  snake:   '#4a7a30',
+  snakeD:  '#3a5a20',
+  snakeM:  '#5a8a40',
+  snakeL:  '#6a9a48',
+  snakeBelly: '#c8cc88',
+  snakePat: '#2a4a18',
+
+  // rat colors
+  rat:     '#7a6a5a',
+  ratD:    '#5a4a3a',
+  ratL:    '#8a7a6a',
+  ratTail: '#a08070',
+
+  // deer colors
+  deer:    '#8a6a48',
+  deerD:   '#6a4a30',
+  deerM:   '#7a5a38',
+  deerL:   '#a88a60',
+  deerBelly: '#c8b898',
+  antler:  '#d4c8a0',
+  antlerD: '#a89870',
+
   // archer tower extras
   tunic:   '#2a7a3a',
   tunicD:  '#1a4a24',
@@ -132,7 +156,31 @@ const P = {
   leafL:   '#38682c',
   leafB:   '#4a7e3a',
   entEye:  '#60ff60',
-  entEyeD: '#208020'
+  entEyeD: '#208020',
+
+  // Ancient Ram boss
+  ram:     '#8a8078',
+  ramD:    '#5a5048',
+  ramM:    '#706860',
+  ramL:    '#aaa098',
+  ramBelly:'#c0b8a8',
+  wool:    '#c8c0b0',
+  woolD:   '#908878',
+  woolL:   '#e0d8cc',
+  horn:    '#d8d0b8',
+  hornD:   '#a8a088',
+  hornM:   '#c0b8a0',
+  hornL:   '#ece8d8',
+
+  // Fog Phantom (river boss)
+  fog:     '#324060',
+  fogD:    '#1a2840',
+  fogM:    '#283450',
+  fogL:    '#506888',
+  fogGlow: '#64c8ff',
+  fogGlowD:'#3090c0',
+  fogCore: '#405878',
+  fogWisp: '#283a58'
 };
 
 // ------------------------------------------------------------------
@@ -211,6 +259,11 @@ function makeCanvas(size: number, draw: (put: Put) => void): HTMLCanvasElement {
   outCtx.putImageData(dstData, 0, 0);
 
   return outCanvas;
+}
+
+/** Wrap a put so all x-coordinates are mirrored around the center (31-x for 32px sprites). */
+function mirrorX(put: Put): Put {
+  return (x, y, c) => put(31 - x, y, c);
 }
 
 function rect(put: Put, x: number, y: number, w: number, h: number, c: string | null) {
@@ -576,6 +629,269 @@ function drawEnemyHeavy(f: EFrame) {
     rect(put, 24, 15, 3, 3, bodyD);
     put(6, 15, bodyM);
     put(25, 15, bodyM);
+  };
+}
+
+// ==================================================================
+//  SNAKE (32x32) — slithering viper, meadow basic enemy
+// ==================================================================
+function drawEnemySnake(f: EFrame) {
+  return (rawPut: Put) => {
+    const put = f.startsWith('die') ? rawPut : mirrorX(rawPut);
+    if (f.startsWith('die')) {
+      const step = parseInt(f.slice(3));
+      const r = 6 - step * 1.5;
+      if (r <= 0) return;
+      disc(put, 16, 22, Math.max(0, Math.round(r)), P.snake);
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + step * 0.5;
+        const d = step * 3 + 2;
+        put(Math.round(16 + Math.cos(a) * d), Math.round(22 + Math.sin(a) * d), P.snakeD);
+      }
+      return;
+    }
+    const flash = f === 'hit';
+    const body = flash ? P.white : P.snake;
+    const bodyD = flash ? P.white : P.snakeD;
+    const bodyL = flash ? P.white : P.snakeL;
+    const belly = flash ? P.white : P.snakeBelly;
+    const pat = flash ? P.white : P.snakePat;
+
+    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
+                  f === 'atk0' ? 0 : f === 'atk1' ? 1 : 0;
+    const cy = 22;
+
+    // Body segments — sinusoidal wave
+    const segs = [
+      { x: 8,  y: cy + [0, -1, 0, 1][phase] },
+      { x: 11, y: cy + [-1, 0, 1, 0][phase] },
+      { x: 14, y: cy + [0, 1, 0, -1][phase] },
+      { x: 17, y: cy + [1, 0, -1, 0][phase] },
+      { x: 20, y: cy + [0, -1, 0, 1][phase] },
+      { x: 23, y: cy + [-1, 0, 1, 0][phase] },
+    ];
+
+    // Tail
+    put(24, segs[5].y, bodyD);
+    put(25, segs[5].y - 1, bodyD);
+
+    // Body segments back to front
+    for (let i = segs.length - 1; i >= 0; i--) {
+      const s = segs[i];
+      const thick = i <= 1 ? 2 : i >= 4 ? 2 : 3;
+      const ty = s.y - Math.floor(thick / 2);
+      rect(put, s.x, ty, 4, thick, body);
+      // Belly
+      rect(put, s.x, ty + thick - 1, 4, 1, belly);
+      // Diamond pattern
+      if (i % 2 === 0) rect(put, s.x + 1, ty, 2, 1, pat);
+    }
+
+    // Head
+    const headY = segs[0].y;
+    rect(put, 5, headY - 2, 5, 4, bodyL);
+    rect(put, 4, headY - 1, 2, 3, bodyL);
+    rect(put, 6, headY - 2, 3, 1, body);
+
+    // Eyes
+    put(5, headY - 1, '#ffcc00');
+    put(6, headY - 1, '#ffcc00');
+    put(5, headY - 1, P.outline);
+
+    // Tongue (flickers on certain frames)
+    if (phase < 2) {
+      put(3, headY, '#dd3333');
+      put(2, headY, '#dd3333');
+      if (phase === 0) {
+        put(1, headY - 1, '#dd3333');
+        put(1, headY + 1, '#dd3333');
+      }
+    }
+
+    // Attack — open mouth
+    if (f === 'atk0' || f === 'atk1') {
+      rect(put, 3, headY, 3, 2, P.outline);
+      put(3, headY + 1, P.white); // fang
+      put(5, headY + 1, P.white);
+    }
+  };
+}
+
+// ==================================================================
+//  RAT SWARM (32x32) — cluster of 3 rats, meadow runner pack
+// ==================================================================
+function drawEnemyRat(f: EFrame) {
+  return (rawPut: Put) => {
+    const put = f.startsWith('die') ? rawPut : mirrorX(rawPut);
+    if (f.startsWith('die')) {
+      const step = parseInt(f.slice(3));
+      const r = 7 - step * 2;
+      if (r <= 0) return;
+      disc(put, 16, 20, Math.max(0, r), P.rat);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + step * 0.5;
+        const d = step * 3 + 2;
+        put(Math.round(16 + Math.cos(a) * d), Math.round(20 + Math.sin(a) * d), P.ratD);
+      }
+      return;
+    }
+    const flash = f === 'hit';
+    const bodyA = flash ? P.white : P.rat;
+    const bodyB = flash ? P.white : P.ratD;
+    const bodyC = flash ? P.white : P.ratL;
+    const tail = flash ? P.white : P.ratTail;
+
+    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
+                  f === 'atk0' ? 0 : f === 'atk1' ? 2 : 0;
+
+    const rats = [
+      { x: 10, y: 19 + [0, 1, 0, -1][phase], c: bodyA },
+      { x: 16, y: 17 + [0, -1, 0, 1][(phase + 1) % 4], c: bodyB },
+      { x: 14, y: 22 + [0, 1, 0, -1][(phase + 2) % 4], c: bodyC },
+    ];
+
+    // Tails first (behind)
+    for (let i = 0; i < rats.length; i++) {
+      const r = rats[i];
+      const tw = [0, 1, 0, -1][(phase + i) % 4];
+      put(r.x + 6, r.y + 1 + tw, tail);
+      put(r.x + 7, r.y + tw, tail);
+      put(r.x + 8, r.y + tw, tail);
+      put(r.x + 9, r.y - 1 + tw, tail);
+    }
+
+    // Rat bodies
+    for (let i = 0; i < rats.length; i++) {
+      const r = rats[i];
+      const legOff = [0, 1, 0, 1][(phase + i) % 4];
+      // Body
+      rect(put, r.x, r.y, 7, 4, r.c);
+      rect(put, r.x + 1, r.y - 1, 5, 1, r.c);
+      // Legs
+      put(r.x, r.y + 4 - legOff, bodyB);
+      put(r.x + 1, r.y + 4 - legOff, bodyB);
+      put(r.x + 5, r.y + 4 + legOff, bodyB);
+      put(r.x + 6, r.y + 4 + legOff, bodyB);
+      // Head
+      rect(put, r.x - 2, r.y, 3, 3, r.c);
+      // Ear
+      put(r.x - 1, r.y - 1, '#e8a0a0');
+      // Eye
+      put(r.x - 2, r.y + 1, '#ff2222');
+      // Nose
+      put(r.x - 3, r.y + 1, '#e8a0a0');
+    }
+  };
+}
+
+// ==================================================================
+//  DEER (32x32) — corrupted stag, meadow heavy enemy
+// ==================================================================
+function drawEnemyDeer(f: EFrame) {
+  return (rawPut: Put) => {
+    const put = f.startsWith('die') ? rawPut : mirrorX(rawPut);
+    if (f.startsWith('die')) {
+      const step = parseInt(f.slice(3));
+      const r = 10 - step * 2;
+      if (r <= 0) return;
+      disc(put, 16, 18, Math.max(0, r), P.deer);
+      disc(put, 16, 18, Math.max(0, r - 2), P.deerL);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + step * 0.4;
+        const d = step * 3 + 3;
+        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), P.deerD);
+        put(Math.round(16 + Math.cos(a) * d) + 1, Math.round(18 + Math.sin(a) * d), P.antler);
+      }
+      return;
+    }
+    const flash = f === 'hit';
+    const body = flash ? P.white : P.deer;
+    const bodyD = flash ? P.white : P.deerD;
+    const bodyL = flash ? P.white : P.deerL;
+    const belly = flash ? P.white : P.deerBelly;
+    const horn = flash ? P.white : P.antler;
+    const hornD = flash ? P.white : P.antlerD;
+
+    // Shadow (drawn first so body renders on top)
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -7; dx <= 7; dx++)
+        if ((dx * dx) / 49 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+
+    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
+                  f === 'atk0' ? 0 : f === 'atk1' ? 2 : 0;
+    const bob = [0, -1, 0, -1][phase];
+    const cy = 14 + bob;
+
+    // Legs (4 thin legs)
+    const legY = cy + 8;
+    if (phase === 0) {
+      rect(put, 11, legY, 2, 7, bodyD); rect(put, 15, legY, 2, 7, bodyD);
+      rect(put, 19, legY, 2, 7, bodyD); rect(put, 22, legY, 2, 7, bodyD);
+    } else if (phase === 1) {
+      rect(put, 10, legY, 2, 8, bodyD); rect(put, 15, legY, 2, 6, bodyD);
+      rect(put, 18, legY, 2, 8, bodyD); rect(put, 23, legY, 2, 6, bodyD);
+    } else {
+      rect(put, 12, legY, 2, 6, bodyD); rect(put, 15, legY, 2, 8, bodyD);
+      rect(put, 20, legY, 2, 6, bodyD); rect(put, 22, legY, 2, 8, bodyD);
+    }
+    // Hooves
+    const hoofOff = phase === 1 ? 1 : phase === 2 ? -1 : 0;
+    rect(put, 11 + (phase === 1 ? -1 : phase === 2 ? 1 : 0), legY + 7 + hoofOff, 2, 1, P.outline);
+    rect(put, 15, legY + 7 - hoofOff, 2, 1, P.outline);
+    rect(put, 19 + (phase === 1 ? -1 : phase === 2 ? 1 : 0), legY + 7 + hoofOff, 2, 1, P.outline);
+    rect(put, 22, legY + 7 - hoofOff, 2, 1, P.outline);
+
+    // Body
+    rect(put, 10, cy + 2, 16, 7, body);
+    rect(put, 11, cy + 1, 14, 1, body);
+    // Belly
+    rect(put, 13, cy + 7, 8, 2, belly);
+    // Back (darker stripe)
+    rect(put, 12, cy + 1, 10, 2, bodyD);
+    // White spots
+    put(14, cy + 3, bodyL); put(17, cy + 4, bodyL);
+    put(20, cy + 3, bodyL); put(12, cy + 5, bodyL);
+    put(22, cy + 5, bodyL);
+
+    // Neck
+    rect(put, 8, cy, 4, 5, body);
+    // Head
+    rect(put, 6, cy - 1, 5, 4, body);
+    rect(put, 5, cy, 2, 3, body);
+    // Snout
+    rect(put, 4, cy + 1, 3, 2, bodyL);
+    // Nose
+    put(4, cy + 1, P.outline); put(5, cy + 1, P.outline);
+    // Eye — red (corrupted)
+    put(7, cy, '#ff3030'); put(8, cy, '#ff3030');
+    put(7, cy, '#aa0000');
+    // Ear
+    rect(put, 8, cy - 3, 2, 2, bodyD);
+
+    // Antlers
+    // Left antler
+    rect(put, 7, cy - 5, 1, 3, horn);
+    rect(put, 6, cy - 7, 1, 2, horn);
+    put(5, cy - 8, horn); put(5, cy - 9, hornD);
+    rect(put, 8, cy - 6, 1, 2, horn);
+    put(9, cy - 7, hornD);
+    // Right antler
+    rect(put, 10, cy - 5, 1, 3, horn);
+    rect(put, 11, cy - 7, 1, 2, horn);
+    put(12, cy - 8, horn); put(12, cy - 9, hornD);
+    rect(put, 9, cy - 6, 1, 2, horn);
+
+    // Tail
+    const tailWag = [0, 1, 0, -1][phase];
+    put(26, cy + 2 + tailWag, bodyL);
+    put(26, cy + 3 + tailWag, bodyL);
+    put(27, cy + 1 + tailWag, bodyL);
+
+    // Attack — antlers thrust forward
+    if (f === 'atk0' || f === 'atk1') {
+      put(4, cy - 2, horn); put(3, cy - 3, horn);
+      put(4, cy - 4, horn); put(3, cy - 5, hornD);
+    }
   };
 }
 
@@ -1148,6 +1464,499 @@ function drawEnemySpider(f: EFrame) {
 }
 
 // ==================================================================
+//  ENEMY CROW (32x32) — dark flying bird, basic river enemy
+// ==================================================================
+function drawEnemyCrow(f: EFrame) {
+  return (put: Put) => {
+    if (f.startsWith('die')) {
+      const step = parseInt(f.slice(3));
+      const r = 6 - step * 2;
+      if (r <= 0) return;
+      disc(put, 16, 18, r, '#232330');
+      disc(put, 16, 18, Math.max(0, r - 1), '#383850');
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + step * 0.5;
+        const d = step * 3 + 2;
+        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), '#1a1a28');
+      }
+      return;
+    }
+    const flash = f === 'hit';
+    const body = flash ? P.white : '#232330';
+    const bodyD = flash ? P.white : '#141420';
+    const bodyL = flash ? P.white : '#383850';
+
+    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
+                  f === 'atk0' ? 0 : f === 'atk1' ? 1 : 0;
+    const bob = [0, -1, -2, -1][phase];
+    const wingY = [0, -2, -3, -1][phase];
+
+    // Shadow
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -5; dx <= 5; dx++)
+        if ((dx * dx) / 25 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+
+    // Wings behind body — thick, connected
+    for (let i = 0; i < 9; i++) {
+      const t = i / 8;
+      const wy = Math.round(wingY * Math.sin(t * Math.PI));
+      const th = Math.max(0, Math.round(2 - t * 1.5));
+      for (let d = 0; d <= th; d++) {
+        put(12 - i, 15 + bob + wy + d, bodyD);
+        put(20 + i, 15 + bob + wy + d, bodyD);
+      }
+      put(12 - i, 15 + bob + wy, bodyL);
+      put(20 + i, 15 + bob + wy, bodyL);
+    }
+
+    // Body
+    disc(put, 16, 16 + bob, 5, bodyD);
+    disc(put, 16, 16 + bob, 4, body);
+    // Head
+    disc(put, 16, 11 + bob, 3, bodyL);
+    // Beak
+    put(16, 14 + bob, '#c8a028');
+    put(16, 15 + bob, '#b49020');
+    // Eyes
+    put(14, 10 + bob, flash ? P.white : '#ff5050');
+    put(18, 10 + bob, flash ? P.white : '#ff5050');
+    // Tail
+    put(14, 22 + bob, bodyD); put(15, 23 + bob, bodyD);
+    put(18, 22 + bob, bodyD); put(17, 23 + bob, bodyD);
+
+    // Attack: beak open
+    if (f === 'atk0' || f === 'atk1') {
+      put(15, 14 + bob, '#c8a028'); put(17, 14 + bob, '#c8a028');
+      if (f === 'atk1') put(16, 16 + bob, '#400808');
+    }
+  };
+}
+
+// ==================================================================
+//  ENEMY BAT (32x32) — heavy flyer with large membrane wings
+// ==================================================================
+function drawEnemyBat(f: EFrame) {
+  return (put: Put) => {
+    if (f.startsWith('die')) {
+      const step = parseInt(f.slice(3));
+      const r = 7 - step * 2;
+      if (r <= 0) return;
+      disc(put, 16, 18, r, '#3c2832');
+      disc(put, 16, 18, Math.max(0, r - 1), '#5a3848');
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + step * 0.4;
+        const d = step * 3 + 3;
+        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), '#2a1820');
+      }
+      return;
+    }
+    const flash = f === 'hit';
+    const body = flash ? P.white : '#3c2832';
+    const bodyD = flash ? P.white : '#2a1820';
+    const bodyL = flash ? P.white : '#5a3848';
+    const membrane = flash ? P.white : '#372030';
+    const membraneL = flash ? P.white : '#4a3040';
+
+    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
+                  f === 'atk0' ? 0 : f === 'atk1' ? 1 : 0;
+    const bob = [0, -1, 0, 1][phase];
+    const wingA = [0, -4, -5, -2][phase];
+
+    // Shadow
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -6; dx <= 6; dx++)
+        if ((dx * dx) / 36 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+
+    // Wing membranes — large, connected to body
+    for (let i = 0; i < 11; i++) {
+      const t = i / 10;
+      const wy = 15 + bob + Math.round(wingA * Math.sin(t * Math.PI));
+      const memH = Math.round(4 + Math.sin(t * Math.PI) * 4);
+      for (let dy = 0; dy <= memH; dy++) {
+        put(13 - i, wy + dy, membrane);
+        put(19 + i, wy + dy, membrane);
+      }
+      // Bone along top
+      put(13 - i, wy, membraneL);
+      put(19 + i, wy, membraneL);
+    }
+
+    // Body
+    for (let dy = -5; dy <= 5; dy++)
+      for (let dx = -3; dx <= 3; dx++)
+        if ((dx * dx) / 9 + (dy * dy) / 25 <= 1) put(16 + dx, 17 + bob + dy, body);
+    // Head
+    disc(put, 16, 11 + bob, 3, bodyL);
+    // Ears
+    put(13, 7 + bob, bodyL); put(13, 8 + bob, bodyL); put(14, 8 + bob, body);
+    put(19, 7 + bob, bodyL); put(19, 8 + bob, bodyL); put(18, 8 + bob, body);
+    // Eyes
+    put(14, 11 + bob, flash ? P.white : '#ff3030');
+    put(18, 11 + bob, flash ? P.white : '#ff3030');
+    // Fangs
+    if (f === 'atk0' || f === 'atk1') {
+      put(15, 14 + bob, P.white); put(17, 14 + bob, P.white);
+      if (f === 'atk1') { put(15, 15 + bob, P.white); put(17, 15 + bob, P.white); }
+    } else {
+      put(15, 14 + bob, '#e0e0e0'); put(17, 14 + bob, '#e0e0e0');
+    }
+  };
+}
+
+// ==================================================================
+//  ENEMY DRAGONFLY (32x32) — fast iridescent insect
+// ==================================================================
+function drawEnemyDragonfly(f: EFrame) {
+  return (put: Put) => {
+    if (f.startsWith('die')) {
+      const step = parseInt(f.slice(3));
+      const r = 5 - step * 1.5;
+      if (r <= 0) return;
+      disc(put, 16, 16, Math.max(0, Math.round(r)), '#28a0b4');
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + step * 0.5;
+        const d = step * 3 + 2;
+        put(Math.round(16 + Math.cos(a) * d), Math.round(16 + Math.sin(a) * d), '#1a708a');
+      }
+      return;
+    }
+    const flash = f === 'hit';
+    const bodyC = flash ? P.white : '#28a0b4';
+    const bodyD = flash ? P.white : '#1a708a';
+    const bodyL = flash ? P.white : '#38c0d8';
+    const wingC = flash ? P.white : '#80d8e8';
+    const wingD = flash ? P.white : '#60b8cc';
+
+    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
+                  f === 'atk0' ? 0 : f === 'atk1' ? 1 : 0;
+    const bob = [0, -1, -2, -1][phase];
+    const wingA = [0, -2, -3, -1][phase];
+    const wingA2 = Math.round(-wingA * 0.5);
+
+    // Shadow
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -5; dx <= 5; dx++)
+        if ((dx * dx) / 25 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+
+    // Upper wings — attached to thorax
+    for (let i = 0; i < 9; i++) {
+      const t = i / 8;
+      const wy = Math.round(wingA * t);
+      const th = Math.max(0, Math.round(1.5 - t));
+      for (let d = 0; d <= th; d++) {
+        put(14 - i, 11 + bob + wy + d, wingD);
+        put(18 + i, 11 + bob + wy + d, wingD);
+      }
+      put(14 - i, 11 + bob + wy, wingC);
+      put(18 + i, 11 + bob + wy, wingC);
+    }
+    // Lower wings
+    for (let i = 0; i < 7; i++) {
+      const t = i / 6;
+      const wy = Math.round(wingA2 * t);
+      put(14 - i, 14 + bob + wy, wingD);
+      put(18 + i, 14 + bob + wy, wingD);
+    }
+
+    // Long segmented body (abdomen)
+    for (let i = 0; i < 12; i++) {
+      const c = i < 4 ? bodyL : i < 8 ? bodyC : bodyD;
+      put(16, 10 + i + bob, c);
+      if (i < 6) { put(15, 10 + i + bob, bodyD); put(17, 10 + i + bob, bodyD); }
+    }
+    // Head
+    disc(put, 16, 9 + bob, 2, bodyL);
+    // Big compound eyes
+    put(14, 8 + bob, flash ? P.white : '#c83030');
+    put(18, 8 + bob, flash ? P.white : '#c83030');
+
+    // Attack: abdomen curls forward
+    if (f === 'atk0' || f === 'atk1') {
+      put(16, 22 + bob, bodyD);
+      if (f === 'atk1') put(16, 23 + bob, '#ff6060');
+    }
+  };
+}
+
+// ==================================================================
+//  ENEMY MOSQUITO (32x32) — ranged attacker, shoots darts
+// ==================================================================
+function drawEnemyMosquito(f: EFrame) {
+  return (put: Put) => {
+    if (f.startsWith('die')) {
+      const step = parseInt(f.slice(3));
+      const r = 5 - step * 1.5;
+      if (r <= 0) return;
+      disc(put, 16, 17, Math.max(0, Math.round(r)), '#504638');
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + step * 0.5;
+        const d = step * 3 + 2;
+        put(Math.round(16 + Math.cos(a) * d), Math.round(17 + Math.sin(a) * d), '#3a3028');
+      }
+      return;
+    }
+    const flash = f === 'hit';
+    const body = flash ? P.white : '#504638';
+    const bodyD = flash ? P.white : '#3a3028';
+    const bodyL = flash ? P.white : '#685a48';
+    const wingC = flash ? P.white : '#b4c8d8';
+
+    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
+                  f === 'atk0' ? 0 : f === 'atk1' ? 1 : 0;
+    const bob = [-1, 0, 1, 0][phase];
+    const wingA = [2, -2, 2, -2][phase]; // fast flapping
+
+    // Shadow
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -4; dx <= 4; dx++)
+        if ((dx * dx) / 16 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+
+    // Wings — fast blur, attached to thorax
+    for (let i = 0; i < 8; i++) {
+      const t = i / 7;
+      const wy = Math.round(wingA * Math.sin(t * Math.PI));
+      const th = Math.max(0, Math.round(1 - t * 0.8));
+      for (let d = 0; d <= th; d++) {
+        put(14 - i, 13 + bob + wy + d, wingC);
+        put(18 + i, 13 + bob + wy + d, wingC);
+      }
+    }
+
+    // Body (thin abdomen)
+    for (let dy = -4; dy <= 4; dy++)
+      for (let dx = -2; dx <= 2; dx++)
+        if ((dx * dx) / 4 + (dy * dy) / 16 <= 1) put(16 + dx, 17 + bob + dy, body);
+    // Lighter thorax
+    disc(put, 16, 14 + bob, 2, bodyL);
+    // Head
+    disc(put, 16, 11 + bob, 2, bodyL);
+    // Proboscis — long needle pointing down/forward
+    put(16, 13 + bob, '#a08060');
+    put(16, 9 + bob, '#a08060');
+    put(16, 8 + bob, '#807050');
+    // Eyes
+    put(14, 10 + bob, flash ? P.white : '#c80000');
+    put(18, 10 + bob, flash ? P.white : '#c80000');
+    // Dangly legs
+    put(14, 19 + bob, bodyD); put(13, 21 + bob, bodyD);
+    put(18, 19 + bob, bodyD); put(19, 21 + bob, bodyD);
+    put(15, 20 + bob, bodyD); put(14, 22 + bob, bodyD);
+    put(17, 20 + bob, bodyD); put(18, 22 + bob, bodyD);
+
+    // Attack animation: proboscis extends, dart fires
+    if (f === 'atk0') {
+      put(16, 7 + bob, '#c0a060');
+      put(16, 6 + bob, '#c0a060');
+    } else if (f === 'atk1') {
+      put(16, 7 + bob, '#e0c080');
+      put(16, 6 + bob, '#e0c080');
+      put(16, 5 + bob, '#60c040'); // venom glow at tip
+    }
+  };
+}
+
+// ==================================================================
+//  MOSQUITO DART (16x16) — small slow-moving venom projectile
+// ==================================================================
+function drawMosquitoDart(f: 'dart0' | 'dart1') {
+  return (put: Put) => {
+    // Small venom droplet with a tail
+    const c1 = f === 'dart0' ? '#60c040' : '#80d060';
+    const c2 = f === 'dart0' ? '#408030' : '#50a040';
+    const tail = f === 'dart0' ? '#304020' : '#405028';
+    // Body of dart — pointed
+    put(6, 8, c1); put(7, 8, c1); put(8, 8, c1); put(9, 8, c1);
+    put(7, 7, c2); put(8, 7, c1); put(9, 7, c2);
+    put(7, 9, c2); put(8, 9, c1); put(9, 9, c2);
+    // Tip
+    put(10, 8, c1); put(11, 8, c2);
+    // Venom glow
+    put(8, 8, '#a0ff80');
+    // Trail
+    put(4, 8, tail); put(5, 8, tail);
+    put(3, 7, tail); put(3, 9, tail);
+  };
+}
+
+// ==================================================================
+//  RIVER BOSS — The Fog Phantom (64x64, flying ghostly mist entity)
+// ==================================================================
+
+interface FogOpts {
+  bob?: number;
+  flash?: boolean;
+  chargeGlow?: boolean;
+  pockets?: number;   // birth animation — tendrils extend
+  rearUp?: boolean;    // atk windup
+  phase?: number;      // movement animation phase 0-3
+}
+
+function drawFogPhantomBody(put: Put, opts: FogOpts) {
+  const cx = 32;
+  const bob = opts.bob ?? 0;
+  const baseCy = 30 + bob;
+
+  const col = {
+    d:   opts.flash ? P.white : P.fogD,
+    m:   opts.flash ? P.white : P.fogM,
+    b:   opts.flash ? P.white : P.fog,
+    l:   opts.flash ? P.white : P.fogL,
+    core:opts.flash ? P.white : P.fogCore,
+    glow:opts.flash ? P.white : P.fogGlow,
+    glowD:opts.flash? P.white : P.fogGlowD,
+    wisp:opts.flash ? P.white : P.fogWisp,
+  };
+  const phase = opts.phase ?? 0;
+
+  // Shadow (faint, ethereal)
+  for (let dy = -2; dy <= 2; dy++)
+    for (let dx = -14; dx <= 14; dx++)
+      if ((dx * dx) / 196 + (dy * dy) / 5 <= 1) put(cx + dx, 58 + dy, P.shadow);
+
+  // Misty tendrils — flowing wisps extending outward
+  for (let t = 0; t < 8; t++) {
+    const angle = (t / 8) * Math.PI * 2 + phase * 0.4;
+    const tendrilLen = opts.pockets != null ? 8 + opts.pockets * 2 : 10;
+    for (let i = 0; i < tendrilLen; i++) {
+      const r = 14 + i * 1.5;
+      const x = cx + Math.cos(angle + i * 0.12) * r;
+      const y = baseCy + Math.sin(angle + i * 0.12) * r * 0.5;
+      const fade = Math.max(0, 1 - i / tendrilLen);
+      if (fade > 0.3) put(Math.round(x), Math.round(y), col.wisp);
+    }
+  }
+
+  // Dripping ectoplasm tendrils hanging below
+  for (let t = 0; t < 5; t++) {
+    const tx = cx - 10 + t * 5 + Math.round(Math.sin(phase * 0.5 + t) * 2);
+    for (let dy = 0; dy < 8 + (phase + t) % 3; dy++) {
+      const fade = 1 - dy / 12;
+      if (fade > 0.2) put(tx, baseCy + 12 + dy, col.d);
+    }
+  }
+
+  // Core body — large ethereal mass
+  disc(put, cx, baseCy, 14, col.d);
+  disc(put, cx, baseCy, 12, col.m);
+  disc(put, cx, baseCy, 10, col.b);
+  disc(put, cx, baseCy - 1, 7, col.l);
+  disc(put, cx, baseCy - 2, 4, col.core);
+
+  // Charge glow — body pulses with energy
+  if (opts.chargeGlow) {
+    disc(put, cx, baseCy, 16, col.glowD);
+    disc(put, cx, baseCy, 13, col.glow);
+    disc(put, cx, baseCy, 10, col.b);
+    disc(put, cx, baseCy, 7, col.l);
+  }
+
+  // Attack windup — body contracts upward then expands
+  if (opts.rearUp) {
+    disc(put, cx, baseCy - 3, 10, col.glow);
+    disc(put, cx, baseCy - 3, 8, col.l);
+  }
+
+  // Face — hollow dark eye sockets
+  // Left eye socket
+  disc(put, cx - 7, baseCy - 4, 4, P.outline);
+  disc(put, cx - 7, baseCy - 4, 3, col.d);
+  // Right eye socket
+  disc(put, cx + 7, baseCy - 4, 4, P.outline);
+  disc(put, cx + 7, baseCy - 4, 3, col.d);
+
+  // Glowing pupils
+  disc(put, cx - 7, baseCy - 4, 2, col.glow);
+  put(cx - 7, baseCy - 4, P.white);
+  disc(put, cx + 7, baseCy - 4, 2, col.glow);
+  put(cx + 7, baseCy - 4, P.white);
+
+  // Glow halo around eyes
+  put(cx - 10, baseCy - 4, col.glowD);
+  put(cx - 4, baseCy - 4, col.glowD);
+  put(cx + 4, baseCy - 4, col.glowD);
+  put(cx + 10, baseCy - 4, col.glowD);
+
+  // Mouth — wavering dark slit
+  const mw = 5 + phase % 2;
+  for (let i = -mw; i <= mw; i++)
+    put(cx + i, baseCy + 4, P.outline);
+  for (let i = -mw + 1; i <= mw - 1; i++)
+    put(cx + i, baseCy + 5, col.d);
+
+  // Birth animation — tendrils actively spawning minions
+  if (opts.pockets != null) {
+    const p = opts.pockets;
+    // Tendrils reach out farther at each stage
+    for (let t = 0; t < 4; t++) {
+      const a = (t / 4) * Math.PI * 2 + 0.5;
+      const len = 6 + p * 4;
+      for (let i = 0; i < len; i++) {
+        const r = 16 + i * 1.5;
+        put(Math.round(cx + Math.cos(a) * r), Math.round(baseCy + Math.sin(a) * r * 0.5), col.glow);
+      }
+    }
+    // At final stages, glow at tips
+    if (p >= 3) {
+      for (let t = 0; t < 4; t++) {
+        const a = (t / 4) * Math.PI * 2 + 0.5;
+        const r = 16 + (6 + p * 4) * 1.5;
+        disc(put, Math.round(cx + Math.cos(a) * r), Math.round(baseCy + Math.sin(a) * r * 0.5), 2, col.glow);
+      }
+    }
+  }
+}
+
+function drawFogPhantomDie(put: Put, step: number) {
+  const cx = 32, cy = 30;
+  const r = Math.max(0, 14 - step * 3);
+  if (r > 0) {
+    disc(put, cx, cy, r, P.fogD);
+    disc(put, cx, cy, Math.max(0, r - 2), P.fog);
+    disc(put, cx, cy, Math.max(0, r - 4), P.fogL);
+  }
+  // Wisps dispersing outward
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2 + step * 0.4;
+    const d = step * 7 + 5;
+    const x = Math.round(cx + Math.cos(a) * d);
+    const y = Math.round(cy + Math.sin(a) * d * 0.6);
+    const fade = Math.max(0, 1 - step / 5);
+    if (fade > 0) {
+      put(x, y, P.fogM);
+      put(x + 1, y, P.fogD);
+      if (i % 3 === 0) put(x, y - 1, P.fogGlow);
+    }
+  }
+}
+
+function drawFogPhantom(frame: BossFrame) {
+  return (put: Put) => {
+    switch (frame) {
+      case 'idle0':      return drawFogPhantomBody(put, { bob: 0, phase: 0 });
+      case 'idle1':      return drawFogPhantomBody(put, { bob: -1, phase: 1 });
+      case 'move0':      return drawFogPhantomBody(put, { bob: 0, phase: 0 });
+      case 'move1':      return drawFogPhantomBody(put, { bob: -1, phase: 1 });
+      case 'move2':      return drawFogPhantomBody(put, { bob: -2, phase: 2 });
+      case 'move3':      return drawFogPhantomBody(put, { bob: -1, phase: 3 });
+      case 'atk0':       return drawFogPhantomBody(put, { rearUp: true, bob: -3, phase: 0 });
+      case 'atk1':       return drawFogPhantomBody(put, { bob: 2, phase: 2 });
+      case 'chargeWind': return drawFogPhantomBody(put, { chargeGlow: true, bob: 0, phase: 0 });
+      case 'hit':        return drawFogPhantomBody(put, { flash: true, phase: 0 });
+      case 'birth0':     return drawFogPhantomBody(put, { pockets: 0, phase: 0 });
+      case 'birth1':     return drawFogPhantomBody(put, { pockets: 1, phase: 1 });
+      case 'birth2':     return drawFogPhantomBody(put, { pockets: 2, phase: 2 });
+      case 'birth3':     return drawFogPhantomBody(put, { pockets: 3, phase: 3 });
+      case 'birth4':     return drawFogPhantomBody(put, { pockets: 4, phase: 0 });
+      case 'die0':       return drawFogPhantomDie(put, 0);
+      case 'die1':       return drawFogPhantomDie(put, 1);
+      case 'die2':       return drawFogPhantomDie(put, 2);
+      case 'die3':       return drawFogPhantomDie(put, 3);
+      case 'die4':       return drawFogPhantomDie(put, 4);
+    }
+  };
+}
+
+// ==================================================================
 //  TOWER (64x64) — 2x2 tile crossbow turret
 // ==================================================================
 function drawTowerBase(put: Put) {
@@ -1703,6 +2512,57 @@ function drawCannonball(frame: 0|1) {
   };
 }
 
+// BOULDER (32x32) — mossy rock thrown by forest boss
+function drawBoulder(frame: 0|1) {
+  return (put: Put) => {
+    const cx = 16, cy = 16, r = 7;
+    // Craggy rock body
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r * r) continue;
+        const dist = Math.sqrt(dx * dx + dy * dy) / r;
+        let color: string;
+        if (dist < 0.3) color = '#8a8078';
+        else if (dist < 0.6) color = '#6a6058';
+        else color = '#4a4038';
+        // Rotate detail slightly per frame
+        const rx = frame === 0 ? dx : dx + 1;
+        if ((rx + dy) % 5 === 0) color = '#5a5048';
+        put(cx + dx, cy + dy, color);
+      }
+    }
+    // Outline
+    for (let dy = -(r+1); dy <= r+1; dy++)
+      for (let dx = -(r+1); dx <= r+1; dx++) {
+        const d2 = dx*dx + dy*dy;
+        if (d2 > (r+1)*(r+1) || d2 <= r*r) continue;
+        put(cx + dx, cy + dy, P.outline);
+      }
+    // Highlight upper-left
+    put(cx-3, cy-3, '#aaa098'); put(cx-2, cy-4, '#b0a898');
+    put(cx-4, cy-2, '#9a9088');
+    if (frame === 0) put(cx-3, cy-4, '#c0b8a8');
+    else put(cx-2, cy-3, '#c0b8a8');
+    // Moss patches
+    put(cx+2, cy-3, P.leafM); put(cx+3, cy-2, P.leaf);
+    put(cx-1, cy+3, P.leafM); put(cx+1, cy+4, P.leafD);
+    // Cracks
+    put(cx+1, cy, '#3a3028'); put(cx+1, cy+1, '#3a3028');
+    put(cx-2, cy+1, '#3a3028');
+  };
+}
+
+function drawBoulderShadow() {
+  return (put: Put) => {
+    const cx = 16, cy = 16;
+    for (let dy = -3; dy <= 3; dy++)
+      for (let dx = -5; dx <= 5; dx++) {
+        const nx = dx / 5, ny = dy / 3;
+        if (nx * nx + ny * ny <= 1) put(cx + dx, cy + dy, P.outline);
+      }
+  };
+}
+
 // Cannonball shadow (32x32) — simple dark ellipse
 function drawCannonballShadow() {
   return (put: Put) => {
@@ -1790,6 +2650,84 @@ function drawCoin(frame: 0|1|2|3|4|5, tier: CoinTier = 'gold') {
 // ==================================================================
 //  EFFECTS (32x32)
 // ==================================================================
+// Boulder impact (32x32) — rock shatter + dust cloud, 5 frames
+function drawBoulderImpact(frame: 0|1|2|3|4) {
+  return (put: Put) => {
+    const cx = 16, cy = 16;
+    // Frame 0: initial hit flash + rock fragments close together
+    // Frame 1-2: dust cloud expanding + fragments flying out
+    // Frame 3-4: dust dissipating, fragments scattered
+
+    // Dust cloud (expanding brown/tan disc)
+    const dustR = [4, 8, 11, 12, 10][frame];
+    const dustAlpha = [1, 1, 0.8, 0.5, 0.2][frame];
+    if (dustAlpha > 0.2) {
+      // Outer dust ring
+      for (let dy = -dustR; dy <= dustR; dy++)
+        for (let dx = -dustR; dx <= dustR; dx++) {
+          if (dx*dx + dy*dy > dustR*dustR) continue;
+          const dist = Math.sqrt(dx*dx + dy*dy) / dustR;
+          if (dist > 0.6 && dustAlpha > 0.3)
+            put(cx+dx, cy+dy, '#8a7a60');
+          else if (dist > 0.3)
+            put(cx+dx, cy+dy, '#a09078');
+        }
+    }
+
+    // Core flash (bright on early frames)
+    if (frame < 2) {
+      const coreR = frame === 0 ? 4 : 2;
+      disc(put, cx, cy, coreR, frame === 0 ? '#fffbd0' : '#e0d0a0');
+    }
+
+    // Rock fragments flying outward
+    const fragDist = [3, 6, 9, 12, 14][frame];
+    const numFrags = 8;
+    const rockCols = ['#7a7068', '#6a6058', '#8a8078', '#5a5048', '#4a4038'];
+    for (let i = 0; i < numFrags; i++) {
+      const a = (i / numFrags) * Math.PI * 2 + 0.3;
+      const fd = fragDist + (i % 3) - 1;
+      const fx = Math.round(cx + Math.cos(a) * fd);
+      const fy = Math.round(cy + Math.sin(a) * fd);
+      if (frame < 4) {
+        // Rock chunk (2x2 on early frames, 1x1 later)
+        const col = rockCols[i % rockCols.length];
+        put(fx, fy, col);
+        if (frame < 3) {
+          put(fx+1, fy, col);
+          put(fx, fy+1, col);
+        }
+        // Moss on some fragments
+        if (i % 3 === 0 && frame < 3) put(fx+1, fy+1, P.leafM);
+      }
+    }
+
+    // Ground crack lines (appear frame 1+, persist)
+    if (frame >= 1 && frame <= 3) {
+      const crackLen = [0, 5, 8, 6, 0][frame];
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + 0.4;
+        for (let d = 2; d < crackLen; d++) {
+          const px = Math.round(cx + Math.cos(a) * d);
+          const py = Math.round(cy + Math.sin(a) * d);
+          put(px, py, '#3a3028');
+        }
+      }
+    }
+
+    // Small pebbles bouncing (frames 2-4)
+    if (frame >= 2) {
+      const pebbleDist = [0, 0, 6, 10, 13][frame];
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + 1.2;
+        const px = Math.round(cx + Math.cos(a) * pebbleDist);
+        const py = Math.round(cy + Math.sin(a) * pebbleDist - (frame < 4 ? 2 : 0));
+        if (frame < 4) put(px, py, '#6a6058');
+      }
+    }
+  };
+}
+
 function drawHitSpark(frame: 0|1|2) {
   return (put: Put) => {
     const cx = 16, cy = 16;
@@ -1895,6 +2833,274 @@ function precomputeNoise(tileX: number, tileY: number, offsetX: number, offsetY:
     const tl = grid[iy * gridW + ix], tr = grid[iy * gridW + ix1];
     const bl = grid[iy1 * gridW + ix], br = grid[iy1 * gridW + ix1];
     return tl * (1 - tx) * (1 - ty) + tr * tx * (1 - ty) + bl * (1 - tx) * ty + br * tx * ty;
+  };
+}
+
+// ---- River geometry (pixel-level, smooth curves) ----
+// River 0: runs north-south (vertical), center X varies with Y
+// River 1: runs east-west (horizontal), center Y varies with X
+export const RIVER_HALF_W = 40;  // half-width of water in pixels
+const ROCK_W = 14;        // rock border width in pixels
+
+// Vertical river: returns center X for a given world-pixel Y
+function riverVerticalCenterX(worldPy: number): number {
+  return -4 * 32
+    + Math.sin(worldPy * 0.0025) * 120
+    + Math.sin(worldPy * 0.007 + 2.0) * 40
+    + Math.sin(worldPy * 0.018 + 5.0) * 15;
+}
+
+// Horizontal river: returns center Y for a given world-pixel X
+export function riverHorizontalCenterY(worldPx: number): number {
+  return -6 * 32
+    + Math.sin(worldPx * 0.003) * 100
+    + Math.sin(worldPx * 0.008 + 1.5) * 35
+    + Math.sin(worldPx * 0.02 + 4.0) * 12;
+}
+
+// For squiggle spawning — riverIdx 0 = vertical, 1 = horizontal
+export function riverCenterPx(riverIdx: number, worldPy: number): number {
+  if (riverIdx === 0) return riverVerticalCenterX(worldPy);
+  // For horizontal river, return the X where the river crosses this Y
+  // (not perfectly accurate but good enough for squiggle placement)
+  return 0; // squiggles will use a different approach for horizontal
+}
+
+/** Pixel-level river classification for a world-pixel coordinate. */
+function riverPixelKind(worldPx: number, worldPy: number): 'water' | 'rock' | null {
+  // Vertical river: distance from center X
+  const vcx = riverVerticalCenterX(worldPy);
+  const vdist = Math.abs(worldPx - vcx);
+  if (vdist <= RIVER_HALF_W + ROCK_W) {
+    if (vdist < RIVER_HALF_W) return 'water';
+    return 'rock';
+  }
+  // Horizontal river: distance from center Y
+  const hcy = riverHorizontalCenterY(worldPx);
+  const hdist = Math.abs(worldPy - hcy);
+  if (hdist <= RIVER_HALF_W + ROCK_W) {
+    if (hdist < RIVER_HALF_W) return 'water';
+    return 'rock';
+  }
+  return null;
+}
+
+/**
+ * Determines the dominant type for a grid tile by sampling its pixels.
+ * Returns the grid value: 4 = water/rock (impassable), 5 = bridge (walkable, unbuildable), 0 = grass.
+ */
+export function getRiverTileGrid(tileX: number, tileY: number): number {
+  const basePx = tileX * 32;
+  const basePy = tileY * 32;
+  let riverCount = 0;
+  // Sample a 4x4 grid within the tile for speed
+  for (let sy = 4; sy < 32; sy += 8) {
+    for (let sx = 4; sx < 32; sx += 8) {
+      const k = riverPixelKind(basePx + sx, basePy + sy);
+      if (k === 'water' || k === 'rock') riverCount++;
+    }
+  }
+  // Majority rules — need at least 4/16 samples to count
+  if (riverCount >= 4) return 4;
+  return 0;
+}
+
+// Deterministic rock positions along the river edges.
+function getRocksNear(basePx: number, basePy: number): { wx: number; wy: number; r: number; shade: number }[] {
+  const rocks: { wx: number; wy: number; r: number; shade: number }[] = [];
+  const margin = 12;
+
+  // Helper: is a point inside either river's water?
+  const inWater = (px: number, py: number) => {
+    const vd = Math.abs(px - riverVerticalCenterX(py));
+    if (vd < RIVER_HALF_W) return true;
+    const hd = Math.abs(py - riverHorizontalCenterY(px));
+    if (hd < RIVER_HALF_W) return true;
+    return false;
+  };
+
+  // Vertical river rocks — scan along Y
+  for (let wy = basePy - margin; wy < basePy + 32 + margin; wy += 5) {
+    const cx = riverVerticalCenterX(wy);
+    const h = ((wy * 73856093 + 19349669) >>> 0) % 2147483647;
+    const jx = (h % 11) - 5;
+    const jy = ((h >> 8) % 7) - 3;
+    const radius = 4 + (h >> 16) % 4;
+    const shade = (h >> 20) % 4;
+    const lx = Math.round(cx - RIVER_HALF_W - 3 + jx), ly = wy + jy;
+    const rx = Math.round(cx + RIVER_HALF_W + 3 - jx), ry = wy + jy;
+    if (!inWater(lx, ly)) rocks.push({ wx: lx, wy: ly, r: radius, shade });
+    if (!inWater(rx, ry)) rocks.push({ wx: rx, wy: ry, r: radius, shade });
+  }
+
+  // Horizontal river rocks — scan along X
+  for (let wx = basePx - margin; wx < basePx + 32 + margin; wx += 5) {
+    const cy = riverHorizontalCenterY(wx);
+    const h = ((wx * 73856093 + 48271 * 19349669) >>> 0) % 2147483647;
+    const jy = (h % 11) - 5;
+    const jx = ((h >> 8) % 7) - 3;
+    const radius = 4 + (h >> 16) % 4;
+    const shade = (h >> 20) % 4;
+    const tx = wx + jx, ty = Math.round(cy - RIVER_HALF_W - 3 + jy);
+    const bx = wx + jx, by = Math.round(cy + RIVER_HALF_W + 3 - jy);
+    if (!inWater(tx, ty)) rocks.push({ wx: tx, wy: ty, r: radius, shade });
+    if (!inWater(bx, by)) rocks.push({ wx: bx, wy: by, r: radius, shade });
+  }
+
+  return rocks;
+}
+
+// River ground drawing — pixel-level with natural water and round rock borders
+// Uses PutRGB for water pixels to avoid hex string encode/decode overhead.
+function drawGroundRiver(tileX: number, tileY: number) {
+  return (put: Put, putRGB?: PutRGB) => {
+    const basePx = tileX * 32;
+    const basePy = tileY * 32;
+    let s = ((tileX * 73856093 + tileY * 19349669) >>> 0) % 2147483647;
+    const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+
+    // Precompute grass noise
+    const sampleGrass = precomputeNoise(tileX, tileY, 8000, 1000, 400);
+    const grassShades = ['#2a4826', '#325230', '#3c5e36', '#486a3e'];
+
+    // Precompute vertical river center X for each row
+    const vcx = new Float32Array(32);
+    for (let py = 0; py < 32; py++) {
+      vcx[py] = riverVerticalCenterX(basePy + py);
+    }
+    // Precompute horizontal river center Y for each column
+    const hcy = new Float32Array(32);
+    for (let px = 0; px < 32; px++) {
+      hcy[px] = riverHorizontalCenterY(basePx + px);
+    }
+
+    // Collect rocks near this tile
+    const rocks = getRocksNear(basePx, basePy);
+
+    // Rock color palettes as RGB arrays: [outline, dark, base, highlight]
+    const rockRGB = [
+      [[0x2a,0x24,0x20],[0x4a,0x44,0x40],[0x6a,0x64,0x60],[0x8a,0x84,0x7a]],
+      [[0x2a,0x22,0x18],[0x4a,0x3e,0x38],[0x6a,0x5e,0x54],[0x8a,0x7e,0x70]],
+      [[0x28,0x26,0x1e],[0x48,0x44,0x38],[0x68,0x62,0x58],[0x88,0x7e,0x72]],
+      [[0x2e,0x2a,0x24],[0x50,0x4a,0x44],[0x70,0x6a,0x62],[0x90,0x88,0x80]],
+    ];
+
+    const writeRGB = putRGB ?? ((x: number, y: number, r: number, g: number, b: number) => {
+      put(x, y, '#' + r.toString(16).padStart(2,'0') + g.toString(16).padStart(2,'0') + b.toString(16).padStart(2,'0'));
+    });
+
+    // First pass: draw base layer (grass, water)
+    for (let py = 0; py < 32; py++) {
+      const wpyBase = basePy + py;
+      const vc = vcx[py];
+      for (let px = 0; px < 32; px++) {
+        const wpx = basePx + px;
+        const hc = hcy[px];
+
+        // Check vertical river
+        const vd = Math.abs(wpx - vc);
+        // Check horizontal river
+        const hd = Math.abs(wpyBase - hc);
+
+        // Determine kind: pick the closer river
+        let kind = 0; // 0=none, 1=water, 2=rock
+        let depth = 0;
+        const vTotal = RIVER_HALF_W + ROCK_W;
+        if (vd <= vTotal || hd <= vTotal) {
+          // Water if within HALF_W of either river
+          const vWater = vd < RIVER_HALF_W;
+          const hWater = hd < RIVER_HALF_W;
+          if (vWater || hWater) {
+            kind = 1;
+            // Depth from whichever river is closer (or merge at intersection)
+            if (vWater) {
+              const t = 1 - vd / RIVER_HALF_W;
+              depth = t * t * (3 - 2 * t);
+            }
+            if (hWater) {
+              const t = 1 - hd / RIVER_HALF_W;
+              const dd = t * t * (3 - 2 * t);
+              if (dd > depth) depth = dd;
+            }
+          } else {
+            kind = 2; // rock border
+          }
+        }
+
+        if (kind === 1) {
+          // Base color: blend from shore blue to deep center blue
+          let br = 0x1e + (0x14 - 0x1e) * depth;
+          let bg = 0x40 + (0x30 - 0x40) * depth;
+          let bb = 0x72 + (0x6a - 0x72) * depth;
+
+          // Layer 1: large slow noise
+          const n1 = Math.sin(wpx * 0.02 + wpyBase * 0.015);
+          br += n1 * 5; bg += n1 * 4; bb += n1 * 6;
+
+          // Layer 2: flowing current
+          const flow = Math.sin(wpx * 0.08 + wpyBase * 0.04) * Math.sin(wpyBase * 0.06 + wpx * 0.01);
+          br += flow * 4 * depth; bg += flow * 5 * depth; bb += flow * 3 * depth;
+
+          // Layer 3: fine ripple texture
+          const ripple = Math.sin(wpx * 0.18 + wpyBase * 0.06) * Math.cos(wpyBase * 0.12 - wpx * 0.04);
+          br += ripple * 4; bg += ripple * 3; bb += ripple * 5;
+
+          writeRGB(px, py,
+            br < 0 ? 0 : br > 255 ? 255 : (br + 0.5) | 0,
+            bg < 0 ? 0 : bg > 255 ? 255 : (bg + 0.5) | 0,
+            bb < 0 ? 0 : bb > 255 ? 255 : (bb + 0.5) | 0);
+        } else if (kind === 2) {
+          const gn = sampleGrass(px, py);
+          const gi = Math.min(3, Math.floor(gn * 4));
+          put(px, py, grassShades[gi]);
+        } else {
+          const gn = sampleGrass(px, py);
+          const gi = Math.min(3, Math.floor(gn * 4));
+          put(px, py, grassShades[gi]);
+        }
+      }
+    }
+
+    // Second pass: stamp round rocks on top
+    for (const rock of rocks) {
+      const pal = rockRGB[rock.shade];
+      const rx = rock.wx - basePx;
+      const ry = rock.wy - basePy;
+      const rr = rock.r;
+      const rr2 = rr * rr;
+      const rr1 = (rr + 1) * (rr + 1);
+      for (let dy = -rr - 1; dy <= rr + 1; dy++) {
+        for (let dx = -rr - 1; dx <= rr + 1; dx++) {
+          const lx = rx + dx, ly = ry + dy;
+          if (lx < 0 || lx >= 32 || ly < 0 || ly >= 32) continue;
+          const dist2 = dx * dx + dy * dy;
+          if (dist2 > rr1) continue;
+          if (dist2 > rr2) {
+            writeRGB(lx, ly, pal[0][0], pal[0][1], pal[0][2]);
+          } else {
+            const shade = (dx + dy) / (rr * 2);
+            const ci = shade < -0.3 ? 3 : shade < 0.2 ? 2 : 1;
+            writeRGB(lx, ly, pal[ci][0], pal[ci][1], pal[ci][2]);
+          }
+        }
+      }
+    }
+
+    // Scattered flowers on grass
+    const flowerColors = ['#e84060', '#e8d040', '#d070e0', '#70a0e8', '#e8a040'];
+    if (rnd() < 0.15) {
+      for (let i = 0; i < 2; i++) {
+        const fx = 2 + Math.floor(rnd() * 28);
+        const fy = 2 + Math.floor(rnd() * 28);
+        const wfx = basePx + fx, wfy = basePy + fy;
+        const onRiver = Math.abs(wfx - vcx[fy]) <= RIVER_HALF_W + ROCK_W
+                     || Math.abs(wfy - hcy[fx]) <= RIVER_HALF_W + ROCK_W;
+        if (!onRiver) {
+          put(fx, fy, flowerColors[Math.floor(rnd() * flowerColors.length)]);
+          put(fx, fy + 1, '#1a3a18');
+        }
+      }
+    }
   };
 }
 
@@ -2770,6 +3976,256 @@ function drawBossDie(put: Put, step: number) {
 }
 
 // ==================================================================
+//  MEADOW BOSS — The Ancient Ram (64x64)
+// ==================================================================
+
+interface RamOpts {
+  bob?: number;
+  flash?: boolean;
+  chargeGlow?: boolean;
+  pockets?: number;
+  rearUp?: boolean;
+  legStep?: number;
+  headDown?: boolean; // atk windup: head lowered
+}
+
+function drawRamBody(put: Put, opts: RamOpts) {
+  const cx = 32;
+  const baseCy = 34 + (opts.bob ?? 0) + (opts.rearUp ? -2 : 0);
+
+  const col = {
+    out: opts.flash ? P.white : P.outline,
+    d:   opts.flash ? P.white : P.ramD,
+    m:   opts.flash ? P.white : P.ramM,
+    b:   opts.flash ? P.white : P.ram,
+    l:   opts.flash ? P.white : P.ramL
+  };
+  const wc = {
+    d: opts.flash ? P.white : P.woolD,
+    b: opts.flash ? P.white : P.wool,
+    l: opts.flash ? P.white : P.woolL
+  };
+  const hc = {
+    d: opts.flash ? P.white : P.hornD,
+    m: opts.flash ? P.white : P.hornM,
+    b: opts.flash ? P.white : P.horn,
+    l: opts.flash ? P.white : P.hornL
+  };
+
+  // Drop shadow
+  for (let dy = -2; dy <= 2; dy++)
+    for (let dx = -24; dx <= 24; dx++)
+      if ((dx * dx) / 576 + (dy * dy) / 5 <= 1) put(cx + dx, 59 + dy, P.shadow);
+
+  // --- Legs (4 thick legs) ---
+  const legStep = opts.legStep ?? 0;
+  // Back legs
+  rect(put, cx - 18, baseCy + 12 + legStep, 5, 10, col.d);
+  rect(put, cx - 17, baseCy + 13 + legStep, 3, 8, col.m);
+  rect(put, cx - 10, baseCy + 14 - legStep, 5, 9, col.d);
+  rect(put, cx - 9, baseCy + 15 - legStep, 3, 7, col.m);
+  // Front legs
+  rect(put, cx + 6, baseCy + 14 - legStep, 5, 9, col.d);
+  rect(put, cx + 7, baseCy + 15 - legStep, 3, 7, col.m);
+  rect(put, cx + 14, baseCy + 12 + legStep, 5, 10, col.d);
+  rect(put, cx + 15, baseCy + 13 + legStep, 3, 8, col.m);
+  // Hooves (dark)
+  rect(put, cx - 18, baseCy + 22 + legStep, 6, 2, col.out);
+  rect(put, cx - 10, baseCy + 22 - legStep, 6, 2, col.out);
+  rect(put, cx + 6, baseCy + 22 - legStep, 6, 2, col.out);
+  rect(put, cx + 14, baseCy + 22 + legStep, 6, 2, col.out);
+
+  // --- Woolly body (big round barrel) ---
+  disc(put, cx, baseCy, 22, col.out);
+  disc(put, cx, baseCy, 21, wc.d);
+  disc(put, cx, baseCy, 19, wc.b);
+
+  // Upper back wool — darker, textured
+  for (let y = -19; y <= -3; y++)
+    for (let x = -18; x <= 18; x++)
+      if (x * x + y * y <= 361) put(cx + x, baseCy + y, wc.d);
+  for (let y = -17; y <= -5; y++)
+    for (let x = -16; x <= 16; x++)
+      if (x * x + y * y <= 289) put(cx + x, baseCy + y, wc.b);
+
+  // Wool highlight (upper-left)
+  for (let y = -16; y <= -8; y++)
+    for (let x = -14; x <= -2; x++)
+      if (x * x + y * y <= 225) put(cx + x, baseCy + y, wc.l);
+
+  // Wool texture lumps
+  disc(put, cx - 8, baseCy - 8, 5, wc.b);
+  disc(put, cx + 4, baseCy - 6, 4, wc.b);
+  disc(put, cx - 2, baseCy - 12, 4, wc.l);
+  disc(put, cx + 10, baseCy - 4, 3, wc.b);
+
+  // Belly (lighter underside)
+  for (let y = 4; y <= 19; y++)
+    for (let x = -16; x <= 16; x++)
+      if (x * x + y * y <= 380) put(cx + x, baseCy + y, P.ramBelly);
+  for (let y = 10; y <= 19; y++)
+    for (let x = -12; x <= 12; x++)
+      if (x * x + y * y <= 340) put(cx + x, baseCy + y, P.ramL);
+
+  // --- Shoulder hump ---
+  disc(put, cx + 12, baseCy - 6, 8, wc.d);
+  disc(put, cx + 12, baseCy - 6, 6, wc.b);
+
+  // --- Head ---
+  const headOff = opts.headDown ? 3 : 0;
+  const hx = cx + 22, hy = baseCy - 4 + headOff;
+
+  // Neck
+  rect(put, cx + 12, hy - 4, 12, 12, col.b);
+  rect(put, cx + 14, hy - 2, 8, 8, col.l);
+
+  // Head shape
+  disc(put, hx, hy, 8, col.out);
+  disc(put, hx, hy, 7, col.d);
+  disc(put, hx, hy, 6, col.b);
+  // Forehead lighter
+  disc(put, hx + 1, hy - 2, 4, col.l);
+  // Muzzle
+  rect(put, hx + 4, hy, 6, 5, col.b);
+  rect(put, hx + 5, hy + 1, 5, 3, col.l);
+  // Nose
+  put(hx + 9, hy + 1, col.out); put(hx + 10, hy + 1, col.out);
+  put(hx + 9, hy + 2, col.out); put(hx + 10, hy + 2, col.out);
+  // Mouth
+  rect(put, hx + 5, hy + 4, 5, 1, col.d);
+  // Ear
+  rect(put, hx - 2, hy - 8, 3, 4, col.d);
+  put(hx - 1, hy - 7, '#8a5a5a');
+
+  // Eye — angry amber
+  put(hx + 2, hy - 2, '#ffcc20'); put(hx + 3, hy - 2, '#ffcc20');
+  put(hx + 2, hy - 1, '#ffaa00'); put(hx + 3, hy - 1, '#ffcc20');
+  put(hx + 3, hy - 2, col.out); // pupil
+  // Brow ridge
+  rect(put, hx + 1, hy - 3, 4, 1, col.d);
+
+  // --- HORNS — massive curling spirals ---
+  // Right horn (curls from forehead outward and down)
+  rect(put, hx - 2, hy - 6, 4, 3, hc.b);
+  rect(put, hx - 5, hy - 8, 4, 3, hc.b);
+  rect(put, hx - 8, hy - 8, 4, 3, hc.m);
+  rect(put, hx - 10, hy - 6, 3, 4, hc.m);
+  rect(put, hx - 11, hy - 3, 3, 4, hc.d);
+  rect(put, hx - 10, hy, 3, 3, hc.d);
+  rect(put, hx - 8, hy + 2, 3, 2, hc.d);
+  // Horn ridges (texture rings)
+  put(hx - 3, hy - 7, hc.d); put(hx - 6, hy - 8, hc.d);
+  put(hx - 9, hy - 6, hc.d); put(hx - 10, hy - 1, hc.d);
+  // Horn highlight
+  put(hx - 4, hy - 7, hc.l); put(hx - 7, hy - 7, hc.l);
+
+  // Left horn (behind head, partial)
+  rect(put, hx + 2, hy - 7, 3, 3, hc.b);
+  rect(put, hx + 4, hy - 9, 3, 3, hc.b);
+  rect(put, hx + 6, hy - 9, 3, 2, hc.m);
+  rect(put, hx + 8, hy - 7, 2, 3, hc.d);
+  put(hx + 5, hy - 8, hc.d);
+
+  // Charge glow — horns shimmer
+  if (opts.chargeGlow) {
+    put(hx - 6, hy - 8, P.sparkL);
+    put(hx - 10, hy - 2, P.sparkL);
+    put(hx - 8, hy + 2, P.spark);
+    put(hx + 6, hy - 9, P.sparkL);
+  }
+
+  // --- Tail (short woolly) ---
+  put(cx - 22, baseCy + 2, wc.d);
+  put(cx - 23, baseCy + 1, wc.d);
+  put(cx - 22, baseCy + 3, wc.d);
+  put(cx - 23, baseCy + 2, wc.b);
+
+  // --- Birth pockets on back ---
+  if (opts.pockets !== undefined) {
+    const stage = opts.pockets;
+    const pockets: Array<[number, number]> = [
+      [-10, -13], [-2, -15], [6, -14]
+    ];
+    for (const [px, py] of pockets) {
+      const ox = cx + px, oy = baseCy + py;
+      if (stage === 0) {
+        disc(put, ox, oy, 3, wc.l);
+        disc(put, ox, oy, 2, wc.b);
+      } else if (stage === 1) {
+        disc(put, ox, oy, 3, wc.d);
+        disc(put, ox, oy, 2, col.out);
+        put(ox, oy, P.redD);
+      } else if (stage === 2) {
+        disc(put, ox, oy, 3, wc.d);
+        disc(put, ox, oy, 2, P.red);
+        put(ox - 1, oy, P.white);
+        put(ox + 1, oy, P.white);
+        put(ox, oy + 1, col.out);
+      } else if (stage === 3) {
+        disc(put, ox, oy - 1, 4, wc.d);
+        disc(put, ox, oy - 1, 3, P.red);
+        disc(put, ox, oy - 2, 2, P.redL);
+        put(ox - 1, oy - 1, P.white);
+        put(ox + 1, oy - 1, P.white);
+        put(ox, oy, col.out);
+      } else if (stage === 4) {
+        disc(put, ox, oy, 3, col.out);
+        disc(put, ox, oy, 2, wc.d);
+      }
+    }
+  }
+}
+
+function drawRam(frame: BossFrame) {
+  return (put: Put) => {
+    switch (frame) {
+      case 'idle0':      return drawRamBody(put, { bob: 0 });
+      case 'idle1':      return drawRamBody(put, { bob: 1 });
+      case 'move0':      return drawRamBody(put, { bob: 0, legStep: 1 });
+      case 'move1':      return drawRamBody(put, { bob: 1, legStep: 0 });
+      case 'move2':      return drawRamBody(put, { bob: 0, legStep: -1 });
+      case 'move3':      return drawRamBody(put, { bob: 1, legStep: 0 });
+      case 'atk0':       return drawRamBody(put, { rearUp: true, headDown: true, bob: -1 });
+      case 'atk1':       return drawRamBody(put, { bob: 2 });
+      case 'chargeWind': return drawRamBody(put, { chargeGlow: true, headDown: true, bob: 0 });
+      case 'hit':        return drawRamBody(put, { flash: true });
+      case 'birth0':     return drawRamBody(put, { pockets: 0 });
+      case 'birth1':     return drawRamBody(put, { pockets: 1 });
+      case 'birth2':     return drawRamBody(put, { pockets: 2 });
+      case 'birth3':     return drawRamBody(put, { pockets: 3 });
+      case 'birth4':     return drawRamBody(put, { pockets: 4 });
+      case 'die0':       return drawRamDie(put, 0);
+      case 'die1':       return drawRamDie(put, 1);
+      case 'die2':       return drawRamDie(put, 2);
+      case 'die3':       return drawRamDie(put, 3);
+      case 'die4':       return drawRamDie(put, 4);
+    }
+  };
+}
+
+function drawRamDie(put: Put, step: number) {
+  const cx = 32, cy = 36;
+  const r = Math.max(0, 24 - step * 5);
+  if (r > 0) {
+    disc(put, cx, cy, r, P.woolD);
+    disc(put, cx, cy, Math.max(0, r - 1), P.wool);
+    disc(put, cx, cy, Math.max(0, r - 3), P.woolL);
+  }
+  // Horn + wool chunks flying out
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 + step * 0.3;
+    const d = step * 6 + 6;
+    const x = Math.round(cx + Math.cos(a) * d);
+    const y = Math.round(cy + Math.sin(a) * d);
+    put(x, y, P.woolD);
+    put(x + 1, y, i % 3 === 0 ? P.horn : P.ramD);
+    if (i % 4 === 0) put(x, y + 1, P.ramBelly);
+  }
+  // Central flash
+  if (step < 2) disc(put, cx, cy, 6, P.sparkL);
+}
+
+// ==================================================================
 //  INFECTED BOSS — The Blighted One (purple/orange/yellow)
 // ==================================================================
 function drawInfectedBossBody(put: Put, opts: BossOpts) {
@@ -2980,122 +4436,125 @@ function drawEntBody(put: Put, opts: EntOpts) {
     lfB:  opts.flash ? P.white : P.leafB,
   };
 
-  // Drop shadow — oval
+  // Drop shadow
   for (let dy = -2; dy <= 2; dy++)
-    for (let dx = -20; dx <= 20; dx++)
-      if ((dx * dx) / 400 + (dy * dy) / 5 <= 1) put(cx + dx, 59 + dy, P.shadow);
+    for (let dx = -22; dx <= 22; dx++)
+      if ((dx * dx) / 484 + (dy * dy) / 5 <= 1) put(cx + dx, 59 + dy, P.shadow);
 
-  // Root-legs (2 thick roots)
+  // Root-legs — thick, gnarled
   const legStep = opts.legStep ?? 0;
   // Left root
-  rect(put, cx - 14, baseCy + 14 + legStep, 6, 8, col.d);
-  rect(put, cx - 13, baseCy + 15 + legStep, 4, 6, col.b);
-  put(cx - 16, baseCy + 21 + legStep, col.d); // root tip
-  put(cx - 15, baseCy + 21 + legStep, col.m);
+  rect(put, cx - 16, baseCy + 12 + legStep, 8, 10, col.d);
+  rect(put, cx - 15, baseCy + 13 + legStep, 6, 8, col.b);
+  rect(put, cx - 14, baseCy + 14 + legStep, 3, 5, col.l);
+  // Root tendrils
+  put(cx - 18, baseCy + 20 + legStep, col.d);
+  put(cx - 17, baseCy + 21 + legStep, col.d);
+  put(cx - 9, baseCy + 21 + legStep, col.d);
+  put(cx - 8, baseCy + 20 + legStep, col.d);
   // Right root
-  rect(put, cx + 8, baseCy + 14 - legStep, 6, 8, col.d);
-  rect(put, cx + 9, baseCy + 15 - legStep, 4, 6, col.b);
-  put(cx + 15, baseCy + 21 - legStep, col.d);
-  put(cx + 14, baseCy + 21 - legStep, col.m);
+  rect(put, cx + 8, baseCy + 12 - legStep, 8, 10, col.d);
+  rect(put, cx + 9, baseCy + 13 - legStep, 6, 8, col.b);
+  rect(put, cx + 11, baseCy + 14 - legStep, 3, 5, col.l);
+  put(cx + 17, baseCy + 20 - legStep, col.d);
+  put(cx + 16, baseCy + 21 - legStep, col.d);
+  put(cx + 7, baseCy + 21 - legStep, col.d);
 
-  // Main trunk body — tall rectangular with rounded top
-  // Outer bark
-  rect(put, cx - 12, baseCy - 14, 24, 30, col.out);
-  rect(put, cx - 11, baseCy - 13, 22, 28, col.d);
-  rect(put, cx - 10, baseCy - 12, 20, 26, col.b);
-  // Lighter left highlight
-  rect(put, cx - 10, baseCy - 12, 8, 24, col.m);
-  rect(put, cx - 9, baseCy - 10, 4, 18, col.l);
-
-  // Bark texture lines (horizontal grooves)
-  for (let y = -8; y <= 12; y += 4) {
-    for (let x = -8; x <= 8; x++) {
+  // Main trunk — wider, richly textured bark
+  rect(put, cx - 12, baseCy - 16, 24, 32, col.out);
+  rect(put, cx - 11, baseCy - 15, 22, 30, col.d);
+  rect(put, cx - 10, baseCy - 14, 20, 28, col.b);
+  // Left bark highlight
+  rect(put, cx - 10, baseCy - 14, 7, 26, col.m);
+  rect(put, cx - 9, baseCy - 12, 3, 20, col.l);
+  // Bark grooves — horizontal
+  for (let y = -10; y <= 12; y += 3)
+    for (let x = -8; x <= 8; x++)
       put(cx + x, baseCy + y, col.d);
-    }
+  // Deep vertical cracks
+  for (let y = -12; y <= 12; y++) {
+    if (y % 2 === 0) { put(cx - 5, baseCy + y, col.d); put(cx + 6, baseCy + y, col.d); }
+    if (y % 3 === 0) put(cx + 1, baseCy + y, col.d);
   }
-  // Vertical bark cracks
-  for (let y = -10; y <= 10; y++) {
-    if (y % 2 === 0) {
-      put(cx - 4, baseCy + y, col.d);
-      put(cx + 5, baseCy + y, col.d);
-    }
-  }
+  // Knotholes
+  disc(put, cx - 4, baseCy + 6, 2, col.d);
+  put(cx - 4, baseCy + 6, col.out);
+  disc(put, cx + 7, baseCy + 2, 1, col.d);
 
   // Branch arms
-  const lArmOff = Math.floor(armSwing * 3);
-  const rArmOff = Math.floor(-armSwing * 3);
-  // Left arm
-  rect(put, cx - 20, baseCy - 6 + lArmOff, 9, 5, col.out);
-  rect(put, cx - 19, baseCy - 5 + lArmOff, 7, 3, col.b);
-  rect(put, cx - 18, baseCy - 5 + lArmOff, 3, 3, col.l);
-  // Left arm twigs
-  put(cx - 22, baseCy - 8 + lArmOff, col.lfM);
-  put(cx - 21, baseCy - 9 + lArmOff, col.lf);
-  put(cx - 23, baseCy - 7 + lArmOff, col.lfD);
-  put(cx - 20, baseCy - 8 + lArmOff, col.lfL);
-  // Right arm
-  rect(put, cx + 11, baseCy - 6 + rArmOff, 9, 5, col.out);
-  rect(put, cx + 12, baseCy - 5 + rArmOff, 7, 3, col.b);
-  rect(put, cx + 16, baseCy - 5 + rArmOff, 3, 3, col.l);
-  // Right arm twigs
-  put(cx + 21, baseCy - 8 + rArmOff, col.lfM);
-  put(cx + 22, baseCy - 9 + rArmOff, col.lf);
-  put(cx + 23, baseCy - 7 + rArmOff, col.lfD);
-  put(cx + 20, baseCy - 8 + rArmOff, col.lfL);
+  const lOff = Math.floor(armSwing * 3);
+  const rOff = Math.floor(-armSwing * 3);
+  // Left branch
+  rect(put, cx - 22, baseCy - 8 + lOff, 11, 6, col.out);
+  rect(put, cx - 21, baseCy - 7 + lOff, 9, 4, col.b);
+  rect(put, cx - 20, baseCy - 7 + lOff, 4, 3, col.l);
+  // Twigs + leaves on left arm
+  put(cx - 24, baseCy - 10 + lOff, col.lfM); put(cx - 23, baseCy - 11 + lOff, col.lf);
+  put(cx - 25, baseCy - 9 + lOff, col.lfL); put(cx - 22, baseCy - 10 + lOff, col.lfB);
+  put(cx - 24, baseCy - 8 + lOff, col.lfD);
+  // Right branch
+  rect(put, cx + 11, baseCy - 8 + rOff, 11, 6, col.out);
+  rect(put, cx + 12, baseCy - 7 + rOff, 9, 4, col.b);
+  rect(put, cx + 17, baseCy - 7 + rOff, 4, 3, col.l);
+  put(cx + 23, baseCy - 10 + rOff, col.lfM); put(cx + 24, baseCy - 11 + rOff, col.lf);
+  put(cx + 25, baseCy - 9 + rOff, col.lfL); put(cx + 22, baseCy - 10 + rOff, col.lfB);
 
-  // Leafy crown (canopy on top of the trunk)
-  // Large circle of leaves on top
-  const crownY = baseCy - 20;
-  disc(put, cx, crownY, 16, col.out);
-  disc(put, cx, crownY, 15, col.lfD);
-  disc(put, cx, crownY, 14, col.lf);
-  disc(put, cx, crownY, 12, col.lfM);
-  // Highlight on upper-left
-  disc(put, cx - 3, crownY - 3, 8, col.lfL);
-  disc(put, cx - 4, crownY - 4, 5, col.lfB);
-  // Dark underside
-  for (let x = -12; x <= 12; x++)
-    for (let y = 2; y <= 6; y++)
-      if (x * x + y * y <= 144) put(cx + x, crownY + y, col.lfD);
-
-  // Leaf edge detail — scattered bright/dark pixels around crown edge
-  for (let a = 0; a < 20; a++) {
-    const angle = (a / 20) * Math.PI * 2;
-    const r = 14 + (a % 3);
-    const lx = Math.round(cx + Math.cos(angle) * r);
-    const ly = Math.round(crownY + Math.sin(angle) * r);
-    put(lx, ly, a % 2 === 0 ? col.lfM : col.lfD);
+  // Hanging moss / vines
+  const moss = opts.flash ? P.white : '#2a5a1a';
+  const mossL = opts.flash ? P.white : '#3a7a2a';
+  for (let i = 0; i < 3; i++) {
+    const vx = cx - 20 + i * 4;
+    const vLen = 3 + (i % 2) * 2;
+    for (let vy = 0; vy < vLen; vy++)
+      put(vx, baseCy - 2 + lOff + vy, vy % 2 === 0 ? moss : mossL);
+  }
+  for (let i = 0; i < 3; i++) {
+    const vx = cx + 13 + i * 4;
+    const vLen = 2 + (i % 2) * 3;
+    for (let vy = 0; vy < vLen; vy++)
+      put(vx, baseCy - 2 + rOff + vy, vy % 2 === 0 ? moss : mossL);
   }
 
-  // Eyes — two glowing green eyes in the trunk face area
+  // CANOPY — dense, layered
+  const crownY = baseCy - 22;
+  disc(put, cx, crownY, 18, col.out);
+  disc(put, cx, crownY, 17, col.lfD);
+  disc(put, cx, crownY, 15, col.lf);
+  disc(put, cx, crownY, 13, col.lfM);
+  // Highlight blob upper-left
+  disc(put, cx - 4, crownY - 4, 8, col.lfL);
+  disc(put, cx - 5, crownY - 5, 5, col.lfB);
+  // Dark undercanopy
+  for (let x = -13; x <= 13; x++)
+    for (let y = 4; y <= 8; y++)
+      if (x * x + y * y <= 169) put(cx + x, crownY + y, col.lfD);
+  // Leaf edge clusters
+  for (let a = 0; a < 24; a++) {
+    const angle = (a / 24) * Math.PI * 2;
+    const r = 15 + (a % 3);
+    const lx = Math.round(cx + Math.cos(angle) * r);
+    const ly = Math.round(crownY + Math.sin(angle) * r);
+    put(lx, ly, a % 3 === 0 ? col.lfB : a % 3 === 1 ? col.lfM : col.lfD);
+    if (a % 4 === 0) put(lx, ly + 1, col.lfD);
+  }
+
+  // Eyes — glowing green, set in bark hollows
   const eyeY = baseCy - 4;
   const glow = opts.chargeGlow ? P.sparkL : P.entEye;
   const glowD = opts.chargeGlow ? P.spark : P.entEyeD;
-  // Left eye
-  put(cx - 6, eyeY - 1, col.out);
-  put(cx - 5, eyeY - 1, col.out);
-  put(cx - 4, eyeY - 1, col.out);
-  put(cx - 6, eyeY, col.out);
-  put(cx - 5, eyeY, glow);
-  put(cx - 4, eyeY, opts.chargeGlow ? P.white : glow);
-  put(cx - 6, eyeY + 1, col.out);
-  put(cx - 5, eyeY + 1, glowD);
-  put(cx - 4, eyeY + 1, col.out);
-  // Right eye
-  put(cx + 4, eyeY - 1, col.out);
-  put(cx + 5, eyeY - 1, col.out);
-  put(cx + 6, eyeY - 1, col.out);
-  put(cx + 4, eyeY, opts.chargeGlow ? P.white : glow);
-  put(cx + 5, eyeY, glow);
-  put(cx + 6, eyeY, col.out);
-  put(cx + 4, eyeY + 1, col.out);
-  put(cx + 5, eyeY + 1, glowD);
-  put(cx + 6, eyeY + 1, col.out);
+  disc(put, cx - 5, eyeY, 2, col.out);
+  put(cx - 5, eyeY, glow); put(cx - 4, eyeY, glow);
+  put(cx - 5, eyeY - 1, opts.chargeGlow ? P.white : '#a0ffa0');
+  disc(put, cx + 5, eyeY, 2, col.out);
+  put(cx + 5, eyeY, glow); put(cx + 6, eyeY, glow);
+  put(cx + 5, eyeY - 1, opts.chargeGlow ? P.white : '#a0ffa0');
 
-  // Mouth — dark hollow in the bark
-  rect(put, cx - 3, baseCy + 2, 6, 2, col.out);
-  put(cx - 2, baseCy + 2, col.d);
-  put(cx + 2, baseCy + 2, col.d);
+  // Mouth — dark hollow
+  rect(put, cx - 3, baseCy + 1, 6, 3, col.out);
+  rect(put, cx - 2, baseCy + 1, 4, 2, col.d);
+  // Mossy beard below mouth
+  put(cx - 2, baseCy + 4, moss); put(cx, baseCy + 5, mossL);
+  put(cx + 2, baseCy + 4, moss);
 
   // Birth pockets — mossy bulges on trunk
   if (opts.pockets !== undefined) {
@@ -3321,6 +4780,7 @@ export function createGroundChunk(scene: Phaser.Scene, chunkX: number, chunkY: n
       const worldTY = startTY + ty;
       const draw = biome === 'forest' ? drawGroundForest(worldTX, worldTY)
                  : biome === 'infected' ? drawGroundInfected(worldTX, worldTY)
+                 : biome === 'river' ? drawGroundRiver(worldTX, worldTY)
                  : drawGroundWorld(worldTX, worldTY);
       const ox = tx * tileSize;
       const oy = ty * tileSize;
@@ -3332,7 +4792,12 @@ export function createGroundChunk(scene: Phaser.Scene, chunkX: number, chunkY: n
         const [r, g, b] = hexToRgb(col);
         buf[idx] = r; buf[idx + 1] = g; buf[idx + 2] = b; buf[idx + 3] = 255;
       };
-      draw(put);
+      const putRGB: PutRGB = (x, y, r, g, b) => {
+        if (x < 0 || y < 0 || x >= tileSize || y >= tileSize) return;
+        const idx = ((oy + y) * pxSize + (ox + x)) * 4;
+        buf[idx] = r; buf[idx + 1] = g; buf[idx + 2] = b; buf[idx + 3] = 255;
+      };
+      draw(put, putRGB);
     }
   }
   ctx.putImageData(imageData, 0, 0);
@@ -3368,12 +4833,23 @@ export function generateAllArt(scene: Phaser.Scene) {
   const eFrames: EFrame[] = ['move0','move1','move2','move3','atk0','atk1','hit','die0','die1','die2','die3'];
   for (const f of eFrames) add(scene, `eb_${f}`, makeCanvas(32, drawEnemyBasic(f)));
   for (const f of eFrames) add(scene, `eh_${f}`, makeCanvas(32, drawEnemyHeavy(f)));
+  for (const f of eFrames) add(scene, `esnk_${f}`, makeCanvas(32, drawEnemySnake(f)));
+  for (const f of eFrames) add(scene, `erat_${f}`, makeCanvas(32, drawEnemyRat(f)));
+  for (const f of eFrames) add(scene, `eder_${f}`, makeCanvas(32, drawEnemyDeer(f)));
   for (const f of eFrames) add(scene, `eib_${f}`, makeCanvas(32, drawEnemyInfectedBasic(f)));
   for (const f of eFrames) add(scene, `eih_${f}`, makeCanvas(32, drawEnemyInfectedHeavy(f)));
   for (const f of eFrames) add(scene, `ew_${f}`, makeCanvas(32, drawEnemyWolf(f)));
   // Bear: extract frames from sprite sheet, strip grey bg, register as textures
   extractBearFrames(scene);
   for (const f of eFrames) add(scene, `es_${f}`, makeCanvas(32, drawEnemySpider(f)));
+  // River flying enemies
+  for (const f of eFrames) add(scene, `ecr_${f}`, makeCanvas(32, drawEnemyCrow(f)));
+  for (const f of eFrames) add(scene, `ebt_${f}`, makeCanvas(32, drawEnemyBat(f)));
+  for (const f of eFrames) add(scene, `edf_${f}`, makeCanvas(32, drawEnemyDragonfly(f)));
+  for (const f of eFrames) add(scene, `emq_${f}`, makeCanvas(32, drawEnemyMosquito(f)));
+  // Mosquito dart projectile
+  add(scene, 'mdart_0', makeCanvas(16, drawMosquitoDart('dart0')));
+  add(scene, 'mdart_1', makeCanvas(16, drawMosquitoDart('dart1')));
 
   // Shared helper to copy a loaded PNG texture to a new key
   const copyTex = (src: string, dst: string) => {
@@ -3492,6 +4968,11 @@ export function generateAllArt(scene: Phaser.Scene) {
   add(scene, 'cball_1', makeCanvas(32, drawCannonball(1)));
   add(scene, 'cball_shadow', makeCanvas(32, drawCannonballShadow()));
 
+  // Boulder (boss projectile)
+  add(scene, 'boulder_0', makeCanvas(32, drawBoulder(0)));
+  add(scene, 'boulder_1', makeCanvas(32, drawBoulder(1)));
+  add(scene, 'boulder_shadow', makeCanvas(32, drawBoulderShadow()));
+
   // Coin (bronze / silver / gold tiers)
   for (let i = 0; i < 6; i++) add(scene, `coin_${i}`, makeCanvas(32, drawCoin(i as any, 'gold')));
   for (const tier of ['bronze','silver','gold'] as const) {
@@ -3502,6 +4983,7 @@ export function generateAllArt(scene: Phaser.Scene) {
   for (let i = 0; i < 3; i++) add(scene, `fx_hit_${i}`,   makeCanvas(32, drawHitSpark(i as any)));
   for (let i = 0; i < 5; i++) add(scene, `fx_death_${i}`, makeCanvas(32, drawDeathBurst(i as any)));
   for (let i = 0; i < 3; i++) add(scene, `fx_pop_${i}`,   makeCanvas(32, drawCoinPop(i as any)));
+  for (let i = 0; i < 5; i++) add(scene, `fx_boulder_${i}`, makeCanvas(32, drawBoulderImpact(i as any)));
 
   // Ground tile variations
   // Ground tiles are generated per-tile in GameScene.generateChunksAround()
@@ -3586,10 +5068,14 @@ export function generateAllArt(scene: Phaser.Scene) {
     'die0','die1','die2','die3','die4'
   ];
   for (const f of bossFrames) add(scene, `boss_${f}`, makeCanvas(64, drawBoss(f)));
+  for (const f of bossFrames) add(scene, `ram_${f}`, makeCanvas(64, drawRam(f)));
   for (const f of bossFrames) add(scene, `iboss_${f}`, makeCanvas(64, drawInfectedBoss(f)));
 
   // Forest boss (Ent) textures
   for (const f of forestBossFrames) add(scene, `fboss_${f}`, makeCanvas(64, drawForestBoss(f)));
+
+  // River boss (Fog Phantom) textures
+  for (const f of bossFrames) add(scene, `rboss_${f}`, makeCanvas(64, drawFogPhantom(f)));
 }
 
 function framesFromKeys(keys: string[]): Phaser.Types.Animations.AnimationFrame[] {
@@ -3619,6 +5105,21 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('eh-atk',  ['eh_atk0','eh_atk1'], 6, -1);
   mk('eh-hit',  ['eh_hit'], 8, 0);
   mk('eh-die',  ['eh_die0','eh_die1','eh_die2','eh_die3'], 8, 0);
+
+  mk('esnk-move', ['esnk_move0','esnk_move1','esnk_move2','esnk_move3'], 8, -1);
+  mk('esnk-atk',  ['esnk_atk0','esnk_atk1'], 8, -1);
+  mk('esnk-hit',  ['esnk_hit'], 10, 0);
+  mk('esnk-die',  ['esnk_die0','esnk_die1','esnk_die2','esnk_die3'], 10, 0);
+
+  mk('erat-move', ['erat_move0','erat_move1','erat_move2','erat_move3'], 10, -1);
+  mk('erat-atk',  ['erat_atk0','erat_atk1'], 10, -1);
+  mk('erat-hit',  ['erat_hit'], 10, 0);
+  mk('erat-die',  ['erat_die0','erat_die1','erat_die2','erat_die3'], 10, 0);
+
+  mk('eder-move', ['eder_move0','eder_move1','eder_move2','eder_move3'], 6, -1);
+  mk('eder-atk',  ['eder_atk0','eder_atk1'], 6, -1);
+  mk('eder-hit',  ['eder_hit'], 8, 0);
+  mk('eder-die',  ['eder_die0','eder_die1','eder_die2','eder_die3'], 8, 0);
 
   mk('eib-move', ['eib_move0','eib_move1','eib_move2','eib_move3'], 8, -1);
   mk('eib-atk',  ['eib_atk0','eib_atk1'], 8, -1);
@@ -3650,6 +5151,30 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('es-hit',  ['es_hit'], 10, 0);
   mk('es-die',  ['es_die0','es_die1','es_die2','es_die3'], 10, 0);
 
+  // River flying enemies
+  mk('ecr-move', ['ecr_move0','ecr_move1','ecr_move2','ecr_move3'], 8, -1);
+  mk('ecr-atk',  ['ecr_atk0','ecr_atk1'], 8, -1);
+  mk('ecr-hit',  ['ecr_hit'], 10, 0);
+  mk('ecr-die',  ['ecr_die0','ecr_die1','ecr_die2','ecr_die3'], 10, 0);
+
+  mk('ebt-move', ['ebt_move0','ebt_move1','ebt_move2','ebt_move3'], 6, -1);
+  mk('ebt-atk',  ['ebt_atk0','ebt_atk1'], 6, -1);
+  mk('ebt-hit',  ['ebt_hit'], 8, 0);
+  mk('ebt-die',  ['ebt_die0','ebt_die1','ebt_die2','ebt_die3'], 8, 0);
+
+  mk('edf-move', ['edf_move0','edf_move1','edf_move2','edf_move3'], 12, -1);
+  mk('edf-atk',  ['edf_atk0','edf_atk1'], 12, -1);
+  mk('edf-hit',  ['edf_hit'], 10, 0);
+  mk('edf-die',  ['edf_die0','edf_die1','edf_die2','edf_die3'], 10, 0);
+
+  mk('emq-move', ['emq_move0','emq_move1','emq_move2','emq_move3'], 10, -1);
+  mk('emq-atk',  ['emq_atk0','emq_atk1'], 10, -1);
+  mk('emq-hit',  ['emq_hit'], 10, 0);
+  mk('emq-die',  ['emq_die0','emq_die1','emq_die2','emq_die3'], 10, 0);
+
+  // Mosquito dart
+  mk('mdart-spin', ['mdart_0','mdart_1'], 8, -1);
+
   mk('tower-top-idle',  ['t_top_0'], 1, 0);
   mk('tower-top-shoot', ['t_top_1','t_top_0'], 14, 0);
   mk('cannon-top-idle',  ['c_top_0'], 1, 0);
@@ -3657,6 +5182,7 @@ export function registerAnimations(scene: Phaser.Scene) {
 
   mk('arrow-spin', ['arrow_0','arrow_1'], 20, -1);
   mk('cball-spin', ['cball_0','cball_1'], 8, -1);
+  mk('boulder-spin', ['boulder_0','boulder_1'], 6, -1);
 
   mk('coin-spin',  ['coin_0','coin_1','coin_2','coin_3','coin_4','coin_5'], 10, -1);
   for (const tier of ['bronze','silver','gold'] as const) {
@@ -3668,6 +5194,7 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('fx-hit',    ['fx_hit_0','fx_hit_1','fx_hit_2'], 22, 0);
   mk('fx-death',  ['fx_death_0','fx_death_1','fx_death_2','fx_death_3','fx_death_4'], 18, 0);
   mk('fx-pop',    ['fx_pop_0','fx_pop_1','fx_pop_2'], 20, 0);
+  mk('fx-boulder', ['fx_boulder_0','fx_boulder_1','fx_boulder_2','fx_boulder_3','fx_boulder_4'], 14, 0);
 
   // Boss
   mk('boss-idle',       ['boss_idle0','boss_idle1'], 2, -1);
@@ -3677,6 +5204,15 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('boss-hit',        ['boss_hit'], 10, 0);
   mk('boss-birth',      ['boss_birth0','boss_birth1','boss_birth2','boss_birth3','boss_birth4'], 4, 0);
   mk('boss-die',        ['boss_die0','boss_die1','boss_die2','boss_die3','boss_die4'], 6, 0);
+
+  // Meadow boss (Ancient Ram) animations
+  mk('ram-idle',       ['ram_idle0','ram_idle1'], 2, -1);
+  mk('ram-move',       ['ram_move0','ram_move1','ram_move2','ram_move3'], 5, -1);
+  mk('ram-atk',        ['ram_atk0','ram_atk1'], 4, 0);
+  mk('ram-chargewind', ['ram_chargeWind','ram_idle0'], 6, -1);
+  mk('ram-hit',        ['ram_hit'], 10, 0);
+  mk('ram-birth',      ['ram_birth0','ram_birth1','ram_birth2','ram_birth3','ram_birth4'], 4, 0);
+  mk('ram-die',        ['ram_die0','ram_die1','ram_die2','ram_die3','ram_die4'], 6, 0);
 
   // Infected boss animations
   mk('iboss-idle',       ['iboss_idle0','iboss_idle1'], 2, -1);
@@ -3695,4 +5231,40 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('fboss-hit',        ['fboss_hit'], 10, 0);
   mk('fboss-birth',      ['fboss_birth0','fboss_birth1','fboss_birth2','fboss_birth3','fboss_birth4'], 4, 0);
   mk('fboss-die',        ['fboss_die0','fboss_die1','fboss_die2','fboss_die3','fboss_die4'], 6, 0);
+
+  // River boss (Fog Phantom)
+  mk('rboss-idle',       ['rboss_idle0','rboss_idle1'], 2, -1);
+  mk('rboss-move',       ['rboss_move0','rboss_move1','rboss_move2','rboss_move3'], 5, -1);
+  mk('rboss-atk',        ['rboss_atk0','rboss_atk1'], 4, 0);
+  mk('rboss-chargewind', ['rboss_chargeWind','rboss_idle0'], 6, -1);
+  mk('rboss-hit',        ['rboss_hit'], 10, 0);
+  mk('rboss-birth',      ['rboss_birth0','rboss_birth1','rboss_birth2','rboss_birth3','rboss_birth4'], 4, 0);
+  mk('rboss-die',        ['rboss_die0','rboss_die1','rboss_die2','rboss_die3','rboss_die4'], 6, 0);
+
+  // Pre-render river squiggle textures (small clusters of dashes)
+  for (let vi = 0; vi < 5; vi++) {
+    const sz = 20;
+    const c = document.createElement('canvas');
+    c.width = sz; c.height = sz;
+    const x = c.getContext('2d')!;
+    x.strokeStyle = '#ffffff';
+    x.lineWidth = 1;
+    x.lineCap = 'round';
+    let h = ((vi * 73856093 + 12345) >>> 0) % 2147483647;
+    const rng = () => { h = (h * 16807) % 2147483647; return h / 2147483647; };
+    const count = 3 + (vi % 3);
+    for (let j = 0; j < count; j++) {
+      const ox = sz / 2 + (rng() - 0.5) * 14;
+      const oy = sz / 2 + (rng() - 0.5) * 10;
+      const ang = rng() * Math.PI;
+      const halfLen = 1.5 + rng() * 3;
+      x.globalAlpha = 0.5 + rng() * 0.3;
+      x.beginPath();
+      x.moveTo(ox - Math.cos(ang) * halfLen, oy - Math.sin(ang) * halfLen);
+      x.lineTo(ox + Math.cos(ang) * halfLen, oy + Math.sin(ang) * halfLen);
+      x.stroke();
+    }
+    if (scene.textures.exists(`river_squig_${vi}`)) scene.textures.remove(`river_squig_${vi}`);
+    scene.textures.addCanvas(`river_squig_${vi}`, c);
+  }
 }

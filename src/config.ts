@@ -28,10 +28,10 @@ export const CFG = {
         ]
       },
       cannon: {
-        cost: 100,
+        cost: 60,
         levels: [
-          { hp: 180, fireRate: 1400, range: 220, damage: 15, projectileSpeed: 200, splashRadius: 48, upgradeCost: 110 },
-          { hp: 250, fireRate: 1100, range: 240, damage: 22, projectileSpeed: 280, splashRadius: 58, upgradeCost: 200 },
+          { hp: 180, fireRate: 1400, range: 220, damage: 15, projectileSpeed: 200, splashRadius: 48, upgradeCost: 60 },
+          { hp: 250, fireRate: 1100, range: 240, damage: 22, projectileSpeed: 280, splashRadius: 58, upgradeCost: 110 },
           { hp: 340, fireRate: 850, range: 260, damage: 32, projectileSpeed: 360, splashRadius: 72, upgradeCost: 0 }
         ]
       }
@@ -49,10 +49,19 @@ export const CFG = {
     basic:  { hp: 20, speed: 60,  dmg: 8,  coin: 1, color: 0xd9412b },
     heavy:  { hp: 30, speed: 40,  dmg: 10, coin: 2, color: 0x7a1d14 },
     runner: { hp: 12, speed: 140, dmg: 5,  coin: 1, color: 0x6af078 },
+    // Meadow enemies (new)
+    snake:  { hp: 18, speed: 55,  dmg: 7,  coin: 1, color: 0x4a7a30 },
+    rat:    { hp: 10, speed: 130, dmg: 4,  coin: 1, color: 0x7a6a5a },
+    deer:   { hp: 40, speed: 35,  dmg: 12, coin: 2, color: 0x8a6a48 },
     // Forest enemies
     wolf:   { hp: 14, speed: 120, dmg: 6,  coin: 1, color: 0x8a8a8a },
     bear:   { hp: 50, speed: 32,  dmg: 14, coin: 3, color: 0x5a3a1a },
-    spider: { hp: 18, speed: 55,  dmg: 7,  coin: 1, color: 0x2a2a2a }
+    spider: { hp: 18, speed: 55,  dmg: 7,  coin: 1, color: 0x2a2a2a },
+    // River flying enemies
+    crow:      { hp: 18, speed: 58,  dmg: 7,  coin: 1, color: 0x232330 },
+    bat:       { hp: 35, speed: 36,  dmg: 11, coin: 2, color: 0x3c2832 },
+    dragonfly: { hp: 10, speed: 135, dmg: 4,  coin: 1, color: 0x28a0b4 },
+    mosquito:  { hp: 14, speed: 50,  dmg: 3,  coin: 1, color: 0x504638 }
   },
 
   coin: { magnetRange: 90, magnetSpeed: 420 },
@@ -87,6 +96,17 @@ export const CFG = {
     runnerPackSize: 5,
     runnerPackCooldownMin: 6000,
     runnerPackCooldownMax: 11000,
+  },
+
+  river: {
+    mosquitoRange: 180,       // px — distance at which mosquito stops and shoots
+    mosquitoFireRate: 2200,   // ms between shots
+    mosquitoDartSpeed: 100,   // slow-moving projectile
+    mosquitoDartDmg: 5,
+    mosquitoDartLifetime: 3000,
+    dragonflyPackSize: 4,
+    dragonflyPackCooldownMin: 7000,
+    dragonflyPackCooldownMax: 12000,
   },
 
   winKills: 200, // kills needed to trigger the boss; defeating the boss wins

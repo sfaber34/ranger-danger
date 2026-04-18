@@ -133,6 +133,34 @@ export class LevelSelectScene extends Phaser.Scene {
         g.fillCircle(cx - 2, cy - 4, 3);
         g.fillCircle(cx + 4, cy - 5, 3);
         break;
+      case 'river':
+        // Two wavy river lines
+        g.lineStyle(3, 0x3a7ac8, 1);
+        g.lineBetween(cx - 8, cy - 4, cx - 3, cy - 7);
+        g.lineBetween(cx - 3, cy - 7, cx + 3, cy - 1);
+        g.lineBetween(cx + 3, cy - 1, cx + 8, cy - 4);
+        g.lineStyle(3, 0x4a8ad8, 1);
+        g.lineBetween(cx - 8, cy + 3, cx - 3, cy);
+        g.lineBetween(cx - 3, cy, cx + 3, cy + 6);
+        g.lineBetween(cx + 3, cy + 6, cx + 8, cy + 3);
+        // Highlight
+        g.lineStyle(1, 0x8ac0ff, 0.6);
+        g.lineBetween(cx - 6, cy - 5, cx - 2, cy - 8);
+        g.lineBetween(cx - 2, cy - 8, cx + 2, cy - 2);
+        g.lineBetween(cx + 2, cy - 2, cx + 6, cy - 5);
+        break;
+      case 'infected':
+        // Corrupted trees — purple canopies
+        g.fillStyle(0x2a1a2a, 1);
+        g.fillRect(cx - 4, cy, 3, 7);
+        g.fillRect(cx + 2, cy - 1, 3, 7);
+        g.fillStyle(0x6a2a6a, 1);
+        g.fillCircle(cx - 3, cy - 3, 5);
+        g.fillCircle(cx + 3, cy - 4, 6);
+        g.fillStyle(0x9a40aa, 1);
+        g.fillCircle(cx - 2, cy - 4, 3);
+        g.fillCircle(cx + 4, cy - 5, 3);
+        break;
       case 'desert':
         // Pyramid
         g.fillStyle(0xd4a84a, 1);
@@ -206,7 +234,7 @@ export class LevelSelectScene extends Phaser.Scene {
       // Biome icon or lock icon in upper part of circle
       const iconG = this.add.graphics().setDepth(4);
       if (unlocked) {
-        this.drawBiomeIcon(iconG, cx, cy - 3, level.biome);
+        this.drawBiomeIcon(iconG, cx, cy - 3, level.name === 'River' ? 'river' : level.biome);
       } else {
         // Lock
         iconG.fillStyle(0x666666, 0.8);
@@ -222,7 +250,7 @@ export class LevelSelectScene extends Phaser.Scene {
         fontFamily: 'monospace', fontSize: '7px',
         color: unlocked ? '#e8dcc8' : '#4a4030',
         stroke: '#000', strokeThickness: 1
-      }).setOrigin(0.5).setDepth(4);
+        }).setOrigin(0.5).setDepth(4);
 
       // Medal dots — below circle
       const dotY = cy + R + 8;
