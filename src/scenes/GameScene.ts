@@ -1906,8 +1906,8 @@ export class GameScene extends Phaser.Scene {
     const distToPlayer = Math.hypot(px - b.x, py - b.y);
 
     // ability triggers (in priority order)
-    // Birthing happens passively while chasing — no pause
-    if (time >= b.nextBirth) {
+    // Birthing happens passively while chasing — not during charge or slam
+    if (time >= b.nextBirth && b.state === 'chase') {
       this.bossBirthSpawn(b);
       b.nextBirth = time + 3800;
     }

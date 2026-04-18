@@ -99,7 +99,7 @@ export const CFG = {
   },
 
   river: {
-    mosquitoRange: 180,       // px — distance at which mosquito stops and shoots
+    mosquitoRange: 260,       // px — distance at which mosquito stops and shoots
     mosquitoFireRate: 2200,   // ms between shots
     mosquitoDartSpeed: 100,   // slow-moving projectile
     mosquitoDartDmg: 5,
