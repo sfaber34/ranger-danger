@@ -101,7 +101,7 @@ export const CFG = {
   river: {
     mosquitoRange: 260,       // px — distance at which mosquito stops and shoots
     mosquitoFireRate: 2200,   // ms between shots
-    mosquitoDartSpeed: 100,   // slow-moving projectile
+    mosquitoDartSpeed: 180,   // slow-moving projectile
     mosquitoDartDmg: 5,
     mosquitoDartLifetime: 3000,
     dragonflyPackSize: 4,

@@ -2538,6 +2538,7 @@ export class GameScene extends Phaser.Scene {
 
   enemyHitsPlayer(e: Enemy) {
     if (!e.active || e.dying) return;
+    if (e.kind === 'mosquito') return; // mosquitoes only damage via darts
     if (this.vTime > e.attackCd) {
       e.attackCd = this.vTime + 700;
       this.player.hurt(e.dmg, this);
@@ -2556,9 +2557,9 @@ export class GameScene extends Phaser.Scene {
 
   // ---------- ENEMY DARTS (mosquito ranged attack) ----------
   spawnMosquitoDart(x: number, y: number, tx: number, ty: number) {
-    const dart = this.physics.add.sprite(x, y, 'mdart_0').setScale(0.5).setDepth(9);
+    const dart = this.physics.add.sprite(x, y, 'mdart_0').setScale(0.7).setDepth(9);
     dart.play('mdart-spin');
-    dart.setSize(10, 10).setOffset(3, 3);
+    dart.setSize(12, 12).setOffset(2, 2);
     const angle = Math.atan2(ty - y, tx - x);
     const spd = CFG.river.mosquitoDartSpeed;
     dart.setVelocity(Math.cos(angle) * spd, Math.sin(angle) * spd);
