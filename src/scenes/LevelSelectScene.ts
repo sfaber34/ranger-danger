@@ -42,6 +42,9 @@ export class LevelSelectScene extends Phaser.Scene {
     this.scale.setGameSize(nativeW, nativeH);
     this.scale.refresh();
 
+    // Store sf in registry so GameScene and UIScene can access it
+    this.game.registry.set('sf', this.sf);
+
     this.medalStore = loadMedals();
     this.medalCount = totalMedals(this.medalStore);
     this.selectedLevel = null;
@@ -608,9 +611,7 @@ export class LevelSelectScene extends Phaser.Scene {
       overlay.classList.remove('hidden');
     }
 
-    // Reset game size to base resolution for gameplay
-    this.scale.setGameSize(CFG.width, CFG.height);
-    this.scale.refresh();
+    // Keep native resolution — GameScene zooms its camera, UIScene scales its elements
 
     const levelId = this.selectedLevel.id;
     const difficulty = this.selectedDiff;

@@ -51,16 +51,16 @@ const FALLBACKS: Partial<Record<SfxKey, string>> = {
   arrowShoot:  '7BMHBGKeaSRzutqux35L2nmieBVFHEcyT4QbJ5wDG18HBTGWqmQjdmTadfaCUnpdTSdp946i84nRdcFDxXiHn7RgQ7aoRe8GbZzz2JmWDYufW4eQBQb3Gv8u1',
   cannonShoot: '12eZRSDW9BMogwNAtzYnLSRoy3YwZx6LxmvDVzyRESygjypkNZbnJsttfvpVtet95EpujKgmAYxtqRHddt5TDH7n6g4wjx2qmx8Szk3YFba8fmPKJRa41VF1yZ',
   hit:         '12eZRSDGK2a8nkE7ocbPN2Zfn34PjaBUS2KFypdmt2hBhWtcRfVMabfr2MCGEaj2op9XeKw5NELanteLuMhsgRQVeCwJJsNdEiAj55sMwroNS8kJ8rpm8AQgRD',
-  coin:        '12eZRSDGK26xo5kBkd8Vub98beAMXRQtxoauUbjGCQn4NdFX7wByAhBptA1YSe5eo9gMtnBZonoMd9xgP1Jak9V5DpvZGbhDyvwPyFnCGjNZSus9ZhRDgsjqYj',
+  // coin uses a custom programmatic tone (see loadCoin below)
   towerPlace:  '7BMHBGG45s3FvKh6FzS7kZfiABdTAz9MnSYVcFhuDwCxHSywhwSyjDxrPJrV3FA74MLDseKvrHTGsAcCa3vBYDuASRXVABXboaWqYT8joRuAUoYGFeeLGtrt7',
   wallPlace:   '12eZRSDGK2a8ncanb4HHKxEkayTgXz1bEGVRiT35nZXFBk38k5xYdmjADDLNFnMEJPG2gYFCMuHcepZzUbEKmhs6E6CM6oHRi7isDz48fB1m5WcUuAYrdGnHj5',
   boom:        '12eZRSDRnjsSkoovj21LDvGd5SbDnrfDbsaxdmMRaT3XK9Qa8jgXdTSa1MaBys6CgmNjtff7futsPfmfcRpWTZUnXr2TWv2gdboDKZmc6GTpUZxc97qpXJWtyD',
   bossSpawn:   '12eZRSDSVRrD67KRceReSAHfH5R3pqU9JuRJpxZuQ1eMG9Fn1aSWE8wmnE3HgvjZiNptQo2zpHgj9fqofhSaDFuEok9jcFWnVvN3cW1iDBbN4qzVuw8gJNnhKM',
   playerHurt:  '12eZRSDGK26xkrJpNakcz4XTrH1g68EjAXHgAYGhaSMTiyy9kWZ2K1zGM4jjXyKhWXTYXmWo5n7nUEYm22Y12WbJfAHpY4VD37Va7qctx3UbXNTnEyTC9CP2EB',
-  upgrade:     '12eZRSDGK2a8oJayiANNjieJrb5utu7mU5pXPmFYAyZsFk7CFbvQi2UfkbzVyufe8uDNMkzwLj6knu3YZ5YL7WJNdH4mrfgKjcPtjKPJJgKaH3PfLnEbVpWw2w',
+  // upgrade uses a custom programmatic tone (see loadUpgrade below)
   victory:     '12eZRSDSVRrD4ighYdxUJtJhbVM7kzBaESDDXD9y9c3gB9aqm7KCQmne61TQrJLPbeVZ55B9tgz9FcmqdQGuWbneGcgGAzT38WkhBUNh5tjysbwgkjcuPkTP51',
   gameOver:    '12eZRSDW9BpyimpJ2g3CzvFeX7gYUb8STeQhqTheS6kbAXPHtF43iMHM4X4FDyt6hu2Gpiiz5scgQdCbp1Kd9YLifs2Xp7PKJhDZqHPZAsDXZesN5w4R7vko6X',
-  click:       '12eZRSDGK26xi4WWw9ZffiyueaRQghYobqM2dciN5v7g8DwPyeyPubN97B65TQfA7E61VLevFC7d7LadNohdshb89bbabfsmQqkJCzWkmKGKLFN2Zqubx1N3eo',
+  // click uses a custom programmatic tone (see loadClick below)
 };
 
 // ---- Manager ----
@@ -69,7 +69,7 @@ class SfxManager {
   private buffers: Partial<Record<SfxKey, AudioBuffer>> = {};
   private ctx: AudioContext | null = null;
   private gainNode: GainNode | null = null;
-  private _volume = 0.35;
+  private _volume = 0.22;
   private _muted = false;
   private lastPlayed: Partial<Record<SfxKey, number>> = {};
   private cooldowns: Partial<Record<SfxKey, number>> = {
@@ -98,6 +98,9 @@ class SfxManager {
       }
     }
     await Promise.all(loads);
+    this.loadClick();
+    this.loadCoin();
+    this.loadUpgrade();
   }
 
   private async loadFile(key: SfxKey, path: string) {
@@ -110,6 +113,70 @@ class SfxManager {
       const b58 = FALLBACKS[key];
       if (b58) this.loadSfxr(key, b58);
     }
+  }
+
+  /** Generate a clean, short sine-wave click (no jsfxr noise) */
+  private loadClick() {
+    const sr = 44100;
+    const len = Math.floor(sr * 0.035); // 35ms
+    const buf = this.ctx!.createBuffer(1, len, sr);
+    const ch = buf.getChannelData(0);
+    const freq = 1800; // Hz — crisp tap pitch
+    for (let i = 0; i < len; i++) {
+      const t = i / sr;
+      const env = 1 - i / len; // linear decay
+      ch[i] = Math.sin(2 * Math.PI * freq * t) * env * env * 0.45;
+    }
+    this.buffers.click = buf;
+  }
+
+  /** Mario-style two-tone coin ding */
+  private loadCoin() {
+    const sr = 44100;
+    const noteLen = Math.floor(sr * 0.06); // 60ms per note
+    const gap = Math.floor(sr * 0.015);    // 15ms gap
+    const totalLen = noteLen + gap + noteLen;
+    const buf = this.ctx!.createBuffer(1, totalLen, sr);
+    const ch = buf.getChannelData(0);
+    const f1 = 988;  // B5
+    const f2 = 1319; // E6 (the iconic Mario coin interval)
+    const vol = 0.3;
+    // First note
+    for (let i = 0; i < noteLen; i++) {
+      const t = i / sr;
+      const env = 1 - (i / noteLen);
+      ch[i] = Math.sin(2 * Math.PI * f1 * t) * env * vol;
+    }
+    // Second note (longer sustain)
+    const off = noteLen + gap;
+    for (let i = 0; i < noteLen; i++) {
+      const t = i / sr;
+      const env = 1 - (i / noteLen) * 0.6; // slower decay on second note
+      ch[off + i] = Math.sin(2 * Math.PI * f2 * t) * env * vol;
+    }
+    this.buffers.coin = buf;
+  }
+
+  /** Mario power-up style ascending arpeggio */
+  private loadUpgrade() {
+    const sr = 44100;
+    // Fast ascending notes: E5 → G5 → B5 → E6 → G6 → B6 → E7
+    const notes = [659, 784, 988, 1319, 1568, 1976, 2637];
+    const noteLen = Math.floor(sr * 0.055); // 55ms per note
+    const totalLen = notes.length * noteLen;
+    const buf = this.ctx!.createBuffer(1, totalLen, sr);
+    const ch = buf.getChannelData(0);
+    const vol = 0.3;
+    for (let n = 0; n < notes.length; n++) {
+      const off = n * noteLen;
+      const freq = notes[n];
+      for (let i = 0; i < noteLen; i++) {
+        const t = i / sr;
+        const env = 1 - (i / noteLen) * 0.5; // gentle decay per note
+        ch[off + i] = Math.sin(2 * Math.PI * freq * t) * env * vol;
+      }
+    }
+    this.buffers.upgrade = buf;
   }
 
   private loadSfxr(key: SfxKey, b58: string) {

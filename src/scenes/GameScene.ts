@@ -93,6 +93,7 @@ export class GameScene extends Phaser.Scene {
   riverSquiggles: { sprite: Phaser.GameObjects.Image; age: number; life: number; dx: number; dy: number }[] = [];
   squiggleTimer = 0;
   treeSeed = 0;
+  sf = 1; // native resolution scale factor
 
   constructor() { super('Game'); }
 
@@ -170,8 +171,8 @@ export class GameScene extends Phaser.Scene {
     generateAllArt(this);
     registerAnimations(this);
 
-    // Fill viewport during gameplay (no black bars)
-    this.scale.scaleMode = Phaser.Scale.ScaleModes.ENVELOP;
+    // Keep FIT mode — native resolution already matches viewport
+    this.scale.scaleMode = Phaser.Scale.ScaleModes.FIT;
     this.scale.refresh();
 
     // Resume systems in case previous run ended while paused
@@ -214,6 +215,8 @@ export class GameScene extends Phaser.Scene {
 
     // player — starts at origin, camera follows
     this.player = new Player(this, 0, 0);
+    this.sf = this.game.registry.get('sf') || 1;
+    this.cameras.main.setZoom(this.sf);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
 
     // Apply difficulty adjustments
@@ -345,7 +348,7 @@ export class GameScene extends Phaser.Scene {
 
   hudState() {
     return {
-      name: 'hero',
+      name: 'Ranger',
       hp: this.player?.hp ?? CFG.player.hp,
       maxHp: this.player?.maxHp ?? CFG.player.hp,
       money: this.player?.money ?? 0,
@@ -704,16 +707,17 @@ export class GameScene extends Phaser.Scene {
     panel.add(nub);
 
     // Title: LVL X
+    const tr = this.sf;
     const title = this.add.text(-W / 2 + 8, -H / 2 + 6, `${t.kind.toUpperCase()}  LVL ${t.level + 1}`, {
       fontFamily: 'monospace', fontSize: '12px', color: '#7cc4ff'
-    });
+    }).setResolution(tr);
     panel.add(title);
 
     // Sell label on the top-right
     const sellVal = Math.floor(t.totalSpent * 0.5);
     const sellLbl = this.add.text(W / 2 - 8, -H / 2 + 6, `SELL $${sellVal}`, {
       fontFamily: 'monospace', fontSize: '11px', color: '#ffa07a'
-    }).setOrigin(1, 0);
+    }).setOrigin(1, 0).setResolution(tr);
     panel.add(sellLbl);
 
     // Current stats
@@ -721,7 +725,7 @@ export class GameScene extends Phaser.Scene {
     const splashLine = st.splashRadius > 0 ? `  AOE ${st.splashRadius}` : '';
     const stats = this.add.text(-W / 2 + 8, -H / 2 + 22,
       `DMG ${st.damage}  RNG ${st.range}${splashLine}\nFIRE ${(1000 / st.fireRate).toFixed(1)}/s  HP ${t.hp}/${t.maxHp}`,
-      { fontFamily: 'monospace', fontSize: '10px', color: '#ccd' });
+      { fontFamily: 'monospace', fontSize: '10px', color: '#ccd' }).setResolution(tr);
     panel.add(stats);
 
     // Upgrade button
@@ -737,7 +741,7 @@ export class GameScene extends Phaser.Scene {
     const upTxt = this.add.text(upBg.x, upBg.y, upLabel, {
       fontFamily: 'monospace', fontSize: '10px',
       color: !canUp ? '#888' : affordable ? '#ffffff' : '#ff9a9a'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setResolution(tr);
     if (canUp) {
       upBg.setInteractive({ useHandCursor: true });
       upBg.on('pointerdown', (_p: any, _lx: any, _ly: any, ev: any) => {
@@ -754,7 +758,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(1, 0x556);
     const sellTxt = this.add.text(sellBg.x, sellBg.y, `SELL $${sellVal}`, {
       fontFamily: 'monospace', fontSize: '10px', color: '#ffd6c0'
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setResolution(tr);
     sellBg.setInteractive({ useHandCursor: true });
     sellBg.on('pointerdown', (_p: any, _lx: any, _ly: any, ev: any) => {
       ev?.stopPropagation?.();
@@ -771,14 +775,14 @@ export class GameScene extends Phaser.Scene {
     if (!t.canUpgrade()) return;
     const cost = t.upgradeCost();
     if (this.player.money < cost) {
-      this.floatText(t.x, t.y - 20, `NEED $${cost}`, '#ff6a6a');
+      this.floatText(t.x, t.y - 40, `NEED $${cost}`, '#ff6a6a');
       return;
     }
     this.player.money -= cost;
     t.totalSpent += cost;
     t.upgrade();
     SFX.play('upgrade');
-    this.floatText(t.x, t.y - 24, `LVL ${t.level + 1}`, '#7cf29a');
+    this.floatText(t.x, t.y - 40, `LVL ${t.level + 1}`, '#7cf29a');
     this.pushHud();
     // refresh ring + panel
     this.drawSelectionRing(t);
@@ -795,7 +799,7 @@ export class GameScene extends Phaser.Scene {
     const txt = this.add.text(x, y, msg, {
       fontFamily: 'monospace', fontSize: '12px', color,
       stroke: '#0b0f1a', strokeThickness: 3
-    }).setOrigin(0.5).setDepth(40);
+    }).setOrigin(0.5).setDepth(950).setResolution(this.sf);
     this.tweens.add({
       targets: txt,
       y: y - 18,
@@ -1938,8 +1942,8 @@ export class GameScene extends Phaser.Scene {
       b.play(`${ap}-chargewind`);
       return;
     }
-    // Boulder throw — targets nearest tower or wall in range (forest boss only, but available to all)
-    if (time >= b.nextBoulder && onScreen) {
+    // Boulder throw — targets nearest tower or wall in range (not meadow boss)
+    if (this.biome !== 'grasslands' && time >= b.nextBoulder && onScreen) {
       const boulderRange = 280;
       let bestDist = boulderRange;
       let target: { x: number; y: number } | null = null;
@@ -3287,7 +3291,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Camera zoom on death spot
-    this.cameras.main.zoomTo(1.3, 800);
+    this.cameras.main.zoomTo(1.3 * this.sf, 800);
 
     // Gravestone pops up from the ground after particles settle
     setTimeout(() => {
@@ -3322,7 +3326,7 @@ export class GameScene extends Phaser.Scene {
       this.physics.pause();
       SFX.play('gameOver');
       this.game.events.emit('game-end', {
-        win: false, name: 'hero',
+        win: false, name: 'Ranger',
         kills: this.player.kills, money: this.player.money
       });
     }, 3500);
@@ -3332,7 +3336,7 @@ export class GameScene extends Phaser.Scene {
     this.gameOver = true;
     this.physics.pause();
     SFX.play('victory');
-    this.game.events.emit('game-end', { win: true, name: 'hero', kills: this.player.kills, money: this.player.money });
+    this.game.events.emit('game-end', { win: true, name: 'Ranger', kills: this.player.kills, money: this.player.money });
   }
 
   shutdown() {
