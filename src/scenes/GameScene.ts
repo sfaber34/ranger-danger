@@ -1864,6 +1864,7 @@ export class GameScene extends Phaser.Scene {
       this.bossChargeImpact(b);
       b.state = 'chase';
       b.nextCharge = time + 9500;
+      b.nextBirth = Math.max(b.nextBirth, time + 3000); // delay spawns after charge
       b.play(`${ap}-idle`);
     }
 
@@ -1900,6 +1901,7 @@ export class GameScene extends Phaser.Scene {
         this.bossChargeImpact(b);
         b.state = 'chase';
         b.nextCharge = time + 9500;
+        b.nextBirth = Math.max(b.nextBirth, time + 3000); // delay spawns after charge
         b.play(`${ap}-idle`);
       }
       // Bulldoze trees during charge (boss plows through without stopping)
