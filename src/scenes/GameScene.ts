@@ -696,7 +696,7 @@ export class GameScene extends Phaser.Scene {
     const panel = this.towerPanel;
     panel.removeAll(true);
 
-    const W = 156, H = 74;
+    const W = 184, H = 74;
     const px = t.x;
     const py = t.y - CFG.tile * t.size / 2 - H / 2 - 10;
     panel.setPosition(px, py);
@@ -708,7 +708,7 @@ export class GameScene extends Phaser.Scene {
     panel.add(bg);
 
     // little pointer nub at the bottom
-    const nub = this.add.triangle(0, H / 2 + 4, -6, -4, 6, -4, 0, 4, 0x11172a)
+    const nub = this.add.triangle(0, H / 2 + 9, -6, -4, 6, -4, 0, 4, 0x11172a)
       .setStrokeStyle(1, 0x2a3760);
     panel.add(nub);
 
@@ -719,12 +719,7 @@ export class GameScene extends Phaser.Scene {
     }).setResolution(tr);
     panel.add(title);
 
-    // Sell label on the top-right
     const sellVal = Math.floor(t.totalSpent * 0.5);
-    const sellLbl = this.add.text(W / 2 - 8, -H / 2 + 6, `SELL $${sellVal}`, {
-      fontFamily: 'monospace', fontSize: '11px', color: '#ffa07a'
-    }).setOrigin(1, 0).setResolution(tr);
-    panel.add(sellLbl);
 
     // Current stats
     const st = t.stats();
@@ -735,7 +730,7 @@ export class GameScene extends Phaser.Scene {
     panel.add(stats);
 
     // Upgrade button
-    const btnW = 70, btnH = 20;
+    const btnW = 84, btnH = 22;
     const btnY = H / 2 - btnH / 2 - 4;
     const canUp = t.canUpgrade();
     const upCost = t.upgradeCost();
