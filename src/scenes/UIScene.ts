@@ -221,11 +221,14 @@ export class UIScene extends Phaser.Scene {
 
     // ---- Mobile virtual joystick (lower-left) ----
     if (this.isMobile) {
-      // Place above the bottom edge so it clears any home-indicator safe area.
       const outerR = this.p(60);
       const innerR = this.p(28);
-      const margin = this.p(60);
-      const cx = margin + outerR;
+      // Portrait: lift the joystick above the bottom hotbar (slot top at
+      // H - p(80), labels extend below to ~H - p(18)). Landscape: hotbar is
+      // horizontally centered with no overlap on the left, so we can sit lower.
+      const isPortraitNow = this.scale.height > this.scale.width;
+      const margin = this.p(isPortraitNow ? 130 : 60);
+      const cx = this.p(40) + outerR;
       const cy = H - margin - outerR;
       const touchPad = this.p(20);
       this.joystick = new VirtualJoystick(this, cx, cy, outerR, innerR, outerR + touchPad);

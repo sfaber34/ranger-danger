@@ -71,17 +71,16 @@ function start() {
     if (landing) landing.classList.remove('loading');
   });
 
-  // Resize / orientation handling. When the viewport changes (rotate, browser
-  // resize, iOS Safari address bar collapse), recompute the scaling values,
-  // resize the canvas, and notify scenes via a global event so they can
-  // re-layout in place without losing state.
+  // Resize / orientation handling. When the viewport changes, update the
+  // shared scale registry values and broadcast a `viewport-changed` event.
+  // Each scene is responsible for setting its own gameSize (LevelSelect locks
+  // to a 3:2 fit; GameScene fills the device viewport), so this top-level
+  // handler intentionally does NOT call setGameSize itself.
   installViewportResizeListener((vp) => {
     game.registry.set('sf', vp.uiScale);
     game.registry.set('cameraZoom', vp.cameraZoom);
     game.registry.set('uiScale', vp.uiScale);
     game.registry.set('isMobile', vp.isMobile);
-    game.scale.setGameSize(vp.renderW, vp.renderH);
-    game.scale.refresh();
     game.events.emit('viewport-changed', vp);
   });
 }

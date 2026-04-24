@@ -224,6 +224,15 @@ export class GameScene extends Phaser.Scene {
     this.wallLayer.setVisible(false); // invisible — walls have their own sprites
     this.wallLayer.setDepth(-1);
 
+    // Expand the canvas back to the full device viewport (LevelSelectScene
+    // shrunk it to a 3:2 fit). On desktop this is a no-op since the viewport
+    // size equals 3:2 * sf already; on mobile this kills the letterbox.
+    {
+      const vp = computeViewport();
+      this.scale.setGameSize(vp.renderW, vp.renderH);
+      this.scale.refresh();
+    }
+
     // player — starts at origin, camera follows
     this.player = new Player(this, 0, 0);
     this.sf = this.game.registry.get('sf') || 1;
@@ -236,12 +245,15 @@ export class GameScene extends Phaser.Scene {
     // distance can exceed 18 tiles (notably in portrait) — grow to cover it.
     this.recomputeSpawnDist();
 
-    // React to rotation / window resize: pull the new camera zoom out of the
-    // registry and grow chunk/spawn radius to match the new viewport. World
-    // state (player, towers, enemies) stays untouched.
+    // React to rotation / window resize: resize the canvas to the new device
+    // viewport, pull the new camera zoom out of the registry, and grow chunk/
+    // spawn radius to match. World state (player, towers, enemies) stays
+    // untouched.
     const onViewportChanged = () => {
-      const newZoom = (this.game.registry.get('cameraZoom') as number) ?? 1;
-      this.cameras.main.setZoom(newZoom);
+      const vp = computeViewport();
+      this.scale.setGameSize(vp.renderW, vp.renderH);
+      this.scale.refresh();
+      this.cameras.main.setZoom(vp.cameraZoom);
       this.recomputeSpawnDist();
       // Force chunk regeneration around player at the new view radius.
       this.lastChunkCx = -9999;
@@ -1528,23 +1540,23 @@ export class GameScene extends Phaser.Scene {
     if (k.S.isDown || k.DOWN.isDown) vy += 1;
 
     // Mobile virtual joystick contribution. UIScene publishes the current
-    // stick vector to the registry every frame; we add it to the keyboard
-    // delta so either input source (or both) can drive movement. A 0.1
-    // magnitude deadband suppresses thumb jitter when the stick is at rest.
+    // stick vector to the registry every frame. A generous deadzone (0.3
+    // magnitude) ignores thumb rest / jitter; outside the deadzone the input
+    // snaps to a unit vector so movement is binary (full speed, no analog).
     const jx = (this.game.registry.get('joystickX') as number) || 0;
     const jy = (this.game.registry.get('joystickY') as number) || 0;
-    if (jx * jx + jy * jy >= 0.01) {
-      vx += jx;
-      vy += jy;
+    const jmag2 = jx * jx + jy * jy;
+    const JOYSTICK_DEADZONE_SQ = 0.3 * 0.3;
+    if (jmag2 >= JOYSTICK_DEADZONE_SQ) {
+      const jmag = Math.sqrt(jmag2);
+      vx += jx / jmag;
+      vy += jy / jmag;
     }
 
     const moving = vx !== 0 || vy !== 0;
     if (moving) {
       const len = Math.hypot(vx, vy);
-      // Joystick already produces magnitudes ≤ 1; clamp the combined vector
-      // to a unit length so diagonal input from keys doesn't outrun the stick.
-      const norm = Math.max(1, len);
-      vx /= norm; vy /= norm;
+      vx /= len; vy /= len;
       this.player.setVelocity(vx * CFG.player.speed, vy * CFG.player.speed);
       if (vx !== 0) this.player.facingRight = vx > 0;
       this.player.setFlipX(!this.player.facingRight);
@@ -1847,6 +1859,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   updateEnemies(time: number, _delta: number) {
+    // Performance cull radius — enemies further than this from the player
+    // skip AI/animation work this frame. Squared so we don't sqrt per enemy.
+    // Chosen well outside any camera viewport so culled enemies are never
+    // visible. The boss is updated separately and is exempt from this cull.
+    const FAR_AI_CULL_SQ = 1100 * 1100;
+
     this.enemies.children.iterate((c: any) => {
       const e = c as Enemy;
       if (!e || !e.active || e.dying) return true;
@@ -1856,6 +1874,14 @@ export class GameScene extends Phaser.Scene {
       e.targetRef = this.player;
       const prefix = e.dirPrefix();
       const dist2 = (tx - e.x) ** 2 + (ty - e.y) ** 2;
+
+      // Far-AI cull: stop the enemy and skip pathfinding/lineBlocked/etc.
+      // It still exists in the world; once the player gets close it resumes
+      // normal behaviour next frame.
+      if (dist2 > FAR_AI_CULL_SQ) {
+        if (e.body && (e.body as any).enable) e.setVelocity(0, 0);
+        return true;
+      }
 
       // Birds randomly poop while flying
       if ((e.kind === 'crow' || e.kind === 'bat') && Math.random() < 0.0006) {
@@ -3447,9 +3473,16 @@ export class GameScene extends Phaser.Scene {
       if (this.winDelayUntil === 0) {
         this.winDelayUntil = this.vTime + 12000;
         this.countdownColor = '#7cf29a';
-        // Kill all remaining enemies when the boss dies
-        for (const e of this.enemies.getChildren() as Enemy[]) {
-          if (!e.dying && e.active) e.hurt(9999);
+        // Kill all remaining enemies when the boss dies — staggered so dozens
+        // of die animations don't all start on the same frame and spike GPU
+        // / animation work.
+        const survivors = (this.enemies.getChildren() as Enemy[])
+          .filter((e) => e && e.active && !e.dying);
+        for (let i = 0; i < survivors.length; i++) {
+          const e = survivors[i];
+          this.time.delayedCall(i * 25, () => {
+            if (e.active && !e.dying) e.hurt(9999);
+          });
         }
       }
       const remaining = Math.max(0, Math.ceil((this.winDelayUntil - this.vTime) / 1000));

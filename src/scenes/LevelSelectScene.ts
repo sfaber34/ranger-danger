@@ -31,24 +31,39 @@ export class LevelSelectScene extends Phaser.Scene {
     // Compute native display size and decoupled scales (desktop stays identical;
     // mobile fills the device viewport with its own camera zoom + UI scale).
     const vp = computeViewport();
-    const nativeW = vp.renderW;
-    const nativeH = vp.renderH;
+
+    // Level select is locked to the 3:2 aspect of CFG.width × CFG.height. The
+    // level-node coordinates and the map background were painted in that space;
+    // stretching the canvas to a phone's portrait/landscape aspect would
+    // distort the background and desync nodes from their painted spots. Fit a
+    // 3:2 box inside the device viewport — Phaser's FIT mode + the smaller
+    // setGameSize gives us natural letterboxing.
+    const aspect = CFG.width / CFG.height;
+    let nativeW = vp.renderW;
+    let nativeH = vp.renderH;
+    if (nativeW / nativeH > aspect) {
+      // Wider than 3:2 — height-constrained.
+      nativeW = Math.round(nativeH * aspect);
+    } else {
+      // Taller than 3:2 — width-constrained.
+      nativeH = Math.round(nativeW / aspect);
+    }
 
     this.scale.scaleMode = Phaser.Scale.ScaleModes.FIT;
     this.scale.setGameSize(nativeW, nativeH);
     this.scale.refresh();
 
-    // Store all three scales in the registry so GameScene and UIScene can use them.
+    // Store all three scales in the registry so GameScene and UIScene can use
+    // them. GameScene's create() will resize the canvas back to the full
+    // viewport when gameplay starts.
     this.game.registry.set('sf', vp.uiScale);
     this.game.registry.set('cameraZoom', vp.cameraZoom);
     this.game.registry.set('uiScale', vp.uiScale);
     this.game.registry.set('isMobile', vp.isMobile);
 
-    // Level select has its own layout authored against a 960×640 design space
-    // (level node positions go out to x≈870), so it uses the legacy min-ratio
-    // formula instead of the mobile uiScale — otherwise far-right nodes would
-    // render off-screen on phones.
-    this.sf = Math.min(nativeW / CFG.width, nativeH / CFG.height);
+    // Layout uses the 3:2-fitted canvas, so the legacy min-ratio formula now
+    // resolves to native/CFG (ratio is identical on both axes by construction).
+    this.sf = nativeW / CFG.width;
 
     // Re-layout on rotation: this scene has no preserved state, so a restart
     // is the cleanest way to rebuild every node/banner at the new size.
