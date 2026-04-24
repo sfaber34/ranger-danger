@@ -25,7 +25,9 @@ export class BootScene extends Phaser.Scene {
   }
 
   create() {
-    SFX.init();
+    // Synchronous unlock happens in main.ts on the Play click. This kicks off
+    // async fetch+decode of all audio assets so they're ready by gameplay.
+    SFX.loadAssets();
     // Art generation deferred to GameScene — go straight to level select
     this.scene.start('LevelSelect');
   }

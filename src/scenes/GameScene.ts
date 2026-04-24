@@ -11,6 +11,7 @@ import { createSparseGrid, findPath, canReachFromSpawnDirections, gridGet, gridS
 import { SFX } from '../audio/sfx';
 import { createGroundChunk, TREE_PATTERNS, generateAllArt, registerAnimations, getRiverTileGrid, riverCenterPx, RIVER_HALF_W, riverHorizontalCenterY } from '../assets/generateArt';
 import { Difficulty, Biome, LEVELS } from '../levels';
+import { computeViewport, viewportWorldSize } from '../viewport';
 
 type BuildKind = 'none' | 'tower' | 'wall';
 
@@ -94,6 +95,9 @@ export class GameScene extends Phaser.Scene {
   squiggleTimer = 0;
   treeSeed = 0;
   sf = 1; // native resolution scale factor
+  /** Effective spawn/chunk radius in tiles. Desktop: CFG.spawnDist (unchanged).
+   *  Mobile: grown when the viewport shows more world than the desktop default covers. */
+  spawnDist = CFG.spawnDist;
   _wallCheckCache = { key: '', valid: false };
   _lastWallCheckPlayerTile = '';
 
@@ -218,8 +222,21 @@ export class GameScene extends Phaser.Scene {
     // player — starts at origin, camera follows
     this.player = new Player(this, 0, 0);
     this.sf = this.game.registry.get('sf') || 1;
-    this.cameras.main.setZoom(this.sf);
+    const cameraZoom = this.game.registry.get('cameraZoom') ?? this.sf;
+    this.cameras.main.setZoom(cameraZoom);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
+
+    // Viewport-aware spawn radius. Desktop keeps CFG.spawnDist exactly (hard
+    // requirement). On mobile the view aspect differs from 3:2, so the corner
+    // distance can exceed 18 tiles (notably in portrait) — grow to cover it.
+    const vp = computeViewport();
+    if (vp.isMobile) {
+      const { w: viewW, h: viewH } = viewportWorldSize(vp);
+      const cornerTiles = Math.ceil(Math.hypot(viewW / 2, viewH / 2) / CFG.tile);
+      this.spawnDist = Math.max(CFG.spawnDist, cornerTiles + 2);
+    } else {
+      this.spawnDist = CFG.spawnDist;
+    }
 
     // Apply difficulty adjustments
     if (this.difficulty === 'oneHP') {
@@ -442,7 +459,7 @@ export class GameScene extends Phaser.Scene {
     }
     // Temporarily block tiles and check spawn directions can still reach the player
     for (let j = 0; j < s; j++) for (let i = 0; i < s; i++) gridSet(this.grid, tx + i, ty + j, 2);
-    const ok = canReachFromSpawnDirections(this.grid, pt.x, pt.y, CFG.spawnDist);
+    const ok = canReachFromSpawnDirections(this.grid, pt.x, pt.y, this.spawnDist);
     for (let j = 0; j < s; j++) for (let i = 0; i < s; i++) gridSet(this.grid, tx + i, ty + j, 0);
     return ok;
   }
@@ -818,7 +835,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Count how many of the 4 cardinal spawn directions can reach (px, py). */
   countReachableDirections(px: number, py: number): number {
-    const dist = CFG.spawnDist;
+    const dist = this.spawnDist;
     const testPoints = [
       { x: px, y: py - dist },
       { x: px, y: py + dist },
@@ -1387,7 +1404,7 @@ export class GameScene extends Phaser.Scene {
     const ptx = Math.floor(this.player.x / t);
     const pty = Math.floor(this.player.y / t);
     // Only do pathfinding checks near spawn (within spawnDist + margin)
-    const nearSpawn = Math.abs(cx * cs) < CFG.spawnDist + cs && Math.abs(cy * cs) < CFG.spawnDist + cs;
+    const nearSpawn = Math.abs(cx * cs) < this.spawnDist + cs && Math.abs(cy * cs) < this.spawnDist + cs;
 
     // Chunk tile origin
     const chunkTileX = cx * cs;
@@ -1420,7 +1437,7 @@ export class GameScene extends Phaser.Scene {
       }
 
       // Pathfinding check only near spawn area
-      if (nearSpawn && !canReachFromSpawnDirections(this.grid, ptx, pty, CFG.spawnDist, 3)) {
+      if (nearSpawn && !canReachFromSpawnDirections(this.grid, ptx, pty, this.spawnDist, 3)) {
         for (const tile of pattern.tiles) {
           gridSet(this.grid, ox + tile.dx, oy + tile.dy, 0);
         }
@@ -2689,7 +2706,7 @@ export class GameScene extends Phaser.Scene {
   spawnBoss() {
     if (this.bossSpawned) return;
     this.bossSpawned = true;
-    const spawnR = CFG.spawnDist * CFG.tile;
+    const spawnR = this.spawnDist * CFG.tile;
     const px = this.player.x, py = this.player.y;
     // spawn at a random corner at spawnDist from the player
     const corners = [
@@ -3203,7 +3220,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   spawnRunnerPack() {
-    const spawnR = CFG.spawnDist * CFG.tile;
+    const spawnR = this.spawnDist * CFG.tile;
     const waveSize = CFG.spawn.waveSize;
     const side = Phaser.Math.Between(0, 3);
     const px = this.player.x, py = this.player.y;
@@ -3244,7 +3261,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   spawnEnemy() {
-    const spawnR = CFG.spawnDist * CFG.tile;
+    const spawnR = this.spawnDist * CFG.tile;
     const px = this.player.x, py = this.player.y;
     const vx = (this.player.body as Phaser.Physics.Arcade.Body).velocity.x;
     const vy = (this.player.body as Phaser.Physics.Arcade.Body).velocity.y;

@@ -28,10 +28,21 @@
 
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      html, body { background:#05070d; color:#eee; font-family: system-ui, -apple-system, sans-serif; overflow-x:hidden; height:100%; }
+      html, body {
+        background:#05070d; color:#eee;
+        font-family: system-ui, -apple-system, sans-serif;
+        overflow: hidden;            /* prevent page scroll, esp. on mobile */
+        overscroll-behavior: none;   /* no pull-to-refresh / rubber-band */
+        height: 100%;
+      }
 
       /* ---- Game canvas ---- */
-      #game { width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+      #game {
+        width: 100vw; height: 100vh;
+        display: flex; align-items: center; justify-content: center;
+        overflow: hidden;
+        touch-action: none;          /* canvas owns gestures; no browser panning */
+      }
       canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
 
       /* ---- Landing overlay ---- */

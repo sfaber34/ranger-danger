@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { CFG } from '../config';
 import { SFX } from '../audio/sfx';
+import { computeViewport } from '../viewport';
 import {
   LEVELS, LevelDef, Difficulty, DIFFICULTY_ORDER, DIFFICULTY_LABELS,
   MEDAL_COLORS, BIOME_COLORS, loadMedals, totalMedals, isLevelUnlocked, MedalStore
@@ -27,23 +28,22 @@ export class LevelSelectScene extends Phaser.Scene {
   constructor() { super('LevelSelect'); }
 
   create() {
-    // Compute native display size so we render sharp text/graphics
-    const parent = this.game.canvas.parentElement;
-    const dpr = window.devicePixelRatio || 1;
-    const parentW = (parent?.clientWidth || window.innerWidth) * dpr;
-    const parentH = (parent?.clientHeight || window.innerHeight) * dpr;
-
-    // Uniform scale factor (maintain 3:2 aspect ratio)
-    this.sf = Math.max(1, Math.min(parentW / CFG.width, parentH / CFG.height));
-    const nativeW = Math.round(CFG.width * this.sf);
-    const nativeH = Math.round(CFG.height * this.sf);
+    // Compute native display size and decoupled scales (desktop stays identical;
+    // mobile fills the device viewport with its own camera zoom + UI scale).
+    const vp = computeViewport();
+    this.sf = vp.uiScale;
+    const nativeW = vp.renderW;
+    const nativeH = vp.renderH;
 
     this.scale.scaleMode = Phaser.Scale.ScaleModes.FIT;
     this.scale.setGameSize(nativeW, nativeH);
     this.scale.refresh();
 
-    // Store sf in registry so GameScene and UIScene can access it
-    this.game.registry.set('sf', this.sf);
+    // Store all three scales in the registry so GameScene and UIScene can use them.
+    this.game.registry.set('sf', vp.uiScale);
+    this.game.registry.set('cameraZoom', vp.cameraZoom);
+    this.game.registry.set('uiScale', vp.uiScale);
+    this.game.registry.set('isMobile', vp.isMobile);
 
     this.medalStore = loadMedals();
     this.medalCount = totalMedals(this.medalStore);

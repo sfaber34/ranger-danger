@@ -4,6 +4,7 @@ import { BootScene } from './scenes/BootScene';
 import { LevelSelectScene } from './scenes/LevelSelectScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
+import { SFX } from './audio/sfx';
 
 const overlay = document.getElementById('overlay') as HTMLDivElement;
 const startBtn = document.getElementById('startBtn') as HTMLButtonElement;
@@ -34,6 +35,11 @@ document.addEventListener('visibilitychange', () => {
 function start() {
   if (started) return;
   started = true;
+
+  // Unlock audio FIRST, synchronously, while we're still inside the click
+  // gesture. iOS requires this for both WebAudio resume and the silent-loop
+  // hack that bypasses the mute switch.
+  SFX.unlock();
 
   // Hide overlay immediately — level select appears fast since art is deferred
   overlay.classList.add('hidden');

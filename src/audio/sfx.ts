@@ -71,6 +71,10 @@ class SfxManager {
   private gainNode: GainNode | null = null;
   private _volume = 0.22;
   private _muted = false;
+  private unlocked = false;
+  /** Hidden looping <audio> element used to bypass the iOS silent switch by
+   *  forcing Safari into the "playback" audio session category. */
+  private silentEl: HTMLAudioElement | null = null;
 
   // Background music
   private bgmGain: GainNode | null = null;
@@ -91,17 +95,64 @@ class SfxManager {
     cannonShoot: 0.75,
   };
 
-  /** Call once at boot. Preloads all audio into AudioBuffers for zero-latency playback. */
-  async init() {
-    this.ctx = new AudioContext();
-    this.gainNode = this.ctx.createGain();
-    this.gainNode.gain.value = this._volume;
-    this.gainNode.connect(this.ctx.destination);
+  /** SYNCHRONOUS — must be called from inside a user-gesture handler (e.g. the
+   *  Play button click). Creates the AudioContext, primes it with a silent
+   *  buffer, and starts the silent-loop hack to bypass the iOS mute switch.
+   *  Safe to call multiple times — only the first call does work. */
+  unlock() {
+    if (!this.ctx) {
+      this.ctx = new AudioContext();
+      this.gainNode = this.ctx.createGain();
+      this.gainNode.gain.value = this._volume;
+      this.gainNode.connect(this.ctx.destination);
 
-    // BGM gain (separate from SFX)
-    this.bgmGain = this.ctx.createGain();
-    this.bgmGain.gain.value = this._bgmVolume;
-    this.bgmGain.connect(this.ctx.destination);
+      this.bgmGain = this.ctx.createGain();
+      this.bgmGain.gain.value = this._bgmVolume;
+      this.bgmGain.connect(this.ctx.destination);
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+
+    // Play a one-sample silent buffer to fully unlock iOS WebAudio.
+    const silentBuf = this.ctx.createBuffer(1, 1, 22050);
+    const silentSrc = this.ctx.createBufferSource();
+    silentSrc.buffer = silentBuf;
+    silentSrc.connect(this.ctx.destination);
+    silentSrc.start(0);
+
+    // iOS mute-switch bypass: a looping <audio> element forces Safari to use
+    // the "playback" audio session category, which ignores the silent switch.
+    if (!this.silentEl) {
+      const el = document.createElement('audio');
+      el.src = '/audio/silent.mp3';
+      el.loop = true;
+      el.preload = 'auto';
+      el.setAttribute('playsinline', '');
+      el.setAttribute('webkit-playsinline', '');
+      (el as any).playsInline = true;
+      el.style.display = 'none';
+      document.body.appendChild(el);
+      // Non-fatal if play() rejects (e.g. file missing during dev).
+      el.play().catch(() => { /* ignore */ });
+      this.silentEl = el;
+    }
+
+    this.unlocked = true;
+  }
+
+  /** ASYNC — fetches/decodes all sound assets. Requires `unlock()` to have
+   *  been called first so an AudioContext exists. */
+  async loadAssets() {
+    if (!this.ctx) {
+      // Fallback: create a context now (decoding works on a suspended context,
+      // though playback won't until unlock() is called from a user gesture).
+      this.ctx = new AudioContext();
+      this.gainNode = this.ctx.createGain();
+      this.gainNode.gain.value = this._volume;
+      this.gainNode.connect(this.ctx.destination);
+      this.bgmGain = this.ctx.createGain();
+      this.bgmGain.gain.value = this._bgmVolume;
+      this.bgmGain.connect(this.ctx.destination);
+    }
 
     const loads: Promise<void>[] = [];
     for (const key of SFX_KEYS) {
@@ -119,6 +170,9 @@ class SfxManager {
     this.loadCoin();
     this.loadUpgrade();
   }
+
+  /** @deprecated kept for any old call sites — equivalent to loadAssets(). */
+  async init() { return this.loadAssets(); }
 
   private async loadFile(key: SfxKey, path: string) {
     try {
