@@ -21,7 +21,7 @@ A Phaser 3 tower-defense game. The codebase was split out of a few mega-files in
 
 ## Validation
 
-After any non-trivial change: `npx tsc --noEmit` must pass, and `npm run dev` must boot. For UI/gameplay changes, run the relevant level end-to-end — type-check passes ≠ feature works.
+After any non-trivial change: `npx tsc --noEmit` must pass, and `npm run dev` must boot.
 
 ## Dev server
 
