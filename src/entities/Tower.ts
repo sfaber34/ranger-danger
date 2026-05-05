@@ -39,10 +39,18 @@ export class Tower extends Phaser.Physics.Arcade.Sprite {
     this.setDepth(6);
     const bodyRadius = (CFG.tile * this.size - 20) / 2;
     const body = this.body as Phaser.Physics.Arcade.StaticBody;
-    body.setCircle(bodyRadius);
+    // Center the circular body exactly on the grid cell. Pass the offset
+    // through setCircle so updateFromGameObject re-inserts the body into the
+    // static collision tree at the correct location. Mutating
+    // body.position.x/y after updateFromGameObject does NOT update the
+    // spatial tree, so collisions fire against the pre-override position —
+    // that's what made the player jitter at the top/left edge of arrow
+    // towers (their PNG is 128×128, while cannon PNG is 88×124, so the
+    // pre-override body sat ~10px NW of grid for arrow vs ~0×9 for cannon).
+    const offX = this.displayWidth / 2 - bodyRadius;
+    const offY = this.displayHeight / 2 - bodyRadius;
+    body.setCircle(bodyRadius, offX, offY);
     body.updateFromGameObject();
-    // Force body center to grid center regardless of sprite dimensions
-    body.position.set(wx - bodyRadius, wy - bodyRadius);
 
     const topOffY = kind === 'arrow' ? -24 : -20;
 
