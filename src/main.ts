@@ -96,6 +96,11 @@ function start() {
       default: 'arcade',
       arcade: { gravity: { x: 0, y: 0 }, debug: false }
     },
+    // Allow up to 3 simultaneous touch points so mobile players can hold the
+    // virtual joystick and tap a hotbar slot (or speed button) at the same
+    // time. Phaser defaults to 1 active touch pointer, which silently drops
+    // every additional finger.
+    input: { activePointers: 3 },
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.NO_CENTER
