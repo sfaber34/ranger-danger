@@ -43,13 +43,16 @@ export class DepthSortSystem {
       if (e.active) e.setDepth(yD(e.y));
     }
 
-    // Arrow projectiles fly across the map, so depth needs to track y.
-    // Cannonballs keep their fixed (high) depth because they arc above
-    // terrain visually.
+    // Both arrows and cannonballs y-sort. Using the cannonball's CURRENT
+    // sprite y (which already includes the arc offset, so it tracks the
+    // visual position) keeps it in front of the firing tower as soon as
+    // the muzzle clears the base — without this it sat at fixed depth 14
+    // while towers render at yDepth(y) ≈ 120+, so a cannon firing south
+    // had its shot obscured by its own tower for the first several frames.
     const projs = scene.projectiles.getChildren() as Projectile[];
     for (let i = 0; i < projs.length; i++) {
       const p = projs[i];
-      if (!p.active || p.groundTarget) continue;
+      if (!p.active) continue;
       p.setDepth(yD(p.y) + 5);
     }
 

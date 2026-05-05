@@ -40,7 +40,14 @@ export class CombatSystem {
           SFX.play('cannonShoot');
           tower.top.play('cannon-top-shoot', true);
           const cScale = 0.5 + tower.level * 0.15;
-          this.spawnProjectile(tower.x, launchY, aim.x, aim.y, st.projectileSpeed, st.damage, st.splashRadius, cScale);
+          // Spawn the cannonball at the muzzle of the barrel, not the pivot
+          // — same trick the arrow tower uses with the bow tip. Cannon top
+          // has origin (0.5, 0.5) and the muzzle sits +22 source px right of
+          // origin → +11 world at scale 0.5; +13 puts the spawn just past
+          // the muzzle flash so it reads as emerging from the bore.
+          const spawnX = tower.top.x + Math.cos(angle) * 26;
+          const spawnY = tower.top.y + Math.sin(angle) * 26;
+          this.spawnProjectile(spawnX, spawnY, aim.x, aim.y, st.projectileSpeed, st.damage, st.splashRadius, cScale);
         }
       } else {
         // Arrow: shoot at nearest enemy with lead targeting
