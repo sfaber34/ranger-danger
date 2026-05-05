@@ -178,6 +178,15 @@ export class GameScene extends Phaser.Scene {
   _lastWallCheckPlayerTile = '';
   _warmupFrames = 0;
 
+  // Bow / nocked-arrow offsets relative to the player center, recomputed in
+  // updatePlayer and re-applied in POST_UPDATE so the bow tracks the player's
+  // post-physics-sync position (otherwise the body integrates in UPDATE,
+  // sprite syncs in POST_UPDATE, and the bow renders one frame behind).
+  _bowOffsetX = 10;
+  _bowOffsetY = 2;
+  _nockOffsetX = 25;
+  _nockOffsetY = 2;
+
   constructor() { super('Game'); }
 
   init(data: any) {
@@ -621,6 +630,8 @@ export class GameScene extends Phaser.Scene {
     this.loadingDone = false;
     this.physics.pause();
     this._warmupFrames = 0;
+
+    this.events.on(Phaser.Scenes.Events.POST_UPDATE, this._syncBowToPlayer);
   }
 
   hudState() {
@@ -832,10 +843,9 @@ export class GameScene extends Phaser.Scene {
       // More offset when aiming horizontally, less when vertical
       const horizFactor = Math.abs(Math.cos(aimAngle)); // 1 at sides, 0 at top/bottom
       const offset = 6 + horizFactor * 5; // 6px minimum, up to 11px at the sides
-      bow.setPosition(
-        this.player.x + Math.cos(aimAngle) * offset,
-        this.player.y + 2 + Math.sin(aimAngle) * offset
-      );
+      this._bowOffsetX = Math.cos(aimAngle) * offset;
+      this._bowOffsetY = 2 + Math.sin(aimAngle) * offset;
+      bow.setPosition(this.player.x + this._bowOffsetX, this.player.y + this._bowOffsetY);
 
       // Flip player body to face target
       this.player.setFlipX(target.x < this.player.x);
@@ -878,14 +888,28 @@ export class GameScene extends Phaser.Scene {
       const idleDir = this.player.facingRight ? 1 : -1;
       bow.setRotation(this.player.facingRight ? 0 : Math.PI);
       bow.setFlipY(!this.player.facingRight);
-      bow.setPosition(this.player.x + idleDir * 10, this.player.y + 2);
+      this._bowOffsetX = idleDir * 10;
+      this._bowOffsetY = 2;
+      bow.setPosition(this.player.x + this._bowOffsetX, this.player.y + this._bowOffsetY);
     }
 
     // Nocked arrow rides with the bow — fletching tip sits on the bowstring.
     // Offset = (bowstring_x - bow_origin_x) + (arrow_center_x - arrow_back_x) = 1 + 14 = 15 world px.
-    nock.setPosition(bow.x + Math.cos(bow.rotation) * 15, bow.y + Math.sin(bow.rotation) * 15);
+    this._nockOffsetX = this._bowOffsetX + Math.cos(bow.rotation) * 15;
+    this._nockOffsetY = this._bowOffsetY + Math.sin(bow.rotation) * 15;
+    nock.setPosition(this.player.x + this._nockOffsetX, this.player.y + this._nockOffsetY);
     nock.setRotation(bow.rotation);
   }
+
+  /** Re-apply bow + nock positions after arcade physics has synced the player
+   *  sprite from its body in POST_UPDATE. Otherwise the bow renders at the
+   *  pre-sync (last frame) player position and visibly lags during movement. */
+  private _syncBowToPlayer = () => {
+    const p = this.player;
+    if (!p || !p.bow) return;
+    p.bow.setPosition(p.x + this._bowOffsetX, p.y + this._bowOffsetY);
+    p.nockedArrow.setPosition(p.x + this._nockOffsetX, p.y + this._nockOffsetY);
+  };
 
 
 
@@ -899,5 +923,6 @@ export class GameScene extends Phaser.Scene {
     this._onUiBuild = undefined;
     this._onUiSell = undefined;
     this._onUiSpeed = undefined;
+    this.events.off(Phaser.Scenes.Events.POST_UPDATE, this._syncBowToPlayer);
   }
 }
