@@ -1,5 +1,5 @@
 import { CFG } from '../config';
-import { findPath, gridGet } from './Pathfinding';
+import { gridGet } from './Pathfinding';
 import type { GameScene } from '../scenes/GameScene';
 
 /**
@@ -33,29 +33,81 @@ export class PathingSystem {
     }
   }
 
-  /** Count how many of the 4 cardinal spawn directions can reach (px, py). */
+  /** Count how many of the 4 cardinal spawn directions can reach (px, py).
+   *  Uses a single BFS flood from the player outward (reachability is
+   *  symmetric in this grid) instead of running up to ~200 separate BFS
+   *  calls — the previous implementation tried up to 49 candidate seeds per
+   *  direction, each doing a full findPath, which made the per-frame ghost
+   *  validity check stutter when the player stood near towers. */
   countReachableDirections(px: number, py: number): number {
     const grid = this.scene.grid;
     const dist = this.scene.spawnDist;
-    const testPoints = [
+    // Region covering the player and all 4 cardinal target points + radius-3
+    // search ring + a small pad. Using a typed Uint8Array indexed by (x,y)
+    // offset so we can mark visited cells without per-cell hashing.
+    const pad = 4;
+    const minX = px - dist - pad, maxX = px + dist + pad;
+    const minY = py - dist - pad, maxY = py + dist + pad;
+    const w = maxX - minX + 1;
+    const visited = new Uint8Array(w * (maxY - minY + 1));
+    const idx = (x: number, y: number) => (y - minY) * w + (x - minX);
+
+    const queue: number[] = [];
+    let qHead = 0;
+    queue.push(idx(px, py));
+    visited[idx(px, py)] = 1;
+
+    const cardinals: [number, number][] = [[1,0],[-1,0],[0,1],[0,-1]];
+    const diagonals: [number, number][] = [[1,1],[-1,1],[1,-1],[-1,-1]];
+    while (qHead < queue.length) {
+      const cur = queue[qHead++];
+      const cx = (cur % w) + minX;
+      const cy = ((cur - (cur % w)) / w) + minY;
+      for (const [dx, dy] of cardinals) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < minX || nx > maxX || ny < minY || ny > maxY) continue;
+        const ni = idx(nx, ny);
+        if (visited[ni]) continue;
+        const nv = gridGet(grid, nx, ny);
+        if (nv >= 1 && nv !== 5) continue; // 5 = bridge, walkable
+        visited[ni] = 1;
+        queue.push(ni);
+      }
+      // Diagonal squeeze rules mirror findPath: walls (1), trees (3), water
+      // (4) on either side block; towers (2) and bridges (5) allow the gap.
+      for (const [dx, dy] of diagonals) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < minX || nx > maxX || ny < minY || ny > maxY) continue;
+        const ni = idx(nx, ny);
+        if (visited[ni]) continue;
+        const dv = gridGet(grid, nx, ny);
+        if (dv >= 1 && dv !== 5) continue;
+        const c1 = gridGet(grid, cx + dx, cy);
+        const c2 = gridGet(grid, cx, cy + dy);
+        const solid1 = c1 === 1 || c1 === 3 || c1 === 4;
+        const solid2 = c2 === 1 || c2 === 3 || c2 === 4;
+        if (solid1 || solid2 || (c1 >= 1 && c2 >= 1)) continue;
+        visited[ni] = 1;
+        queue.push(ni);
+      }
+    }
+
+    const targets = [
       { x: px, y: py - dist },
       { x: px, y: py + dist },
       { x: px - dist, y: py },
       { x: px + dist, y: py },
     ];
     let reachable = 0;
-    for (const tp of testPoints) {
+    for (const tp of targets) {
       let found = false;
       for (let r = 0; r <= 3 && !found; r++) {
         for (let dy = -r; dy <= r && !found; dy++) {
           for (let dx = -r; dx <= r && !found; dx++) {
             if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
             const sx = tp.x + dx, sy = tp.y + dy;
-            const sv = gridGet(grid, sx, sy);
-            if (sv === 0 || sv === 5) {
-              const path = findPath(grid, sx, sy, px, py);
-              if (path.length > 0) found = true;
-            }
+            if (sx < minX || sx > maxX || sy < minY || sy > maxY) continue;
+            if (visited[idx(sx, sy)]) found = true;
           }
         }
       }

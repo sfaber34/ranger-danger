@@ -28,6 +28,12 @@ export class BuildSystem {
   private lastGridOverlayCols = NaN;
   private lastGridOverlayRows = NaN;
 
+  // Cached "how many spawn directions can reach the player from where they
+  // stand right now?" — same answer for every uncached hovered tile, so we
+  // pay the BFS once per player-tile/grid-version change instead of per-cell.
+  private _beforeReach = -1;
+  private _beforeReachKey = '';
+
   constructor(private scene: GameScene) {}
 
   toggleBuild(k: BuildKind, towerKind?: TowerKind) {
@@ -311,7 +317,14 @@ export class BuildSystem {
             valid = cached;
           } else {
             const pt = scene.pathing.worldToTile(scene.player.x, scene.player.y);
-            const beforeReach = scene.pathing.countReachableDirections(pt.x, pt.y);
+            // beforeReach is identical for every uncached cell at the same
+            // player-tile + gridVersion — only afterReach varies per cell.
+            const beforeKey = `${ptKey}|${scene.gridVersion}`;
+            if (this._beforeReachKey !== beforeKey) {
+              this._beforeReachKey = beforeKey;
+              this._beforeReach = scene.pathing.countReachableDirections(pt.x, pt.y);
+            }
+            const beforeReach = this._beforeReach;
             gridSet(scene.grid, tx, ty, 1);
             const afterReach = scene.pathing.countReachableDirections(pt.x, pt.y);
             gridSet(scene.grid, tx, ty, 0);
