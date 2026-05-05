@@ -438,6 +438,14 @@ export class SpawnSystem {
       scene.hud.pushHud();
     }
 
+    // Infinite-mode boss waves are *boss-only* — no preceding enemy
+    // spawn phase. Fast-forward the wave counters so the boss-lead-in
+    // branch below kicks straight into the boss-prep countdown.
+    if (isInfinite && isBossWave && scene.waveState.waveSpawned === 0) {
+      scene.waveState.waveSpawned = waveSize;
+      scene.waveState.waveKills = waveSize;
+    }
+
     if (isBossWave && scene.waveState.waveSpawned >= waveSize) {
       const live = this.liveEnemyCount();
       const left = Math.max(live, waveSize - scene.waveState.waveKills);

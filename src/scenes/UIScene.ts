@@ -951,7 +951,13 @@ export class UIScene extends Phaser.Scene {
 
     // Wave progress bar
     this.waveBarGfx.clear();
-    if (s.bossSpawned) {
+    // Infinite boss waves spawn no enemies — there's no progress to show
+    // once the boss prep starts, so hide the bar/label then. Keep it
+    // visible during the lead-in break so the player still sees the
+    // "BOSS IN Ns" countdown.
+    const inWaveBreak = s.waveBreakUntil > 0 && s.vTime < s.waveBreakUntil;
+    const infiniteBossWave = this.difficulty === 'infinite' && s.wave % 4 === 0;
+    if (s.bossSpawned || (infiniteBossWave && !inWaveBreak)) {
       // Hide wave bar when boss is active (boss bar takes its place)
       this.waveLabel.setVisible(false);
       this.waveBarGfx.setVisible(false);
