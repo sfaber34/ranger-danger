@@ -33,7 +33,15 @@ export class CombatSystem {
         const aim = this.findBestCannonTarget(tower.x, tower.y, st.range, st.splashRadius, st.projectileSpeed);
         if (!aim) continue;
         const launchY = tower.top.y; // fire from the barrel position, not base center
-        const angle = Math.atan2(aim.y - launchY, aim.x - tower.x);
+        // Cannonball arcs visually via `vy(t) = startY + dy·t − 22·sin(t·π)`
+        // (see updateProjectiles). Tangent at the muzzle (t=0) is
+        // (dx, dy − 22π) — totalDist drops out. Aim the barrel along that
+        // tangent so the cannon points where the ball is actually heading
+        // when it leaves the bore, not straight at the target.
+        const dx = aim.x - tower.x;
+        const dy = aim.y - launchY;
+        const ARC_LIFT = 22 * Math.PI;
+        const angle = Math.atan2(dy - ARC_LIFT, dx);
         tower.top.setRotation(angle);
         if (time > tower.lastShot + st.fireRate) {
           tower.lastShot = time;
