@@ -9,7 +9,7 @@ import { Wall } from '../entities/Wall';
 import { Projectile } from '../entities/Projectile';
 import { Coin } from '../entities/Coin';
 import { Boss } from '../entities/Boss';
-import { createSparseGrid, findPath, canReachFromSpawnDirections, gridGet, gridSet, SparseGrid } from '../systems/Pathfinding';
+import { createSparseGrid, gridGet, gridSet, SparseGrid } from '../systems/Pathfinding';
 import { CoinSystem } from '../systems/CoinSystem';
 import { PathingSystem } from '../systems/PathingSystem';
 import { DepthSortSystem } from '../systems/DepthSortSystem';
