@@ -5,7 +5,7 @@ import { CFG } from '../config';
 import { Tower, TowerKind } from '../entities/Tower';
 import { Wall } from '../entities/Wall';
 import { SFX } from '../audio/sfx';
-import { canReachFromSpawnDirections, gridGet, gridSet } from './Pathfinding';
+import { gridGet, gridSet } from './Pathfinding';
 import type { GameScene, BuildKind } from '../scenes/GameScene';
 
 /**
@@ -27,6 +27,12 @@ export class BuildSystem {
   private lastGridOverlayZoom = NaN;
   private lastGridOverlayCols = NaN;
   private lastGridOverlayRows = NaN;
+
+  // Cached "how many spawn directions can reach the player from where they
+  // stand right now?" — same answer for every uncached hovered tile, so we
+  // pay the BFS once per player-tile/grid-version change instead of per-cell.
+  private _beforeReach = -1;
+  private _beforeReachKey = '';
 
   constructor(private scene: GameScene) {}
 
@@ -95,9 +101,12 @@ export class BuildSystem {
         if (gridGet(scene.grid, tx + i, ty + j) !== 0) return false;
       }
     }
-    // Temporarily block tiles and check spawn directions can still reach the player
+    // Temporarily block tiles and check spawn directions can still reach the
+    // player. PathingSystem.countReachableDirections runs a single BFS flood
+    // from the player; the legacy canReachFromSpawnDirections did up to ~200
+    // separate BFS calls per check and stalled the ghost cursor near towers.
     for (let j = 0; j < s; j++) for (let i = 0; i < s; i++) gridSet(scene.grid, tx + i, ty + j, 2);
-    const ok = canReachFromSpawnDirections(scene.grid, pt.x, pt.y, scene.spawnDist);
+    const ok = scene.pathing.countReachableDirections(pt.x, pt.y) >= 2;
     for (let j = 0; j < s; j++) for (let i = 0; i < s; i++) gridSet(scene.grid, tx + i, ty + j, 0);
     return ok;
   }
@@ -311,7 +320,14 @@ export class BuildSystem {
             valid = cached;
           } else {
             const pt = scene.pathing.worldToTile(scene.player.x, scene.player.y);
-            const beforeReach = scene.pathing.countReachableDirections(pt.x, pt.y);
+            // beforeReach is identical for every uncached cell at the same
+            // player-tile + gridVersion — only afterReach varies per cell.
+            const beforeKey = `${ptKey}|${scene.gridVersion}`;
+            if (this._beforeReachKey !== beforeKey) {
+              this._beforeReachKey = beforeKey;
+              this._beforeReach = scene.pathing.countReachableDirections(pt.x, pt.y);
+            }
+            const beforeReach = this._beforeReach;
             gridSet(scene.grid, tx, ty, 1);
             const afterReach = scene.pathing.countReachableDirections(pt.x, pt.y);
             gridSet(scene.grid, tx, ty, 0);
