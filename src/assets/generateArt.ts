@@ -102,31 +102,7 @@ export function generateAllArt(scene: Phaser.Scene) {
   // Toad glob projectile
   add(scene, 'tglob_0', makeCanvas(16, drawToadGlob('glob0')));
   add(scene, 'tglob_1', makeCanvas(16, drawToadGlob('glob1')));
-  // Wolf — PNG sprite frames (variable count). Idle pose is frame_0 of walking.
-  // No die frames yet; Enemy.hurt() destroys wolves immediately when PNGs are loaded.
-  if (scene.textures.exists('ew_walk_png_0')) {
-    const cleanCopyTex = (src: string, dst: string) => {
-      if (scene.textures.exists(dst)) scene.textures.remove(dst);
-      const srcImg = scene.textures.get(src).getSourceImage() as HTMLImageElement;
-      const c = document.createElement('canvas');
-      c.width = srcImg.width; c.height = srcImg.height;
-      c.getContext('2d')!.drawImage(srcImg, 0, 0);
-      scene.textures.addCanvas(dst, c);
-    };
-    let n = 0;
-    while (scene.textures.exists(`ew_walk_png_${n}`)) {
-      cleanCopyTex(`ew_walk_png_${n}`, `ew_move${n}`);
-      n++;
-    }
-    let m = 0;
-    while (scene.textures.exists(`ew_atk_png_${m}`)) {
-      cleanCopyTex(`ew_atk_png_${m}`, `ew_atk${m}`);
-      m++;
-    }
-    cleanCopyTex('ew_walk_png_0', 'ew_hit');
-  } else {
-    for (const f of eFrames) add(scene, `ew_${f}`, makeCanvas(32, drawEnemyWolf(f)));
-  }
+  for (const f of eFrames) add(scene, `ew_${f}`, makeCanvas(32, drawEnemyWolf(f)));
   // Bear: extract frames from sprite sheet, strip grey bg, register as textures
   extractBearFrames(scene);
   for (const f of eFrames) add(scene, `es_${f}`, makeCanvas(32, drawEnemySpider(f)));
@@ -463,19 +439,10 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('etd-die',  ['etd_die0','etd_die1','etd_die2','etd_die3'], 8, 0);
   mk('tglob-spin', ['tglob_0','tglob_1'], 8, -1);
 
-  // Wolf — frame counts are dynamic when PNG sprites are loaded.
-  {
-    let n = 0;
-    while (scene.textures.exists(`ew_move${n}`)) n++;
-    mk('ew-move', Array.from({ length: n }, (_, i) => `ew_move${i}`), 10, -1);
-    let m = 0;
-    while (scene.textures.exists(`ew_atk${m}`)) m++;
-    mk('ew-atk', Array.from({ length: m }, (_, i) => `ew_atk${i}`), 10, -1);
-  }
+  mk('ew-move', ['ew_move0','ew_move1','ew_move2','ew_move3'], 10, -1);
+  mk('ew-atk',  ['ew_atk0','ew_atk1'], 10, -1);
   mk('ew-hit',  ['ew_hit'], 10, 0);
-  if (scene.textures.exists('ew_die0')) {
-    mk('ew-die',  ['ew_die0','ew_die1','ew_die2','ew_die3'], 10, 0);
-  }
+  mk('ew-die',  ['ew_die0','ew_die1','ew_die2','ew_die3'], 10, 0);
 
   // Bear: directional animations (right-facing and left-facing)
   mk('ear-move', ['ear_move0','ear_move1','ear_move2','ear_move3','ear_move4','ear_move5','ear_move6','ear_move7'], 10, -1);

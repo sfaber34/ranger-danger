@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { CFG } from '../config';
+import { hasPngOverride } from '../assets/spriteOverrides';
 
 export type EnemyKind = 'basic' | 'heavy' | 'runner' | 'snake' | 'rat' | 'deer' | 'wolf' | 'bear' | 'spider' | 'infected_basic' | 'infected_heavy' | 'infected_runner' | 'toad' | 'crow' | 'bat' | 'dragonfly' | 'mosquito' | 'skeleton' | 'warlock' | 'golem' | 'shadow_imp' | 'castle_bat' | 'castle_rat';
 
@@ -73,7 +74,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.play('eder-move');
         break;
       case 'wolf':
-        if (scene.textures.exists('ew_walk_png_0')) {
+        if (hasPngOverride(scene, 'ew', 'move')) {
           // PNG sprites are 128×128; 0.3375 = 1.5× the size-matched 0.225 baseline (procedural was 64×64 @ 0.45).
           this.setScale(0.3375).setSize(44, 36).setOffset(42, 52);
         } else {
@@ -247,7 +248,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       if (this.rotates) this.setRotation(0);
       (this.body as Phaser.Physics.Arcade.Body).enable = false;
       // Wolf has no die frames in PNG mode — vanish on death.
-      if (this.kind === 'wolf' && this.scene.textures.exists('ew_walk_png_0')) {
+      if (this.kind === 'wolf' && hasPngOverride(this.scene, 'ew', 'move')) {
         this.destroy();
         return;
       }
