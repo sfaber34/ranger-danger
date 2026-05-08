@@ -41,6 +41,28 @@ import cannonBaseImg from '../assets/sprites/cannon_base.png';
 import cannonBase1Img from '../assets/sprites/cannon_base_1.png';
 import cannonBase2Img from '../assets/sprites/cannon_base_2.png';
 
+// Wolf PNG sprite frames — variable count, discovered at build time.
+// Files: src/assets/sprites/wolf/{walking,attacking}/frame_<N>.png
+const wolfWalkUrls = import.meta.glob(
+  '../assets/sprites/wolf/walking/frame_*.png',
+  { eager: true, query: '?url', import: 'default' }
+) as Record<string, string>;
+const wolfAtkUrls = import.meta.glob(
+  '../assets/sprites/wolf/attacking/frame_*.png',
+  { eager: true, query: '?url', import: 'default' }
+) as Record<string, string>;
+function sortFrameUrls(modules: Record<string, string>): string[] {
+  return Object.entries(modules)
+    .map(([path, url]) => {
+      const m = path.match(/frame_(\d+)\.png$/);
+      return { idx: m ? parseInt(m[1], 10) : 0, url };
+    })
+    .sort((a, b) => a.idx - b.idx)
+    .map(e => e.url);
+}
+const wolfWalkSorted = sortFrameUrls(wolfWalkUrls);
+const wolfAtkSorted = sortFrameUrls(wolfAtkUrls);
+
 // BuildKind moved to src/state/BuildState.ts. Re-exported here so existing
 // `import { BuildKind } from '../scenes/GameScene'` callers don't break.
 export type { BuildKind } from '../state/BuildState';
@@ -301,6 +323,14 @@ export class GameScene extends Phaser.Scene {
     if (!this.textures.exists('c_base_png')) this.load.image('c_base_png', cannonBaseImg);
     if (!this.textures.exists('c_base_1_png')) this.load.image('c_base_1_png', cannonBase1Img);
     if (!this.textures.exists('c_base_2_png')) this.load.image('c_base_2_png', cannonBase2Img);
+    wolfWalkSorted.forEach((url, i) => {
+      const k = `ew_walk_png_${i}`;
+      if (!this.textures.exists(k)) this.load.image(k, url);
+    });
+    wolfAtkSorted.forEach((url, i) => {
+      const k = `ew_atk_png_${i}`;
+      if (!this.textures.exists(k)) this.load.image(k, url);
+    });
   }
 
   create() {

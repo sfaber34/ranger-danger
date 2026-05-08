@@ -73,7 +73,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.play('eder-move');
         break;
       case 'wolf':
-        this.setScale(0.45).setSize(22, 18).setOffset(21, 26);
+        if (scene.textures.exists('ew_walk_png_0')) {
+          // PNG sprites are 128×128; 0.3375 = 1.5× the size-matched 0.225 baseline (procedural was 64×64 @ 0.45).
+          this.setScale(0.3375).setSize(44, 36).setOffset(42, 52);
+        } else {
+          this.setScale(0.45).setSize(22, 18).setOffset(21, 26);
+        }
         this.play('ew-move');
         break;
       case 'bear':
@@ -241,6 +246,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.setVelocity(0, 0);
       if (this.rotates) this.setRotation(0);
       (this.body as Phaser.Physics.Arcade.Body).enable = false;
+      // Wolf has no die frames in PNG mode — vanish on death.
+      if (this.kind === 'wolf' && this.scene.textures.exists('ew_walk_png_0')) {
+        this.destroy();
+        return;
+      }
       const prefix = this.dirPrefix();
       this.play(`${prefix}-die`);
       this.once('animationcomplete', () => this.destroy());
