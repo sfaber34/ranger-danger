@@ -504,8 +504,6 @@ export class CombatSystem {
     // 7) Permanent dirt crater on the ground
     this.spawnCrater(x, y, radius);
 
-    scene.cameras.main.shake(80, 0.003);
-
     // Damage all enemies in radius
     const r2 = radius * radius;
     const hitList: Enemy[] = [];
