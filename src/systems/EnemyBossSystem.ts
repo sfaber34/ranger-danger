@@ -60,9 +60,13 @@ export class EnemyBossSystem {
 
   updateEnemies(time: number, _delta: number) {
     const scene = this.scene;
-    const FAR_AI_CULL_SQ = 1100 * 1100;
-    const TELEPORT_DIST_SQ = 1500 * 1500;
     const respawnR = scene.spawnDist * CFG.tile;
+    // Cull/teleport thresholds must stay outside the spawn ring — spawnDist
+    // grows with viewport diagonal, so a hardcoded radius can fall inside
+    // the spawn ring on large screens and leave freshly-spawned enemies
+    // permanently frozen until the player walks toward them.
+    const FAR_AI_CULL_SQ = (respawnR + 200) ** 2;
+    const TELEPORT_DIST_SQ = (respawnR + 600) ** 2;
 
     scene.enemies.children.iterate((c: any) => {
       const e = c as Enemy;
