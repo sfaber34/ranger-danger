@@ -44,7 +44,7 @@ export class UIScene extends Phaser.Scene {
    *  rather than under them (would happen if drawn in GameScene since
    *  scenes layer in registration order). */
   private towerIndicators = new Map<any, { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite }>();
-  private bossIndicator: { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite } | null = null;
+  private bossIndicators = new Map<any, { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite }>();
 
   /** Speed-cycle lock state — true while the tutorial is running. Locks the
    *  speed hotbar slot, the SPACE keybind, and the new `5` keybind. */
@@ -119,7 +119,7 @@ export class UIScene extends Phaser.Scene {
     this.bossBarGfx = undefined;
     this.bossLabel = undefined;
     this.towerIndicators = new Map();
-    this.bossIndicator = null;
+    this.bossIndicators = new Map();
     // Restore speedIdx if a prior incarnation persisted it (e.g. across a
     // viewport-driven scene restart on rotation). Default to 0 for fresh runs.
     this.speedIdx = (getRegistry(this.game).get('uiSpeedIdx') as number) ?? 0;
@@ -1057,40 +1057,50 @@ export class UIScene extends Phaser.Scene {
       }
     }
 
-    // ---- Boss indicator (regular bosses + castle queen/dragon)
-    const b = game.boss;
-    if (b && b.active && !b.dying) {
-      const bossOnScreen = b.x > wv.x - margin && b.x < wv.right + margin &&
-                           b.y > wv.y - margin && b.y < wv.bottom + margin;
-      if (!this.bossIndicator) {
+    // ---- Boss indicators (primary + castle queen mid-boss + infinite secondary).
+    // During the castle queen fight, bossState.boss === bossState.midBoss, so
+    // we de-dupe by identity before drawing.
+    const bs = game.bossState;
+    const bosses: any[] = [];
+    if (bs?.boss && bs.boss.active && !bs.boss.dying) bosses.push(bs.boss);
+    if (bs?.midBoss && bs.midBoss !== bs.boss && bs.midBoss.active && !bs.midBoss.dying) bosses.push(bs.midBoss);
+    const bossesAlive = new Set(bosses);
+    for (const b of bosses) {
+      const onScreen = b.x > wv.x - margin && b.x < wv.right + margin &&
+                       b.y > wv.y - margin && b.y < wv.bottom + margin;
+      let ind = this.bossIndicators.get(b);
+      if (!ind) {
         const bg = this.add.sprite(0, 0, 'ind_boss')
           .setDepth(950).setScale(iconScale).setAlpha(0.9).setVisible(false);
         const ptr = this.add.sprite(0, 0, 'ind_ptr')
           .setDepth(950.1).setScale(iconScale).setAlpha(0.9).setVisible(false);
-        this.bossIndicator = { bg, ptr };
+        ind = { bg, ptr };
+        this.bossIndicators.set(b, ind);
       }
-      if (bossOnScreen) {
-        this.bossIndicator.bg.setVisible(false);
-        this.bossIndicator.ptr.setVisible(false);
-      } else {
-        const dx = b.x - mid.x;
-        const dy = b.y - mid.y;
-        if (dx !== 0 || dy !== 0) {
-          const sX = dx !== 0 ? (cx - pad) / Math.abs(dx) : Infinity;
-          const sY = dy !== 0 ? (cy - pad) / Math.abs(dy) : Infinity;
-          const s = Math.min(sX, sY);
-          const edgeX = cx + dx * s;
-          const edgeY = cy + dy * s;
-          const angle = Math.atan2(dy, dx);
-          this.bossIndicator.bg.setPosition(edgeX, edgeY).setVisible(true);
-          this.bossIndicator.ptr.setPosition(edgeX + Math.cos(angle) * offset, edgeY + Math.sin(angle) * offset)
-            .setRotation(angle).setVisible(true);
-        }
+      if (onScreen) {
+        ind.bg.setVisible(false);
+        ind.ptr.setVisible(false);
+        continue;
       }
-    } else if (this.bossIndicator) {
-      this.bossIndicator.bg.destroy();
-      this.bossIndicator.ptr.destroy();
-      this.bossIndicator = null;
+      const dx = b.x - mid.x;
+      const dy = b.y - mid.y;
+      if (dx === 0 && dy === 0) continue;
+      const sX = dx !== 0 ? (cx - pad) / Math.abs(dx) : Infinity;
+      const sY = dy !== 0 ? (cy - pad) / Math.abs(dy) : Infinity;
+      const s = Math.min(sX, sY);
+      const edgeX = cx + dx * s;
+      const edgeY = cy + dy * s;
+      const angle = Math.atan2(dy, dx);
+      ind.bg.setPosition(edgeX, edgeY).setVisible(true);
+      ind.ptr.setPosition(edgeX + Math.cos(angle) * offset, edgeY + Math.sin(angle) * offset)
+        .setRotation(angle).setVisible(true);
+    }
+    for (const [b, ind] of this.bossIndicators) {
+      if (!bossesAlive.has(b)) {
+        ind.bg.destroy();
+        ind.ptr.destroy();
+        this.bossIndicators.delete(b);
+      }
     }
   }
 
@@ -1404,11 +1414,8 @@ export class UIScene extends Phaser.Scene {
     // GameScene tower/boss instances which don't survive a scene restart.
     for (const [, ind] of this.towerIndicators) { ind.bg.destroy(); ind.ptr.destroy(); }
     this.towerIndicators.clear();
-    if (this.bossIndicator) {
-      this.bossIndicator.bg.destroy();
-      this.bossIndicator.ptr.destroy();
-      this.bossIndicator = null;
-    }
+    for (const [, ind] of this.bossIndicators) { ind.bg.destroy(); ind.ptr.destroy(); }
+    this.bossIndicators.clear();
     getEvents(this.game.events).off('hud');
     getEvents(this.game.events).off('game-end');
     getEvents(this.game.events).off('boss-spawn');
