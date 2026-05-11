@@ -145,7 +145,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.play('ewl-move');
         break;
       case 'golem':
-        applyEntityVisual(this, 'golem', 'move', 0.55, 30, 30, 17, 20);
+        // Wider body than other enemies — needed for the same-kind collider in
+        // GameScene to give visible spacing between golems.
+        applyEntityVisual(this, 'golem', 'move', 0.55, 50, 50, 7, 14);
         this.play('ego-move');
         break;
       case 'shadow_imp':
