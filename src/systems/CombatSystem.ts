@@ -33,14 +33,29 @@ export class CombatSystem {
         const aim = this.findBestCannonTarget(tower.x, tower.y, st.range, st.splashRadius, st.projectileSpeed);
         if (!aim) continue;
         const launchY = tower.top.y; // fire from the barrel position, not base center
-        const angle = Math.atan2(aim.y - launchY, aim.x - tower.x);
+        // Cannonball arcs visually via `vy(t) = startY + dy·t − 22·sin(t·π)`
+        // (see updateProjectiles). Tangent at the muzzle (t=0) is
+        // (dx, dy − 22π) — totalDist drops out. Aim the barrel along that
+        // tangent so the cannon points where the ball is actually heading
+        // when it leaves the bore, not straight at the target.
+        const dx = aim.x - tower.x;
+        const dy = aim.y - launchY;
+        const ARC_LIFT = 22 * Math.PI;
+        const angle = Math.atan2(dy - ARC_LIFT, dx);
         tower.top.setRotation(angle);
         if (time > tower.lastShot + st.fireRate) {
           tower.lastShot = time;
           SFX.play('cannonShoot');
           tower.top.play('cannon-top-shoot', true);
           const cScale = 0.5 + tower.level * 0.15;
-          this.spawnProjectile(tower.x, launchY, aim.x, aim.y, st.projectileSpeed, st.damage, st.splashRadius, cScale);
+          // Spawn the cannonball at the muzzle of the barrel, not the pivot
+          // — same trick the arrow tower uses with the bow tip. Cannon top
+          // has origin (0.5, 0.5) and the muzzle sits +22 source px right of
+          // origin → +11 world at scale 0.5; +13 puts the spawn just past
+          // the muzzle flash so it reads as emerging from the bore.
+          const spawnX = tower.top.x + Math.cos(angle) * 26;
+          const spawnY = tower.top.y + Math.sin(angle) * 26;
+          this.spawnProjectile(spawnX, spawnY, aim.x, aim.y, st.projectileSpeed, st.damage, st.splashRadius, cScale);
         }
       } else {
         // Arrow: shoot at nearest enemy with lead targeting
