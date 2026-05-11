@@ -219,11 +219,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (dx === 0 && dy === 0) return;
     if (dx < 0) {
       this.setFlipX(true);
-      this.setFlipY(true);
       this.setRotation(Math.atan2(-dy, -dx));
     } else {
       this.setFlipX(false);
-      this.setFlipY(false);
       this.setRotation(Math.atan2(dy, dx));
     }
   }
