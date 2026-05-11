@@ -36,19 +36,31 @@ import Phaser from 'phaser';
 // castle-rat, toad, player, plus the bosses (boss-grasslands, boss-meadow,
 // boss-infected, boss-forest, boss-river, boss-castle-q, boss-castle-d).
 //
+// DEFAULTS are applied to every character. Per-character OVERRIDES below
+// override individual fields. To turn off a default for a single character,
+// set the field explicitly in OVERRIDES.
+//
 // Examples:
-//   wolf: { pngScaleMultiplier: 1.5 }
-//   rat:  { anims: { move: { skipLast: 1, fps: 12 }, atk: { fps: 8 } } }
+//   wolf: { pngScaleMultiplier: 1.2 }                     // smaller than 1.5 default
+//   rat:  { anims: { move: { skipLast: 1 }, atk: { fps: 8 } } }
 
 type CharacterOverrides = {
   pngScaleMultiplier?: number;
   anims?: Record<string, { frameCount?: number; skipLast?: number; fps?: number }>;
 };
 
+const DEFAULTS: CharacterOverrides = {
+  pngScaleMultiplier: 1.5,
+  anims: {
+    move: { fps: 12 },
+    atk:  { fps: 12 },
+  },
+};
+
 const OVERRIDES: Record<string, CharacterOverrides> = {
-  wolf: { pngScaleMultiplier: 1.5 },
-  rat:  { anims: { move: { skipLast: 1, fps: 12 }, atk: { fps: 8 } } },
-  deer:  { pngScaleMultiplier: 1.5, anims: { move: { fps: 12 }, atk: { fps: 8 } } },
+  rat:  { anims: { move: { skipLast: 1 } } },
+  spider:  { anims: { move: { fps: 18 } } },
+  bear:  { pngScaleMultiplier: 3.0 },
 };
 
 // ============================================================================
@@ -72,6 +84,11 @@ type CharacterSpec = {
   anims: AnimSpec[];
   proceduralCanvasSize?: number;
   pngScaleMultiplier?: number;
+  // For directional characters whose left-facing render uses a second texture
+  // set (bear uses 'eal_*' alongside 'ear_*'). When set, PNG slices are also
+  // written horizontally-mirrored to keys prefixed with this value, and the
+  // matching animations ({mirrorTexPrefix}-<suffix>) are re-registered.
+  mirrorTexPrefix?: string;
 };
 
 const stdEnemyAnims = (texPrefix: string): AnimSpec[] => [
@@ -108,10 +125,10 @@ const BUILTIN: CharacterSpec[] = [
   { folder: 'shadow-imp',     texPrefix: 'esi',   anims: stdEnemyAnims('esi') },
   { folder: 'castle-bat',     texPrefix: 'ecb',   anims: stdEnemyAnims('ecb') },
   { folder: 'castle-rat',     texPrefix: 'ecrat', anims: stdEnemyAnims('ecrat') },
-  // Bear extracts 32×32 frames from bearsprites.png; right- and left-facing
-  // are exposed as separate folders so you can ship mirrored sheets.
-  { folder: 'bear-right',     texPrefix: 'ear',   anims: stdEnemyAnims('ear'), proceduralCanvasSize: 32 },
-  { folder: 'bear-left',      texPrefix: 'eal',   anims: stdEnemyAnims('eal'), proceduralCanvasSize: 32 },
+  // Bear — drop a right-facing sheet; the engine generates a mirrored copy
+  // for the left-facing texture set the bear logic uses (eal_*). Procedural
+  // bear frames are 32×32, extracted from bearsprites.png.
+  { folder: 'bear',           texPrefix: 'ear',   anims: stdEnemyAnims('ear'), proceduralCanvasSize: 32, mirrorTexPrefix: 'eal' },
   // Toad — primary motion is 'hop'. Idle derives from hop frame_0.
   { folder: 'toad', texPrefix: 'etd', anims: [
     { suffix: 'hop',  indexed: true,  indexSep: '', animKey: 'etd-hop'  },
@@ -136,19 +153,18 @@ const BUILTIN: CharacterSpec[] = [
 ];
 
 const CHARACTERS: CharacterSpec[] = BUILTIN.map(base => {
-  const ov = OVERRIDES[base.folder];
-  if (!ov) return base;
+  const ov = OVERRIDES[base.folder] ?? {};
   return {
     ...base,
-    pngScaleMultiplier: ov.pngScaleMultiplier ?? base.pngScaleMultiplier,
+    pngScaleMultiplier: ov.pngScaleMultiplier ?? DEFAULTS.pngScaleMultiplier ?? base.pngScaleMultiplier,
     anims: base.anims.map(a => {
       const animOv = ov.anims?.[a.suffix];
-      if (!animOv) return a;
+      const animDefault = DEFAULTS.anims?.[a.suffix];
       return {
         ...a,
-        frameCount: animOv.frameCount ?? a.frameCount,
-        skipLast: animOv.skipLast ?? a.skipLast,
-        fps: animOv.fps ?? a.fps,
+        frameCount: animOv?.frameCount ?? animDefault?.frameCount ?? a.frameCount,
+        skipLast:   animOv?.skipLast   ?? animDefault?.skipLast   ?? a.skipLast,
+        fps:        animOv?.fps        ?? animDefault?.fps        ?? a.fps,
       };
     }),
   };
@@ -199,6 +215,27 @@ function sliceFrame(scene: Phaser.Scene, sheetK: string, total: number, idx: num
   scene.textures.addCanvas(dst, c);
 }
 
+function sliceFrameMirrored(scene: Phaser.Scene, sheetK: string, total: number, idx: number, dst: string) {
+  const img = scene.textures.get(sheetK).getSourceImage() as HTMLImageElement;
+  const frameW = img.width / total;
+  const frameH = img.height;
+  const c = document.createElement('canvas');
+  c.width = Math.round(frameW);
+  c.height = frameH;
+  const ctx = c.getContext('2d')!;
+  ctx.translate(c.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(img, idx * frameW, 0, frameW, frameH, 0, 0, c.width, c.height);
+  if (scene.textures.exists(dst)) scene.textures.remove(dst);
+  scene.textures.addCanvas(dst, c);
+}
+
+function mirrorCanonicalKey(c: CharacterSpec, spec: AnimSpec, i: number): string {
+  return spec.indexed
+    ? `${c.mirrorTexPrefix}_${spec.suffix}${spec.indexSep}${i}`
+    : `${c.mirrorTexPrefix}_${spec.suffix}`;
+}
+
 export function loadSpriteOverrides(scene: Phaser.Scene) {
   for (const c of CHARACTERS) {
     for (const a of c.anims) {
@@ -227,9 +264,11 @@ export function applySpriteOverrides(scene: Phaser.Scene) {
       const used = Math.max(1, total - (a.skipLast ?? 0));
       if (!a.indexed) {
         sliceFrame(scene, sheet, total, 0, canonicalKey(a, c.texPrefix, 0));
+        if (c.mirrorTexPrefix) sliceFrameMirrored(scene, sheet, total, 0, mirrorCanonicalKey(c, a, 0));
       } else {
         for (let i = 0; i < used; i++) {
           sliceFrame(scene, sheet, total, i, canonicalKey(a, c.texPrefix, i));
+          if (c.mirrorTexPrefix) sliceFrameMirrored(scene, sheet, total, i, mirrorCanonicalKey(c, a, i));
         }
       }
     }
@@ -273,6 +312,24 @@ export function reregisterSpriteOverrideAnimations(scene: Phaser.Scene) {
         frameRate,
         repeat,
       });
+      if (c.mirrorTexPrefix) {
+        const mirrorAnimKey = `${c.mirrorTexPrefix}-${a.suffix}`;
+        if (scene.anims.exists(mirrorAnimKey)) {
+          const mExisting = scene.anims.get(mirrorAnimKey);
+          const mFrameRate = a.fps ?? mExisting.frameRate;
+          const mRepeat = mExisting.repeat;
+          scene.anims.remove(mirrorAnimKey);
+          const mKeys = a.indexed
+            ? Array.from({ length: used }, (_, i) => mirrorCanonicalKey(c, a, i))
+            : [mirrorCanonicalKey(c, a, 0)];
+          scene.anims.create({
+            key: mirrorAnimKey,
+            frames: mKeys.map(k => ({ key: k })),
+            frameRate: mFrameRate,
+            repeat: mRepeat,
+          });
+        }
+      }
     }
   }
 }

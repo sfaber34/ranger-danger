@@ -78,7 +78,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.play('ew-move');
         break;
       case 'bear':
-        applyEntityVisual(this, 'bear-right', 'move', 0.55, 30, 30, 17, 20);
+        applyEntityVisual(this, 'bear', 'move', 0.55, 30, 30, 17, 20);
         this.play('ear-move');
         break;
       case 'spider': {
@@ -214,16 +214,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /** Set rotation from a movement vector. Sprites face right at rotation 0.
-   *  When moving left, flips X and negates the angle so the sprite never appears backwards. */
+   *  When moving left, mirror horizontally (flipX) and offset the angle by π so the
+   *  sprite faces movement direction without going belly-up — flipY is never used. */
   rotateToward(dx: number, dy: number) {
     if (dx === 0 && dy === 0) return;
+    this.setFlipY(false);
     if (dx < 0) {
       this.setFlipX(true);
-      this.setFlipY(true);
       this.setRotation(Math.atan2(-dy, -dx));
     } else {
       this.setFlipX(false);
-      this.setFlipY(false);
       this.setRotation(Math.atan2(dy, dx));
     }
   }
