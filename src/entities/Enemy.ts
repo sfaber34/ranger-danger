@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { CFG } from '../config';
+import { applyEntityVisual } from '../assets/spriteOverrides';
 
 export type EnemyKind = 'basic' | 'heavy' | 'runner' | 'snake' | 'rat' | 'deer' | 'wolf' | 'bear' | 'spider' | 'infected_basic' | 'infected_heavy' | 'infected_runner' | 'toad' | 'crow' | 'bat' | 'dragonfly' | 'mosquito' | 'skeleton' | 'warlock' | 'golem' | 'shadow_imp' | 'castle_bat' | 'castle_rat';
 
@@ -47,41 +48,41 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     switch (kind) {
       case 'basic':
-        this.setScale(0.5).setSize(24, 24).setOffset(20, 24);
+        applyEntityVisual(this, 'basic', 'move', 0.5, 24, 24, 20, 24);
         this.play('eb-move');
         break;
       case 'heavy':
-        this.setScale(0.5).setSize(32, 32).setOffset(16, 20);
+        applyEntityVisual(this, 'heavy', 'move', 0.5, 32, 32, 16, 20);
         this.play('eh-move');
         break;
       case 'runner':
-        this.setScale(0.425).setSize(20, 20).setOffset(22, 26);
+        applyEntityVisual(this, 'basic', 'move', 0.425, 20, 20, 22, 26);
         this.play('eb-move');
         this.baseTint = 0x6af078;
         this.setTint(this.baseTint);
         break;
       case 'snake':
-        this.setScale(0.5).setSize(24, 16).setOffset(16, 18);
+        applyEntityVisual(this, 'snake', 'move', 0.5, 24, 16, 16, 18);
         this.play('esnk-move');
         break;
       case 'rat':
-        this.setScale(0.45).setSize(22, 20).setOffset(20, 24);
+        applyEntityVisual(this, 'rat', 'move', 0.45, 22, 20, 20, 24);
         this.play('erat-move');
         break;
       case 'deer':
-        this.setScale(0.55).setSize(30, 28).setOffset(14, 16);
+        applyEntityVisual(this, 'deer', 'move', 0.55, 30, 28, 14, 16);
         this.play('eder-move');
         break;
       case 'wolf':
-        this.setScale(0.45).setSize(22, 18).setOffset(21, 26);
+        applyEntityVisual(this, 'wolf', 'move', 0.45, 22, 18, 21, 26);
         this.play('ew-move');
         break;
       case 'bear':
-        this.setScale(0.55).setSize(30, 30).setOffset(17, 20);
+        applyEntityVisual(this, 'bear-right', 'move', 0.55, 30, 30, 17, 20);
         this.play('ear-move');
         break;
       case 'spider': {
-        this.setScale(0.45).setSize(24, 22).setOffset(20, 24);
+        applyEntityVisual(this, 'spider', 'move', 0.45, 24, 22, 20, 24);
         this.play('es-move');
         // Random forest spider color variety
         const spiderTints = [
@@ -97,67 +98,67 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         break;
       }
       case 'infected_basic':
-        this.setScale(0.5).setSize(24, 24).setOffset(20, 24);
+        applyEntityVisual(this, 'infected-basic', 'move', 0.5, 24, 24, 20, 24);
         this.play('eib-move');
         break;
       case 'infected_heavy':
-        this.setScale(0.5).setSize(32, 32).setOffset(16, 20);
+        applyEntityVisual(this, 'infected-heavy', 'move', 0.5, 32, 32, 16, 20);
         this.play('eih-move');
         break;
       case 'infected_runner':
-        this.setScale(0.425).setSize(20, 20).setOffset(22, 26);
+        applyEntityVisual(this, 'infected-basic', 'move', 0.425, 20, 20, 22, 26);
         this.play('eib-move');
         this.baseTint = 0xe0d020; // yellow tint for infected runners
         this.setTint(this.baseTint);
         break;
       case 'toad':
-        this.setScale(0.55).setSize(28, 24).setOffset(18, 22);
+        applyEntityVisual(this, 'toad', 'hop', 0.55, 28, 24, 18, 22);
         this.play('etd-idle');
         break;
       case 'crow':
-        this.setScale(0.5).setSize(24, 24).setOffset(20, 20);
+        applyEntityVisual(this, 'crow', 'move', 0.5, 24, 24, 20, 20);
         this.play('ecr-move');
         this.flying = true;
         break;
       case 'bat':
-        this.setScale(0.5).setSize(26, 26).setOffset(19, 19);
+        applyEntityVisual(this, 'bat', 'move', 0.5, 26, 26, 19, 19);
         this.play('ebt-move');
         this.flying = true;
         break;
       case 'dragonfly':
-        this.setScale(0.45).setSize(20, 20).setOffset(22, 22);
+        applyEntityVisual(this, 'dragonfly', 'move', 0.45, 20, 20, 22, 22);
         this.play('edf-move');
         this.flying = true;
         break;
       case 'mosquito':
-        this.setScale(0.45).setSize(20, 20).setOffset(22, 22);
+        applyEntityVisual(this, 'mosquito', 'move', 0.45, 20, 20, 22, 22);
         this.play('emq-move');
         this.flying = true;
         break;
       // Castle enemies
       case 'skeleton':
-        this.setScale(0.5).setSize(24, 24).setOffset(20, 24);
+        applyEntityVisual(this, 'skeleton', 'move', 0.5, 24, 24, 20, 24);
         this.play('esk-move');
         break;
       case 'warlock':
-        this.setScale(0.5).setSize(24, 24).setOffset(20, 24);
+        applyEntityVisual(this, 'warlock', 'move', 0.5, 24, 24, 20, 24);
         this.play('ewl-move');
         break;
       case 'golem':
-        this.setScale(0.55).setSize(30, 30).setOffset(17, 20);
+        applyEntityVisual(this, 'golem', 'move', 0.55, 30, 30, 17, 20);
         this.play('ego-move');
         break;
       case 'shadow_imp':
-        this.setScale(0.45).setSize(20, 20).setOffset(22, 26);
+        applyEntityVisual(this, 'shadow-imp', 'move', 0.45, 20, 20, 22, 26);
         this.play('esi-move');
         break;
       case 'castle_bat':
-        this.setScale(0.45).setSize(20, 20).setOffset(22, 22);
+        applyEntityVisual(this, 'castle-bat', 'move', 0.45, 20, 20, 22, 22);
         this.play('ecb-move');
         this.flying = true;
         break;
       case 'castle_rat':
-        this.setScale(0.45).setSize(22, 20).setOffset(20, 24);
+        applyEntityVisual(this, 'castle-rat', 'move', 0.45, 22, 20, 20, 24);
         this.play('ecrat-move');
         break;
     }
@@ -241,9 +242,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.setVelocity(0, 0);
       if (this.rotates) this.setRotation(0);
       (this.body as Phaser.Physics.Arcade.Body).enable = false;
-      const prefix = this.dirPrefix();
-      this.play(`${prefix}-die`);
-      this.once('animationcomplete', () => this.destroy());
+      const pop = this.scene.add.sprite(this.x, this.y, 'fx_death_0').setDepth(this.depth + 0.5);
+      pop.play('fx-death');
+      pop.once('animationcomplete', () => pop.destroy());
+      this.destroy();
     }
   }
 }

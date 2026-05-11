@@ -40,6 +40,11 @@ import arrowBase2Img from '../assets/sprites/arrow_base_2.png';
 import cannonBaseImg from '../assets/sprites/cannon_base.png';
 import cannonBase1Img from '../assets/sprites/cannon_base_1.png';
 import cannonBase2Img from '../assets/sprites/cannon_base_2.png';
+import {
+  loadSpriteOverrides,
+  applySpriteOverrides,
+  reregisterSpriteOverrideAnimations,
+} from '../assets/spriteOverrides';
 
 // BuildKind moved to src/state/BuildState.ts. Re-exported here so existing
 // `import { BuildKind } from '../scenes/GameScene'` callers don't break.
@@ -301,6 +306,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.textures.exists('c_base_png')) this.load.image('c_base_png', cannonBaseImg);
     if (!this.textures.exists('c_base_1_png')) this.load.image('c_base_1_png', cannonBase1Img);
     if (!this.textures.exists('c_base_2_png')) this.load.image('c_base_2_png', cannonBase2Img);
+    loadSpriteOverrides(this);
   }
 
   create() {
@@ -309,6 +315,8 @@ export class GameScene extends Phaser.Scene {
     // Generate art on first game start (deferred from boot for instant level select)
     generateAllArt(this);
     registerAnimations(this);
+    applySpriteOverrides(this);
+    reregisterSpriteOverrideAnimations(this);
 
     // Keep FIT mode — native resolution already matches viewport
     this.scale.scaleMode = Phaser.Scale.ScaleModes.FIT;
