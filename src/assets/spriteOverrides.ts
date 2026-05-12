@@ -63,9 +63,10 @@ const OVERRIDES: Record<string, CharacterOverrides> = {
   wolf:  { anims: { move: { fps: 24 } } },
   bear:  { pngScaleMultiplier: 3.0,  anims: { move: { fps: 18 }, atk: { fps: 24 } } },
   golem:  { pngScaleMultiplier: 1.3, anims: { atk: { fps: 20 } } },
-  crow:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 16 }, atk: { fps: 16 } }  },
+  crow:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 14 }, atk: { fps: 14 } }  },
   dragonfly:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 24 }, atk: { fps: 24 } }  },
   mosquito:  { pngScaleMultiplier: 1.1 },
+  bat:  { pngScaleMultiplier: 1.2 },
 
 };
 
