@@ -69,6 +69,7 @@ const OVERRIDES: Record<string, CharacterOverrides> = {
   bat:  { pngScaleMultiplier: 1.2 },
   shadow_imp:  { anims: { move: { fps: 18 } } },
   toad:  { pngScaleMultiplier: 1.2 },
+  infected_basic:  { pngScaleMultiplier: 1.2,  anims: { atk: { fps: 22 } } },
 };
 
 // ============================================================================
