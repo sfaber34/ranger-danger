@@ -156,6 +156,12 @@ export class EnemyBossSystem {
           });
         }
 
+        // Let the attack animation finish before the hop/idle logic stomps it.
+        if (e.anims.currentAnim?.key === 'etd-atk' && e.anims.isPlaying) {
+          e.setVelocity(0, 0);
+          return true;
+        }
+
         if (td._toadHopping) {
           if (time > td._toadHopEnd) {
             td._toadHopping = false;

@@ -6,7 +6,7 @@ import Phaser from 'phaser';
 //
 // Drop a horizontal sprite sheet at src/assets/sprites/<name>/<anim>.png
 // where <name> is the enemy/character folder name (e.g. 'rat', 'wolf', 'player')
-// and <anim> is the animation suffix (move, atk, hop, shoot, hit, die, birth).
+// and <anim> is the animation suffix (move, atk, shoot, hit, die, birth).
 // Frames are auto-sliced from the sheet by assuming square frames.
 //
 // Idle is auto-derived from frame_0 of the primary motion animation.
@@ -68,6 +68,7 @@ const OVERRIDES: Record<string, CharacterOverrides> = {
   mosquito:  { pngScaleMultiplier: 1.1 },
   bat:  { pngScaleMultiplier: 1.2 },
   shadow_imp:  { anims: { move: { fps: 18 } } },
+  toad:  { pngScaleMultiplier: 1.2 },
 };
 
 // ============================================================================
@@ -136,11 +137,12 @@ const BUILTIN: CharacterSpec[] = [
   // for the left-facing texture set the bear logic uses (eal_*). Procedural
   // bear frames are 32×32, extracted from bearsprites.png.
   { folder: 'bear',           texPrefix: 'ear',   anims: stdEnemyAnims('ear'), proceduralCanvasSize: 32, mirrorTexPrefix: 'eal' },
-  // Toad — primary motion is 'hop'. Idle derives from hop frame_0.
+  // Toad — drops in as move.png (in-game animation is etd-hop). Idle derives
+  // from move frame_0.
   { folder: 'toad', texPrefix: 'etd', anims: [
-    { suffix: 'hop',  indexed: true,  indexSep: '', animKey: 'etd-hop'  },
+    { suffix: 'move', indexed: true,  indexSep: '', animKey: 'etd-hop'  },
     { suffix: 'atk',  indexed: true,  indexSep: '', animKey: 'etd-atk'  },
-    { suffix: 'idle', indexed: false, indexSep: '', animKey: 'etd-idle', derivedFrom: 'hop' },
+    { suffix: 'idle', indexed: false, indexSep: '', animKey: 'etd-idle', derivedFrom: 'move' },
   ]},
   // Player — keys use an underscore separator before the index (p_move_0, p_idle_0, etc.).
   { folder: 'player', texPrefix: 'p', anims: [

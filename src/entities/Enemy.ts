@@ -112,7 +112,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.setTint(this.baseTint);
         break;
       case 'toad':
-        applyEntityVisual(this, 'toad', 'hop', 0.55, 28, 24, 18, 22);
+        applyEntityVisual(this, 'toad', 'move', 0.55, 28, 24, 18, 22);
         this.play('etd-idle');
         break;
       case 'crow':
