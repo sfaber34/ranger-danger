@@ -58,11 +58,11 @@ const DEFAULTS: CharacterOverrides = {
 };
 
 const OVERRIDES: Record<string, CharacterOverrides> = {
-  rat:  { anims: { move: { skipLast: 1 } } },
-  spider:  { anims: { move: { fps: 18 } } },
+  rat:  { pngScaleMultiplier: 1.0, anims: { move: { skipLast: 1 } } },
+  spider:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 18 } } },
   wolf:  { anims: { move: { fps: 24 } } },
-  bear:  { pngScaleMultiplier: 3.0 },
-  golem:  { pngScaleMultiplier: 1.3, anims: { attack: { fps: 20 } } },
+  bear:  { pngScaleMultiplier: 3.0,  anims: { move: { fps: 18 }, atk: { fps: 24 } } },
+  golem:  { pngScaleMultiplier: 1.3, anims: { atk: { fps: 20 } } },
 };
 
 // ============================================================================
