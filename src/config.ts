@@ -13,7 +13,7 @@ export const CFG = {
     fireRate: 480,
     range: 240,
     projectileSpeed: 520,
-    damage: 10
+    damage: 13
   },
 
   tower: {

@@ -27,6 +27,7 @@ import { BuildState, BuildKind } from '../state/BuildState';
 import { BossState } from '../state/BossState';
 import { EndState } from '../state/EndState';
 import { RunStats } from '../state/RunStats';
+import { PlayerUpgradeState } from '../state/PlayerUpgradeState';
 import { SFX } from '../audio/sfx';
 import { generateAllArt, registerAnimations } from '../assets/generateArt';
 import { Difficulty, Biome, LEVELS } from '../levels';
@@ -121,6 +122,12 @@ export class GameScene extends Phaser.Scene {
    *  bossSpawned latch, the castlePhase enum, and infinite-mode counters.
    *  Mutate via the named transitions on BossState. */
   bossState = new BossState();
+  /** Per-level player upgrade counts. Reset in init(). Bonuses never
+   *  carry across levels — purchases only affect the active run. */
+  playerUpgrades = new PlayerUpgradeState();
+  /** Captured after difficulty-driven HP overrides in create() so max-HP
+   *  upgrades scale from the level's true base (e.g. 1 in oneHP mode). */
+  playerBaseMaxHp = CFG.player.hp;
   warlockBolts!: Phaser.Physics.Arcade.Group;
   queenOrbs!: Phaser.Physics.Arcade.Group;
   dragonFireballs!: Phaser.Physics.Arcade.Group;
@@ -225,6 +232,7 @@ export class GameScene extends Phaser.Scene {
     this.sellTimers = new Map();
     this.bossState.boss = null;
     this.bossState.bossSpawned = false;
+    this.playerUpgrades.reset();
     // (waveState.reset() above also cleared bossCountdownUntil.)
     // Clear any persisted boss state from the previous run/level.
     getRegistry(this.game).set('bossActive', false);
@@ -440,6 +448,7 @@ export class GameScene extends Phaser.Scene {
       this.player.hp = 1;
       this.player.maxHp = 1;
     }
+    this.playerBaseMaxHp = this.player.maxHp;
 
     // Generate all initial ground chunks before the game starts (no time limit)
     this.chunkSystem.generateChunksAround(0, 0);
@@ -805,7 +814,8 @@ export class GameScene extends Phaser.Scene {
     if (moving) {
       const len = Math.hypot(vx, vy);
       vx /= len; vy /= len;
-      this.player.setVelocity(vx * CFG.player.speed * speedMult, vy * CFG.player.speed * speedMult);
+      const runMult = this.playerUpgrades.multiplier('runSpeed');
+      this.player.setVelocity(vx * CFG.player.speed * speedMult * runMult, vy * CFG.player.speed * speedMult * runMult);
       if (vx !== 0) this.player.facingRight = vx > 0;
       this.player.setFlipX(!this.player.facingRight);
       if (this.player.anims.currentAnim?.key !== 'player-move') this.player.play('player-move');
@@ -842,7 +852,7 @@ export class GameScene extends Phaser.Scene {
     const nock = this.player.nockedArrow;
 
     // Find most threatening enemy — prioritizes shortest path distance, not euclidean
-    const target = this.combat.findMostThreateningEnemy(this.player.x, this.player.y, CFG.player.range);
+    const target = this.combat.findMostThreateningEnemy(this.player.x, this.player.y, CFG.player.range * this.playerUpgrades.multiplier('atkRange'));
 
     if (target) {
       // Aim bow at target
@@ -870,7 +880,7 @@ export class GameScene extends Phaser.Scene {
         this.playerStoppedAt = time;
       }
       const stoodLongEnough = !moving && this.playerStoppedAt > 0 && (time - this.playerStoppedAt) >= 400;
-      const rate = stoodLongEnough ? CFG.player.fireRate : CFG.player.fireRate * 2;
+      const rate = (stoodLongEnough ? CFG.player.fireRate : CFG.player.fireRate * 2) / this.playerUpgrades.multiplier('atkSpeed');
       if (time > this.player.lastShot + rate) {
         this.player.lastShot = time;
         SFX.play('arrowShoot');
@@ -892,7 +902,7 @@ export class GameScene extends Phaser.Scene {
         // Spawn the projectile at the nocked-arrow position so it emanates from the bow
         const spawnX = bow.x + Math.cos(bow.rotation) * 15;
         const spawnY = bow.y + Math.sin(bow.rotation) * 15;
-        this.combat.spawnProjectile(spawnX, spawnY, aimX, aimY, CFG.player.projectileSpeed, CFG.player.damage, 0, 0.5, 0, target);
+        this.combat.spawnProjectile(spawnX, spawnY, aimX, aimY, CFG.player.projectileSpeed, CFG.player.damage * this.playerUpgrades.multiplier('atkPower'), 0, 0.5, 0, target);
       }
     } else {
       // No target — bow points in the direction the player faces, held out to the side

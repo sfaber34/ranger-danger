@@ -5,6 +5,7 @@ import { CFG } from '../config';
 import { Difficulty, saveMedal, LEVELS, Biome } from '../levels';
 import { SFX } from '../audio/sfx';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
+import { UpgradePanel } from '../ui/UpgradePanel';
 import { loadInfiniteBest, saveInfiniteBest, RunStatsSnapshot } from '../state/RunStats';
 
 export class UIScene extends Phaser.Scene {
@@ -45,6 +46,8 @@ export class UIScene extends Phaser.Scene {
    *  scenes layer in registration order). */
   private towerIndicators = new Map<any, { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite }>();
   private bossIndicators = new Map<any, { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite }>();
+  private upgradePanel: UpgradePanel | null = null;
+  private upgradeBtnAnchor: { x: number; y: number; w: number; h: number } | null = null;
 
   /** Speed-cycle lock state — true while the tutorial is running. Locks the
    *  speed hotbar slot, the SPACE keybind, and the new `5` keybind. */
@@ -58,7 +61,7 @@ export class UIScene extends Phaser.Scene {
   /** Scale factor for native resolution rendering */
   private sf = 1;
   /** Scale a base-resolution value to native */
-  private p(v: number) { return v * this.sf; }
+  p(v: number) { return v * this.sf; }
   /** Convert a 1-indexed cumulative wave number into the display number
    *  shown to the player. In infinite mode, every 4th wave is a boss
    *  event that doesn't get a number — so the visible sequence reads
@@ -96,7 +99,7 @@ export class UIScene extends Phaser.Scene {
     g.fillRect(+p(1.1), p(1.7), p(0.3), p(1.5));
   }
   /** Build a font-size string at scaled resolution */
-  private fs(px: number) { return `${Math.round(px * this.sf)}px`; }
+  fs(px: number) { return `${Math.round(px * this.sf)}px`; }
   /** Design-space width (canvas divided by uiScale) — how many base units of
    *  horizontal room the UI has. Elements sized in base units must fit inside
    *  this number or they overflow the canvas. */
@@ -170,6 +173,23 @@ export class UIScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: this.fs(15), fontStyle: 'bold', color: '#ffd84a',
       stroke: '#0b0f1a', strokeThickness: this.p(3),
     }).setOrigin(1, 0.5);
+
+    // Upgrades button — sits directly to the left of the money badge.
+    const upgW = this.p(96), upgH = this.p(26), upgR = this.p(6);
+    const upgX = gbX - this.p(6) - upgW, upgY = coinY - upgH / 2;
+    const upgGfx = this.add.graphics();
+    upgGfx.fillStyle(0x0b0f1a, 0.85);
+    upgGfx.fillRoundedRect(upgX, upgY, upgW, upgH, upgR);
+    upgGfx.lineStyle(this.p(1.5), 0x6cd47a, 0.7);
+    upgGfx.strokeRoundedRect(upgX, upgY, upgW, upgH, upgR);
+    this.add.text(upgX + upgW / 2, coinY, '▲ UPGRADES', {
+      fontFamily: 'monospace', fontSize: this.fs(11), fontStyle: 'bold', color: '#dfffe8',
+      stroke: '#0b0f1a', strokeThickness: this.p(2),
+    }).setOrigin(0.5);
+    this.add.rectangle(upgX + upgW / 2, coinY, upgW, upgH, 0x000000, 0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.openUpgradePanel());
+    this.upgradeBtnAnchor = { x: upgX, y: upgY, w: upgW, h: upgH };
 
     // Bottom-center minimal hotbar (#7 style — slots with labels below)
     const slotSize = this.p(48);
@@ -1000,6 +1020,20 @@ export class UIScene extends Phaser.Scene {
     this.updateIndicators();
   }
 
+  /** Open the player-upgrade panel, pausing GameScene physics while it's
+   *  visible so the player can shop without being shot. No-op while the
+   *  game-over panel is up or another upgrade panel is already open. */
+  private openUpgradePanel() {
+    if (this.upgradePanel || !this.upgradeBtnAnchor) return;
+    const game = this.scene.get('Game') as any;
+    if (!game || !game.player || game.endState?.gameOver) return;
+    game.physics?.pause();
+    this.upgradePanel = new UpgradePanel(this, game, this.upgradeBtnAnchor, () => {
+      game.physics?.resume();
+      this.upgradePanel = null;
+    });
+  }
+
   private updateIndicators() {
     const game = this.scene.get('Game') as any;
     if (!game || !game.cameras?.main || !game.towers) return;
@@ -1416,6 +1450,7 @@ export class UIScene extends Phaser.Scene {
     this.towerIndicators.clear();
     for (const [, ind] of this.bossIndicators) { ind.bg.destroy(); ind.ptr.destroy(); }
     this.bossIndicators.clear();
+    if (this.upgradePanel) { this.upgradePanel.close(); this.upgradePanel = null; }
     getEvents(this.game.events).off('hud');
     getEvents(this.game.events).off('game-end');
     getEvents(this.game.events).off('boss-spawn');
