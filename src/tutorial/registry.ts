@@ -17,6 +17,7 @@ import { gameCollect60 } from './steps/gameCollect60';
 import { gameClickTower } from './steps/gameClickTower';
 import { gameUpgradeTower } from './steps/gameUpgradeTower';
 import { gameDeselectTower } from './steps/gameDeselectTower';
+import { gameSpeed } from './steps/gameSpeed';
 import { gameDone } from './steps/gameDone';
 
 /**
@@ -51,6 +52,7 @@ export function buildStepRegistry(): Map<TutorialStepName, Step> {
   reg.set('game_click_tower', gameClickTower);
   reg.set('game_upgrade_tower', gameUpgradeTower);
   reg.set('game_deselect_tower', gameDeselectTower);
+  reg.set('game_speed', gameSpeed);
   reg.set('game_done', gameDone);
 
   return reg;

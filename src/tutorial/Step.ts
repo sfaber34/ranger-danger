@@ -25,6 +25,7 @@ export type TutorialStepName =
   | 'game_click_tower'
   | 'game_upgrade_tower'
   | 'game_deselect_tower'
+  | 'game_speed'
   | 'game_done'
   | 'complete';
 
