@@ -31,9 +31,9 @@ import Phaser from 'phaser';
 //                                procedural keeps its tuned rate).
 //
 // Names that work in OVERRIDES match the sprite-folder names: basic, heavy,
-// snake, rat, deer, wolf, bear, spider, infected-basic, infected-heavy, crow,
-// bat, dragonfly, mosquito, skeleton, warlock, golem, shadow-imp, castle-bat,
-// castle-rat, toad, player, plus the bosses (boss-grasslands, boss-meadow,
+// snake, rat, deer, wolf, bear, spider, infected_basic, infected_heavy, crow,
+// bat, dragonfly, mosquito, skeleton, warlock, golem, shadow_imp, castle_bat,
+// castle_rat, toad, player, plus the bosses (boss-grasslands, boss-meadow,
 // boss-infected, boss-forest, boss-river, boss-castle-q, boss-castle-d).
 //
 // DEFAULTS are applied to every character. Per-character OVERRIDES below
@@ -67,7 +67,7 @@ const OVERRIDES: Record<string, CharacterOverrides> = {
   dragonfly:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 24 }, atk: { fps: 24 } }  },
   mosquito:  { pngScaleMultiplier: 1.1 },
   bat:  { pngScaleMultiplier: 1.2 },
-
+  shadow_imp:  { anims: { move: { fps: 18 } } },
 };
 
 // ============================================================================
@@ -120,8 +120,8 @@ const BUILTIN: CharacterSpec[] = [
   { folder: 'deer',           texPrefix: 'eder',  anims: stdEnemyAnims('eder') },
   { folder: 'wolf',           texPrefix: 'ew',    anims: stdEnemyAnims('ew') },
   { folder: 'spider',         texPrefix: 'es',    anims: stdEnemyAnims('es') },
-  { folder: 'infected-basic', texPrefix: 'eib',   anims: stdEnemyAnims('eib') },
-  { folder: 'infected-heavy', texPrefix: 'eih',   anims: stdEnemyAnims('eih') },
+  { folder: 'infected_basic', texPrefix: 'eib',   anims: stdEnemyAnims('eib') },
+  { folder: 'infected_heavy', texPrefix: 'eih',   anims: stdEnemyAnims('eih') },
   { folder: 'crow',           texPrefix: 'ecr',   anims: stdEnemyAnims('ecr') },
   { folder: 'bat',            texPrefix: 'ebt',   anims: stdEnemyAnims('ebt') },
   { folder: 'dragonfly',      texPrefix: 'edf',   anims: stdEnemyAnims('edf') },
@@ -129,9 +129,9 @@ const BUILTIN: CharacterSpec[] = [
   { folder: 'skeleton',       texPrefix: 'esk',   anims: stdEnemyAnims('esk') },
   { folder: 'warlock',        texPrefix: 'ewl',   anims: stdEnemyAnims('ewl') },
   { folder: 'golem',          texPrefix: 'ego',   anims: stdEnemyAnims('ego') },
-  { folder: 'shadow-imp',     texPrefix: 'esi',   anims: stdEnemyAnims('esi') },
-  { folder: 'castle-bat',     texPrefix: 'ecb',   anims: stdEnemyAnims('ecb') },
-  { folder: 'castle-rat',     texPrefix: 'ecrat', anims: stdEnemyAnims('ecrat') },
+  { folder: 'shadow_imp',     texPrefix: 'esi',   anims: stdEnemyAnims('esi') },
+  { folder: 'castle_bat',     texPrefix: 'ecb',   anims: stdEnemyAnims('ecb') },
+  { folder: 'castle_rat',     texPrefix: 'ecrat', anims: stdEnemyAnims('ecrat') },
   // Bear — drop a right-facing sheet; the engine generates a mirrored copy
   // for the left-facing texture set the bear logic uses (eal_*). Procedural
   // bear frames are 32×32, extracted from bearsprites.png.
