@@ -75,6 +75,7 @@ export interface EventMap {
   'tutorial-tower-selected': [];
   'tutorial-tower-upgraded': [];
   'tutorial-tower-deselected': [];
+  'tutorial-speed-unlocked': [];
   'tutorial-finished': [];
 }
 

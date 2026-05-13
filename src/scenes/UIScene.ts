@@ -48,6 +48,8 @@ export class UIScene extends Phaser.Scene {
   private bossIndicators = new Map<any, { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite }>();
   private upgradePanel: UpgradePanel | null = null;
   private upgradeBtnAnchor: { x: number; y: number; w: number; h: number } | null = null;
+  private upgradesLocked = false;
+  private upgradesLockOverlay: Phaser.GameObjects.Graphics | null = null;
 
   /** Speed-cycle lock state — true while the tutorial is running. Locks the
    *  speed hotbar slot, the SPACE keybind, and the new `5` keybind. */
@@ -190,6 +192,14 @@ export class UIScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.openUpgradePanel());
     this.upgradeBtnAnchor = { x: upgX, y: upgY, w: upgW, h: upgH };
+
+    // Lock the UPGRADES button during the tutorial — paired with the
+    // speed-slot lock above. The `tutorial-finished` listener tears the
+    // overlay back off and clears the flag.
+    this.upgradesLocked = !!getRegistry(this.game).get('tutorialActive');
+    if (this.upgradesLocked) {
+      this.upgradesLockOverlay = this.buildUpgradesLockOverlay();
+    }
 
     // Bottom-center minimal hotbar (#7 style — slots with labels below)
     const slotSize = this.p(48);
@@ -370,13 +380,29 @@ export class UIScene extends Phaser.Scene {
     getEvents(this.game.events).on('boss-spawn', (s: any) => this.showBossBar(s));
     getEvents(this.game.events).on('boss-hp', (s: any) => this.updateBossBar(s));
     getEvents(this.game.events).on('boss-died', () => this.hideBossBar());
-    // Tutorial wrapped — drop the speed-slot lock. The earlier game_speed
-    // step already explained the slot, so no toast is needed here.
+    // game_speed tutorial step fires this so the player can press the
+    // speed slot while reading its prompt (the broader UPGRADES lock
+    // stays on until tutorial-finished).
+    getEvents(this.game.events).on('tutorial-speed-unlocked', () => {
+      this.speedLocked = false;
+      if (this.speedLockOverlay) {
+        this.speedLockOverlay.destroy();
+        this.speedLockOverlay = null;
+      }
+    });
+    // Tutorial wrapped — drop the UPGRADES lock (speed already unlocked
+    // a step earlier). Also a safety net for the speed slot in case a
+    // skip-path bypassed game_speed entirely.
     getEvents(this.game.events).on('tutorial-finished', () => {
       this.speedLocked = false;
       if (this.speedLockOverlay) {
         this.speedLockOverlay.destroy();
         this.speedLockOverlay = null;
+      }
+      this.upgradesLocked = false;
+      if (this.upgradesLockOverlay) {
+        this.upgradesLockOverlay.destroy();
+        this.upgradesLockOverlay = null;
       }
     });
     getEvents(this.game.events).on('build-error', (msg: string) => {
@@ -1027,7 +1053,7 @@ export class UIScene extends Phaser.Scene {
    *  visible so the player can shop without being shot. No-op while the
    *  game-over panel is up or another upgrade panel is already open. */
   private openUpgradePanel() {
-    if (this.upgradePanel || !this.upgradeBtnAnchor) return;
+    if (this.upgradePanel || !this.upgradeBtnAnchor || this.upgradesLocked) return;
     const game = this.scene.get('Game') as any;
     if (!game || !game.player || game.endState?.gameOver) return;
     game.physics?.pause();
@@ -1035,6 +1061,17 @@ export class UIScene extends Phaser.Scene {
       game.physics?.resume();
       this.upgradePanel = null;
     });
+  }
+
+  /** Dim overlay sized for the rectangular UPGRADES button — signals the
+   *  button is inactive during the tutorial without the padlock icon
+   *  (which read as confusing against the rectangular shape). */
+  private buildUpgradesLockOverlay(): Phaser.GameObjects.Graphics {
+    const a = this.upgradeBtnAnchor!;
+    const g = this.add.graphics().setDepth(50);
+    g.fillStyle(0x000000, 0.6);
+    g.fillRoundedRect(a.x, a.y, a.w, a.h, this.p(6));
+    return g;
   }
 
   private updateIndicators() {
@@ -1441,6 +1478,7 @@ export class UIScene extends Phaser.Scene {
     getEvents(this.game.events).off('boss-hp');
     getEvents(this.game.events).off('boss-died');
     getEvents(this.game.events).off('tutorial-finished');
+    getEvents(this.game.events).off('tutorial-speed-unlocked');
     getEvents(this.game.events).off('build-error');
     getEvents(this.game.events).off('build-mode');
   }
