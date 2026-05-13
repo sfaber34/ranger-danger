@@ -68,6 +68,20 @@ export class EnemyBossSystem {
     const FAR_AI_CULL_SQ = (respawnR + 200) ** 2;
     const TELEPORT_DIST_SQ = (respawnR + 600) ** 2;
 
+    // Count alive enemies once so we can detect "stragglers phase" and
+    // bypass perf cull / unwedge stuck movers. With a handful left and
+    // no new spawns drawing the player around, a frozen straggler stalls
+    // the wave indefinitely.
+    let liveCount = 0;
+    scene.enemies.children.iterate((c: any) => {
+      const e = c as Enemy;
+      if (e && e.active && !e.dying) liveCount++;
+      return true;
+    });
+    const stragglersPhase = liveCount > 0 && liveCount <= 3;
+    const STUCK_TELEPORT_MS = 3000;
+    const MOVING_SPEED_THRESH = 5;
+
     scene.enemies.children.iterate((c: any) => {
       const e = c as Enemy;
       if (!e || !e.active || e.dying) return true;
@@ -77,6 +91,16 @@ export class EnemyBossSystem {
       const prefix = e.dirPrefix();
       const dist2 = (tx - e.x) ** 2 + (ty - e.y) ** 2;
 
+      // Initialize / refresh "last actually moving" timestamp. Done before
+      // any early-return so newly-spawned enemies don't read as "stuck for
+      // the entire vTime so far" on their first iteration.
+      if (e.lastMovingAt === 0) e.lastMovingAt = time;
+      const body = e.body as Phaser.Physics.Arcade.Body | null;
+      if (body) {
+        const speedNow = Math.hypot(body.velocity.x, body.velocity.y);
+        if (speedNow > MOVING_SPEED_THRESH) e.lastMovingAt = time;
+      }
+
       if (dist2 > TELEPORT_DIST_SQ) {
         const dx = e.x - tx, dy = e.y - ty;
         const inv = 1 / Math.sqrt(dx * dx + dy * dy);
@@ -84,11 +108,31 @@ export class EnemyBossSystem {
         if (e.body && (e.body as any).enable) e.setVelocity(0, 0);
         e.path = [];
         e.pathIdx = 0;
+        e.lastMovingAt = time;
         return true;
       }
 
-      if (dist2 > FAR_AI_CULL_SQ) {
+      // Skip the perf cull during stragglers phase so the last few
+      // enemies always run AI and head for the player.
+      if (dist2 > FAR_AI_CULL_SQ && !stragglersPhase) {
         if (e.body && (e.body as any).enable) e.setVelocity(0, 0);
+        return true;
+      }
+
+      // Stragglers wedged behind terrain (path keeps returning empty) or
+      // pinned by the cull edge case: teleport to the spawn ring along
+      // their current bearing so the wave can resolve. Skip kinds that
+      // intentionally stand still (toad between hops, warlock standoff,
+      // any flying kind that can't get terrain-wedged).
+      const skipsStuckCheck = e.kind === 'toad' || e.kind === 'warlock' || e.flying;
+      if (stragglersPhase && !skipsStuckCheck && time - e.lastMovingAt > STUCK_TELEPORT_MS) {
+        const dx = e.x - tx, dy = e.y - ty;
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        e.setPosition(tx + (dx / d) * respawnR, ty + (dy / d) * respawnR);
+        if (e.body && (e.body as any).enable) e.setVelocity(0, 0);
+        e.path = [];
+        e.pathIdx = 0;
+        e.lastMovingAt = time;
         return true;
       }
 

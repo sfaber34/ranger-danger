@@ -21,6 +21,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   noCoinDrop = false; // boss-spawned enemies don't drop coins
   targetRef: any = null; // current target object (player, tower, wall)
   facing: 'r' | 'l' = 'r'; // directional facing for bear
+  /** vTime of the last frame this enemy was actually moving. Used by the
+   *  stragglers-phase stuck-teleport in EnemyBossSystem to unwedge the
+   *  last enemy or two when terrain blocks the path or the AI cull
+   *  freezes them off-screen. 0 = uninitialized; set on first iteration. */
+  lastMovingAt = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number, kind: EnemyKind) {
     const dataMap: Record<EnemyKind, typeof CFG.enemy.basic> = {
