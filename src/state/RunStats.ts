@@ -17,7 +17,7 @@ export interface RunStatsSnapshot {
   timeSurvived: number;
 }
 
-const STORAGE_KEY = 'td_infinite_scores';
+const STORAGE_KEY = 'td_endless_scores';
 
 type ScoreStore = Record<string, RunStatsSnapshot>;
 
@@ -39,7 +39,7 @@ function writeStore(store: ScoreStore): void {
 }
 
 /** Best run for `levelId`, or null if no run was ever saved. */
-export function loadInfiniteBest(levelId: number): RunStatsSnapshot | null {
+export function loadEndlessBest(levelId: number): RunStatsSnapshot | null {
   return loadStore()[String(levelId)] ?? null;
 }
 
@@ -47,7 +47,7 @@ export function loadInfiniteBest(levelId: number): RunStatsSnapshot | null {
  *  — each metric tracks its own all-time best, so a long run with poor
  *  damage doesn't wipe a short run's better damage record. Returns the
  *  set of metric keys this run set a new record on. */
-export function saveInfiniteBest(levelId: number, run: RunStatsSnapshot): Set<string> {
+export function saveEndlessBest(levelId: number, run: RunStatsSnapshot): Set<string> {
   const store = loadStore();
   const key = String(levelId);
   const prev = store[key];
@@ -92,7 +92,7 @@ export function saveInfiniteBest(levelId: number, run: RunStatsSnapshot): Set<st
 }
 
 /**
- * Per-run telemetry counters. Used by infinite mode to populate the
+ * Per-run telemetry counters. Used by endless mode to populate the
  * death screen and to compare against the persisted best-run snapshot.
  *
  * All counters reset to 0 on every level start (init) — this is a
@@ -104,7 +104,7 @@ export class RunStats {
   wavesCleared = 0;
 
   /** Total bosses defeated (sum of bossesByKind). Mirrors
-   *  bossState.infiniteBossesCleared. */
+   *  bossState.endlessBossesCleared. */
   bossesKilled = 0;
 
   /** Per-kind boss kill breakdown. Keys match the boss "title" buckets:

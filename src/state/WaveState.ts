@@ -60,12 +60,12 @@ export class WaveState {
   }
 
   /**
-   * Infinite-mode boss-cycle reset. Wave counter is cumulative across
+   * Endless-mode boss-cycle reset. Wave counter is cumulative across
    * cycles (so the displayed wave number keeps climbing), but spawn/kill
    * counters and the boss-prep timer reset for the next 3-waves-plus-boss
    * cycle.
    */
-  enterNextInfiniteCycle(now: number, breakMs: number) {
+  enterNextEndlessCycle(now: number, breakMs: number) {
     this.wave++;
     this.waveSpawned = 0;
     this.waveKills = 0;

@@ -1,4 +1,4 @@
-export type Difficulty = 'easy' | 'medium' | 'hard' | 'oneHP' | 'infinite';
+export type Difficulty = 'easy' | 'medium' | 'hard' | 'oneHP' | 'endless';
 export type Biome = 'grasslands' | 'forest' | 'infected' | 'river' | 'castle' | 'desert' | 'tundra' | 'volcanic';
 
 export interface LevelDef {
@@ -43,10 +43,10 @@ export const LEVELS: LevelDef[] = [
   { id: 14, name: "Dragon's Maw",  biome: 'volcanic',   x: 870, y: 420, connectsTo: [],     unlockCost: 34, implemented: false },
 ];
 
-export const DIFFICULTY_ORDER: Difficulty[] = ['easy', 'medium', 'hard', 'oneHP', 'infinite'];
+export const DIFFICULTY_ORDER: Difficulty[] = ['easy', 'medium', 'hard', 'oneHP', 'endless'];
 
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
-  easy: 'Easy', medium: 'Medium', hard: 'Hard', oneHP: '1 HP', infinite: 'Infinite'
+  easy: 'Easy', medium: 'Medium', hard: 'Hard', oneHP: '1 HP', endless: 'Endless'
 };
 
 export const MEDAL_COLORS: Record<Difficulty, { label: string; fill: number; hex: string }> = {
@@ -54,9 +54,9 @@ export const MEDAL_COLORS: Record<Difficulty, { label: string; fill: number; hex
   medium:  { label: 'Silver',  fill: 0xc8d0d8, hex: '#c8d0d8' },
   hard:    { label: 'Gold',    fill: 0xffd84a, hex: '#ffd84a' },
   oneHP:   { label: 'Diamond', fill: 0x7cc4ff, hex: '#7cc4ff' },
-  // No medal awarded for Infinite — entry exists so DIFFICULTY-keyed
-  // Records type-check. The infinite mode tracks high scores instead.
-  infinite: { label: 'Endless', fill: 0xc040c0, hex: '#c040c0' },
+  // No medal awarded for Endless — entry exists so DIFFICULTY-keyed
+  // Records type-check. The endless mode tracks high scores instead.
+  endless: { label: 'Endless', fill: 0xc040c0, hex: '#c040c0' },
 };
 
 export const BIOME_COLORS: Record<Biome, { fill: number; label: string; textHex: string }> = {
@@ -83,12 +83,12 @@ export function loadMedals(): MedalStore {
 }
 
 export function saveMedal(levelId: number, diff: Difficulty): void {
-  // Infinite is an endless mode — winning isn't possible, no medal awarded.
-  // High scores for infinite live in their own localStorage namespace.
-  if (diff === 'infinite') return;
+  // Endless mode has no win condition — no medal awarded. High scores
+  // for endless live in their own localStorage namespace.
+  if (diff === 'endless') return;
   const store = loadMedals();
   const key = String(levelId);
-  if (!store[key]) store[key] = { easy: false, medium: false, hard: false, oneHP: false, infinite: false };
+  if (!store[key]) store[key] = { easy: false, medium: false, hard: false, oneHP: false, endless: false };
   store[key][diff] = true;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
   // Engaged player just earned progress — ask the browser to mark this

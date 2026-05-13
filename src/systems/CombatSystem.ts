@@ -142,10 +142,10 @@ export class CombatSystem {
       candidates.push({ px, py });
       return true;
     });
-    // Also consider the boss(es). Infinite mode's double-boss events
+    // Also consider the boss(es). Endless mode's double-boss events
     // stash the secondary in midBoss, so cannons can lead-target either.
     const bossesToCheck: (Boss | null)[] = [scene.bossState.boss];
-    if (scene.difficulty === 'infinite' && scene.bossState.midBoss && scene.bossState.midBoss !== scene.bossState.boss) {
+    if (scene.difficulty === 'endless' && scene.bossState.midBoss && scene.bossState.midBoss !== scene.bossState.boss) {
       bossesToCheck.push(scene.bossState.midBoss);
     }
     for (const bb of bossesToCheck) {
@@ -196,7 +196,7 @@ export class CombatSystem {
       const d = (scene.bossState.boss.x - x) ** 2 + (scene.bossState.boss.y - y) ** 2;
       if (d < bestD) { bestD = d; best = scene.bossState.boss; }
     }
-    if (scene.difficulty === 'infinite' && scene.bossState.midBoss && scene.bossState.midBoss !== scene.bossState.boss
+    if (scene.difficulty === 'endless' && scene.bossState.midBoss && scene.bossState.midBoss !== scene.bossState.boss
         && scene.bossState.midBoss.active && !scene.bossState.midBoss.dying) {
       const d = (scene.bossState.midBoss.x - x) ** 2 + (scene.bossState.midBoss.y - y) ** 2;
       if (d < bestD) { bestD = d; best = scene.bossState.midBoss; }
@@ -227,7 +227,7 @@ export class CombatSystem {
       return true;
     });
     const bossesToCheck: (Boss | null)[] = [scene.bossState.boss];
-    if (scene.difficulty === 'infinite' && scene.bossState.midBoss && scene.bossState.midBoss !== scene.bossState.boss) {
+    if (scene.difficulty === 'endless' && scene.bossState.midBoss && scene.bossState.midBoss !== scene.bossState.boss) {
       bossesToCheck.push(scene.bossState.midBoss);
     }
     for (const bb of bossesToCheck) {
@@ -318,7 +318,7 @@ export class CombatSystem {
     spark.play('fx-hit');
     spark.once('animationcomplete', () => spark.destroy());
     pr.destroy();
-    // Only the primary boss drives the top HUD bar — otherwise infinite-
+    // Only the primary boss drives the top HUD bar — otherwise endless-
     // mode double-boss events flicker the bar between two HP values as
     // hits land on each. Each boss still gets its own in-world bar via
     // Boss.drawHpBar().
@@ -327,7 +327,7 @@ export class CombatSystem {
       getRegistry(scene.game).set('bossHp', b.hp);
     }
     if (b.dying) {
-      // bossActive only flips off when the primary dies — for infinite
+      // bossActive only flips off when the primary dies — for endless
       // doubles we still want the HUD to show the secondary's HP via
       // its in-world bar; the primary bar hides at this moment.
       if (b === scene.bossState.boss) getRegistry(scene.game).set('bossActive', false);

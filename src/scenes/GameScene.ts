@@ -119,7 +119,7 @@ export class GameScene extends Phaser.Scene {
   sellTimers = new Map<Tower | Wall, { startTime: number; duration: number; gfx: Phaser.GameObjects.Graphics }>();
 
   /** Boss-fight state machine — primary/secondary boss refs, the
-   *  bossSpawned latch, the castlePhase enum, and infinite-mode counters.
+   *  bossSpawned latch, the castlePhase enum, and endless-mode counters.
    *  Mutate via the named transitions on BossState. */
   bossState = new BossState();
   /** Per-level player upgrade counts. Reset in init(). Bonuses never
@@ -142,17 +142,17 @@ export class GameScene extends Phaser.Scene {
    *  endState.gameOver and endState.dying. */
   endState = new EndState();
   /** Per-run stat counters — populated by callsites throughout the
-   *  systems and rendered on the infinite-mode death screen. */
+   *  systems and rendered on the endless-mode death screen. */
   runStats = new RunStats();
   levelId = 1;
   difficulty: Difficulty = 'easy';
-  // (Infinite-mode counters live on bossState now: infiniteBossesCleared,
-  // infiniteResetUntil. They never reset within a run; the cycle reset
+  // (Endless-mode counters live on bossState now: endlessBossesCleared,
+  // endlessResetUntil. They never reset within a run; the cycle reset
   // restarts wave state but leaves the cumulative count alone.)
   biome: Biome = 'grasslands';
   enemyHpMult = 1;
   enemySpeedMult = 1;
-  // Per-enemy damage multiplier. Stays at 1 in campaign modes; infinite
+  // Per-enemy damage multiplier. Stays at 1 in campaign modes; endless
   // mode compounds it 1.05× per boss cleared via EndSystem.
   enemyDmgMult = 1;
   levelRampFactor = CFG.spawn.rampFactor;
@@ -261,8 +261,8 @@ export class GameScene extends Phaser.Scene {
     this.bossState.castlePhase = 0;
     this.bossState.midBoss = null;
     this.bossState.midBossDefeated = false;
-    this.bossState.infiniteBossesCleared = 0;
-    this.bossState.infiniteResetUntil = 0;
+    this.bossState.endlessBossesCleared = 0;
+    this.bossState.endlessResetUntil = 0;
     // (CoinSystem owns its own fx-pop pool now — fresh instance per
     // create() means no stale-sprite carryover across level transitions.)
     this.nextQueenTeleport = 0;
@@ -334,7 +334,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.resume();
     this.anims.resumeAll();
 
-    // Infinite world — no physics bounds, no camera bounds
+    // Endless world — no physics bounds, no camera bounds
     this.physics.world.setBounds(-1e6, -1e6, 2e6, 2e6);
     this.physics.world.setBoundsCollision(false);
 
