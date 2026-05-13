@@ -414,7 +414,7 @@ export class EnemyBossSystem {
       b.state = 'charging';
       b.stateEnd = time + 1000;
       b.setVelocity(b.chargeDirX * 320, b.chargeDirY * 320);
-      b.play(`${ap}-move`);
+      b.play(`${ap}-dash`);
       this.spawnChargeSmoke(b, 3);
       b.lastSmoke = time;
     } else if (b.state === 'charging' && time >= b.stateEnd) {
@@ -542,7 +542,8 @@ export class EnemyBossSystem {
       b.state = 'charge_wind';
       b.stateEnd = time + 1200;
       b.setVelocity(0, 0);
-      b.play(`${ap}-chargewind`);
+      const windAnim = `${ap}-windup`;
+      b.play(scene.anims.exists(windAnim) ? windAnim : `${ap}-chargewind`);
       return;
     }
     if (!isCastleBoss && scene.biome !== 'grasslands' && time >= b.nextBoulder && onScreen) {

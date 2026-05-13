@@ -33,8 +33,9 @@ import Phaser from 'phaser';
 // Names that work in OVERRIDES match the sprite-folder names: basic, heavy,
 // snake, rat, deer, wolf, bear, spider, infected_basic, infected_heavy, crow,
 // bat, dragonfly, mosquito, skeleton, warlock, golem, shadow_imp, castle_bat,
-// castle_rat, toad, player, plus the bosses (boss-grasslands, boss-meadow,
-// boss-infected, boss-forest, boss-river, boss-castle-q, boss-castle-d).
+// castle_rat, toad, player, plus the bosses (boss_grasslands, boss_meadow,
+// boss_infected, boss_forest, boss_river, boss_castle_q, boss_castle_d).
+// Bosses only need move.png + atk.png — hit flash and death pop are programmatic.
 //
 // DEFAULTS are applied to every character. Per-character OVERRIDES below
 // override individual fields. To turn off a default for a single character,
@@ -52,8 +53,10 @@ type CharacterOverrides = {
 const DEFAULTS: CharacterOverrides = {
   pngScaleMultiplier: 1.5,
   anims: {
-    move: { fps: 12 },
-    atk:  { fps: 12 },
+    move:   { fps: 12 },
+    atk:    { fps: 12 },
+    dash:   { fps: 24 },
+    windup: { fps: 12 },
   },
 };
 
@@ -84,10 +87,13 @@ type AnimSpec = {
   indexed: boolean;
   indexSep: string;
   animKey: string;
-  derivedFrom?: string;
+  derivedFrom?: string;        // single-frame derivation: this anim shows frame_0 of <source>.
+  derivedAllFrames?: string;   // multi-frame derivation: this anim plays all frames of <source>
+                               // (no sheet of its own; just a different fps / repeat).
   frameCount?: number;
   skipLast?: number;
   fps?: number;
+  repeat?: number;             // used when there's no procedural anim to inherit from. Default -1.
 };
 
 type CharacterSpec = {
@@ -109,12 +115,14 @@ const stdEnemyAnims = (texPrefix: string): AnimSpec[] => [
 ];
 
 const bossAnims = (texPrefix: string): AnimSpec[] => [
-  { suffix: 'move',  indexed: true,  indexSep: '', animKey: `${texPrefix}-move`  },
-  { suffix: 'atk',   indexed: true,  indexSep: '', animKey: `${texPrefix}-atk`   },
-  { suffix: 'hit',   indexed: false, indexSep: '', animKey: `${texPrefix}-hit`   },
-  { suffix: 'birth', indexed: true,  indexSep: '', animKey: `${texPrefix}-birth` },
-  { suffix: 'die',   indexed: true,  indexSep: '', animKey: `${texPrefix}-die`   },
-  { suffix: 'idle',  indexed: true,  indexSep: '', animKey: `${texPrefix}-idle`, derivedFrom: 'move' },
+  { suffix: 'move',   indexed: true, indexSep: '', animKey: `${texPrefix}-move`   },
+  { suffix: 'atk',    indexed: true, indexSep: '', animKey: `${texPrefix}-atk`    },
+  // 'windup' has no procedural counterpart — created fresh from windup.png. Loops
+  // while the boss is in the charge_wind state (~1.2 s).
+  { suffix: 'windup', indexed: true, indexSep: '', animKey: `${texPrefix}-windup`, repeat: -1 },
+  // 'dash' has no sheet — it plays the move frames at a higher fps during charges.
+  { suffix: 'dash',   indexed: true, indexSep: '', animKey: `${texPrefix}-dash`,   derivedAllFrames: 'move' },
+  { suffix: 'idle',   indexed: true, indexSep: '', animKey: `${texPrefix}-idle`,   derivedFrom: 'move' },
 ];
 
 const BUILTIN: CharacterSpec[] = [
@@ -156,13 +164,14 @@ const BUILTIN: CharacterSpec[] = [
     { suffix: 'idle',  indexed: true, indexSep: '_', animKey: 'player-idle', derivedFrom: 'move' },
   ]},
   // Bosses — chargeWind isn't overridable (its anim alternates with idle0).
-  { folder: 'boss-grasslands', texPrefix: 'boss',   anims: bossAnims('boss'),   proceduralCanvasSize: 128 },
-  { folder: 'boss-meadow',     texPrefix: 'ram',    anims: bossAnims('ram'),    proceduralCanvasSize: 128 },
-  { folder: 'boss-infected',   texPrefix: 'iboss',  anims: bossAnims('iboss'),  proceduralCanvasSize: 128 },
-  { folder: 'boss-forest',     texPrefix: 'fboss',  anims: bossAnims('fboss'),  proceduralCanvasSize: 128 },
-  { folder: 'boss-river',      texPrefix: 'rboss',  anims: bossAnims('rboss'),  proceduralCanvasSize: 128 },
-  { folder: 'boss-castle-q',   texPrefix: 'cqboss', anims: bossAnims('cqboss'), proceduralCanvasSize: 128 },
-  { folder: 'boss-castle-d',   texPrefix: 'cdboss', anims: bossAnims('cdboss'), proceduralCanvasSize: 128 },
+  // Hit flash and death pop are programmatic, so bosses only need move.png + atk.png.
+  { folder: 'boss_grasslands', texPrefix: 'boss',   anims: bossAnims('boss'),   proceduralCanvasSize: 128 },
+  { folder: 'boss_meadow',     texPrefix: 'ram',    anims: bossAnims('ram'),    proceduralCanvasSize: 128 },
+  { folder: 'boss_infected',   texPrefix: 'iboss',  anims: bossAnims('iboss'),  proceduralCanvasSize: 128 },
+  { folder: 'boss_forest',     texPrefix: 'fboss',  anims: bossAnims('fboss'),  proceduralCanvasSize: 128 },
+  { folder: 'boss_river',      texPrefix: 'rboss',  anims: bossAnims('rboss'),  proceduralCanvasSize: 128 },
+  { folder: 'boss_castle_q',   texPrefix: 'cqboss', anims: bossAnims('cqboss'), proceduralCanvasSize: 128 },
+  { folder: 'boss_castle_d',   texPrefix: 'cdboss', anims: bossAnims('cdboss'), proceduralCanvasSize: 128 },
 ];
 
 const CHARACTERS: CharacterSpec[] = BUILTIN.map(base => {
@@ -252,7 +261,7 @@ function mirrorCanonicalKey(c: CharacterSpec, spec: AnimSpec, i: number): string
 export function loadSpriteOverrides(scene: Phaser.Scene) {
   for (const c of CHARACTERS) {
     for (const a of c.anims) {
-      if (a.derivedFrom) continue;
+      if (a.derivedFrom || a.derivedAllFrames) continue;
       const url = findSheet(c.folder, a.suffix);
       if (!url) continue;
       const k = sheetKey(c.texPrefix, a.suffix);
@@ -271,6 +280,7 @@ export function applySpriteOverrides(scene: Phaser.Scene) {
         sliceFrame(scene, sourceSheet, sourceCount, 0, canonicalKey(a, c.texPrefix, 0));
         continue;
       }
+      if (a.derivedAllFrames) continue;
       const sheet = sheetKey(c.texPrefix, a.suffix);
       if (!scene.textures.exists(sheet)) continue;
       const total = inferFrameCount(scene, sheet, a.frameCount);
@@ -307,15 +317,42 @@ export function reregisterSpriteOverrideAnimations(scene: Phaser.Scene) {
         });
         continue;
       }
+      if (a.derivedAllFrames) {
+        const sourceSpec = findAnim(c, a.derivedAllFrames);
+        if (!sourceSpec) continue;
+        // Source canonical keys exist after generateAllArt/applySpriteOverrides,
+        // whether procedural or PNG-backed.
+        let n = 0;
+        while (scene.textures.exists(canonicalKey(sourceSpec, c.texPrefix, n))) n++;
+        if (n === 0) continue;
+        const used = Math.max(1, n - (sourceSpec.skipLast ?? 0));
+        const frameRate = a.fps ?? 24;
+        if (scene.anims.exists(a.animKey)) scene.anims.remove(a.animKey);
+        const keys = Array.from({ length: used }, (_, i) => canonicalKey(sourceSpec, c.texPrefix, i));
+        scene.anims.create({
+          key: a.animKey,
+          frames: keys.map(k => ({ key: k })),
+          frameRate,
+          repeat: -1,
+        });
+        continue;
+      }
       const sheet = sheetKey(c.texPrefix, a.suffix);
       if (!scene.textures.exists(sheet)) continue;
       const total = inferFrameCount(scene, sheet, a.frameCount);
       const used = Math.max(1, total - (a.skipLast ?? 0));
-      if (!scene.anims.exists(a.animKey)) continue;
-      const existing = scene.anims.get(a.animKey);
-      const frameRate = a.fps ?? existing.frameRate;
-      const repeat = existing.repeat;
-      scene.anims.remove(a.animKey);
+      let frameRate: number;
+      let repeat: number;
+      if (scene.anims.exists(a.animKey)) {
+        const existing = scene.anims.get(a.animKey);
+        frameRate = a.fps ?? existing.frameRate;
+        repeat = existing.repeat;
+        scene.anims.remove(a.animKey);
+      } else {
+        // No procedural anim to inherit from (e.g. boss windup) — create fresh.
+        frameRate = a.fps ?? 12;
+        repeat = a.repeat ?? -1;
+      }
       const keys = a.indexed
         ? Array.from({ length: used }, (_, i) => canonicalKey(a, c.texPrefix, i))
         : [canonicalKey(a, c.texPrefix, 0)];

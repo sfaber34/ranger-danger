@@ -47,6 +47,11 @@ import {
   reregisterSpriteOverrideAnimations,
 } from '../assets/spriteOverrides';
 
+// DEBUG: when true, every level skips waves and spawns its boss immediately
+// on load. Castle loads at the Phantom Queen (mid-boss). Temporary — flip to
+// false for normal play. Infinite mode is unaffected.
+const DEBUG_BOSS_RUSH = true;
+
 // BuildKind moved to src/state/BuildState.ts. Re-exported here so existing
 // `import { BuildKind } from '../scenes/GameScene'` callers don't break.
 export type { BuildKind } from '../state/BuildState';
@@ -716,6 +721,10 @@ export class GameScene extends Phaser.Scene {
         const bgmKey = (['grasslands', 'forest', 'infected', 'river', 'castle'] as const)
           .includes(this.biome as any) ? this.biome : 'castle';
         SFX.playBgm(bgmKey);
+        if (DEBUG_BOSS_RUSH && this.difficulty !== 'infinite') {
+          if (this.biome === 'castle') this.spawn.spawnCastleBoss('queen');
+          else this.spawn.spawnBoss();
+        }
       }
       return;
     }
