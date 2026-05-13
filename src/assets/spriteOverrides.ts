@@ -6,7 +6,7 @@ import Phaser from 'phaser';
 //
 // Drop a horizontal sprite sheet at src/assets/sprites/<name>/<anim>.png
 // where <name> is the enemy/character folder name (e.g. 'rat', 'wolf', 'player')
-// and <anim> is the animation suffix (move, atk, hop, shoot, hit, die, birth).
+// and <anim> is the animation suffix (move, atk, shoot, hit, die, birth).
 // Frames are auto-sliced from the sheet by assuming square frames.
 //
 // Idle is auto-derived from frame_0 of the primary motion animation.
@@ -31,9 +31,9 @@ import Phaser from 'phaser';
 //                                procedural keeps its tuned rate).
 //
 // Names that work in OVERRIDES match the sprite-folder names: basic, heavy,
-// snake, rat, deer, wolf, bear, spider, infected-basic, infected-heavy, crow,
-// bat, dragonfly, mosquito, skeleton, warlock, golem, shadow-imp, castle-bat,
-// castle-rat, toad, player, plus the bosses (boss-grasslands, boss-meadow,
+// snake, rat, deer, wolf, bear, spider, infected_basic, infected_heavy, crow,
+// bat, dragonfly, mosquito, skeleton, warlock, golem, shadow_imp, castle_bat,
+// castle_rat, toad, player, plus the bosses (boss-grasslands, boss-meadow,
 // boss-infected, boss-forest, boss-river, boss-castle-q, boss-castle-d).
 //
 // DEFAULTS are applied to every character. Per-character OVERRIDES below
@@ -58,11 +58,19 @@ const DEFAULTS: CharacterOverrides = {
 };
 
 const OVERRIDES: Record<string, CharacterOverrides> = {
-  rat:  { anims: { move: { skipLast: 1 } } },
-  spider:  { anims: { move: { fps: 18 } } },
+  rat:  { pngScaleMultiplier: 1.0, anims: { move: { skipLast: 1 } } },
+  spider:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 18 } } },
   wolf:  { anims: { move: { fps: 24 } } },
-  bear:  { pngScaleMultiplier: 3.0 },
-  golem:  { pngScaleMultiplier: 1.3, anims: { attack: { fps: 20 } } },
+  bear:  { pngScaleMultiplier: 3.0,  anims: { move: { fps: 18 }, atk: { fps: 24 } } },
+  golem:  { pngScaleMultiplier: 1.3, anims: { atk: { fps: 20 } } },
+  crow:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 14 }, atk: { fps: 14 } }  },
+  dragonfly:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 24 }, atk: { fps: 24 } }  },
+  mosquito:  { pngScaleMultiplier: 1.1 },
+  bat:  { pngScaleMultiplier: 1.2 },
+  shadow_imp:  { anims: { move: { fps: 18 } } },
+  toad:  { pngScaleMultiplier: 1.2 },
+  infected_basic:  { pngScaleMultiplier: 1.2,  anims: { atk: { fps: 22 } } },
+  infected_heavy:  { anims: { atk: { fps: 18 } } },
 };
 
 // ============================================================================
@@ -115,8 +123,8 @@ const BUILTIN: CharacterSpec[] = [
   { folder: 'deer',           texPrefix: 'eder',  anims: stdEnemyAnims('eder') },
   { folder: 'wolf',           texPrefix: 'ew',    anims: stdEnemyAnims('ew') },
   { folder: 'spider',         texPrefix: 'es',    anims: stdEnemyAnims('es') },
-  { folder: 'infected-basic', texPrefix: 'eib',   anims: stdEnemyAnims('eib') },
-  { folder: 'infected-heavy', texPrefix: 'eih',   anims: stdEnemyAnims('eih') },
+  { folder: 'infected_basic', texPrefix: 'eib',   anims: stdEnemyAnims('eib') },
+  { folder: 'infected_heavy', texPrefix: 'eih',   anims: stdEnemyAnims('eih') },
   { folder: 'crow',           texPrefix: 'ecr',   anims: stdEnemyAnims('ecr') },
   { folder: 'bat',            texPrefix: 'ebt',   anims: stdEnemyAnims('ebt') },
   { folder: 'dragonfly',      texPrefix: 'edf',   anims: stdEnemyAnims('edf') },
@@ -124,18 +132,19 @@ const BUILTIN: CharacterSpec[] = [
   { folder: 'skeleton',       texPrefix: 'esk',   anims: stdEnemyAnims('esk') },
   { folder: 'warlock',        texPrefix: 'ewl',   anims: stdEnemyAnims('ewl') },
   { folder: 'golem',          texPrefix: 'ego',   anims: stdEnemyAnims('ego') },
-  { folder: 'shadow-imp',     texPrefix: 'esi',   anims: stdEnemyAnims('esi') },
-  { folder: 'castle-bat',     texPrefix: 'ecb',   anims: stdEnemyAnims('ecb') },
-  { folder: 'castle-rat',     texPrefix: 'ecrat', anims: stdEnemyAnims('ecrat') },
+  { folder: 'shadow_imp',     texPrefix: 'esi',   anims: stdEnemyAnims('esi') },
+  { folder: 'castle_bat',     texPrefix: 'ecb',   anims: stdEnemyAnims('ecb') },
+  { folder: 'castle_rat',     texPrefix: 'ecrat', anims: stdEnemyAnims('ecrat') },
   // Bear — drop a right-facing sheet; the engine generates a mirrored copy
   // for the left-facing texture set the bear logic uses (eal_*). Procedural
   // bear frames are 32×32, extracted from bearsprites.png.
   { folder: 'bear',           texPrefix: 'ear',   anims: stdEnemyAnims('ear'), proceduralCanvasSize: 32, mirrorTexPrefix: 'eal' },
-  // Toad — primary motion is 'hop'. Idle derives from hop frame_0.
+  // Toad — drops in as move.png (in-game animation is etd-hop). Idle derives
+  // from move frame_0.
   { folder: 'toad', texPrefix: 'etd', anims: [
-    { suffix: 'hop',  indexed: true,  indexSep: '', animKey: 'etd-hop'  },
+    { suffix: 'move', indexed: true,  indexSep: '', animKey: 'etd-hop'  },
     { suffix: 'atk',  indexed: true,  indexSep: '', animKey: 'etd-atk'  },
-    { suffix: 'idle', indexed: false, indexSep: '', animKey: 'etd-idle', derivedFrom: 'hop' },
+    { suffix: 'idle', indexed: false, indexSep: '', animKey: 'etd-idle', derivedFrom: 'move' },
   ]},
   // Player — keys use an underscore separator before the index (p_move_0, p_idle_0, etc.).
   { folder: 'player', texPrefix: 'p', anims: [

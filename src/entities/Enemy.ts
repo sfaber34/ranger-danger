@@ -98,21 +98,21 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         break;
       }
       case 'infected_basic':
-        applyEntityVisual(this, 'infected-basic', 'move', 0.5, 24, 24, 20, 24);
+        applyEntityVisual(this, 'infected_basic', 'move', 0.5, 24, 24, 20, 24);
         this.play('eib-move');
         break;
       case 'infected_heavy':
-        applyEntityVisual(this, 'infected-heavy', 'move', 0.5, 32, 32, 16, 20);
+        applyEntityVisual(this, 'infected_heavy', 'move', 0.5, 32, 32, 16, 20);
         this.play('eih-move');
         break;
       case 'infected_runner':
-        applyEntityVisual(this, 'infected-basic', 'move', 0.425, 20, 20, 22, 26);
+        applyEntityVisual(this, 'infected_basic', 'move', 0.425, 20, 20, 22, 26);
         this.play('eib-move');
         this.baseTint = 0xe0d020; // yellow tint for infected runners
         this.setTint(this.baseTint);
         break;
       case 'toad':
-        applyEntityVisual(this, 'toad', 'hop', 0.55, 28, 24, 18, 22);
+        applyEntityVisual(this, 'toad', 'move', 0.55, 28, 24, 18, 22);
         this.play('etd-idle');
         break;
       case 'crow':
@@ -151,16 +151,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.play('ego-move');
         break;
       case 'shadow_imp':
-        applyEntityVisual(this, 'shadow-imp', 'move', 0.45, 20, 20, 22, 26);
+        applyEntityVisual(this, 'shadow_imp', 'move', 0.45, 20, 20, 22, 26);
         this.play('esi-move');
         break;
       case 'castle_bat':
-        applyEntityVisual(this, 'castle-bat', 'move', 0.45, 20, 20, 22, 22);
+        applyEntityVisual(this, 'castle_bat', 'move', 0.45, 20, 20, 22, 22);
         this.play('ecb-move');
         this.flying = true;
         break;
       case 'castle_rat':
-        applyEntityVisual(this, 'castle-rat', 'move', 0.45, 22, 20, 20, 24);
+        applyEntityVisual(this, 'castle_rat', 'move', 0.45, 22, 20, 20, 24);
         this.play('ecrat-move');
         break;
     }
