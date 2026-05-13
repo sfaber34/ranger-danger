@@ -195,9 +195,11 @@ export class LevelSelectScene extends Phaser.Scene {
 
         for (let pass = 0; pass < 2; pass++) {
           if (pass === 0) {
-            g.lineStyle(this.p(6), 0x000000, unlocked ? 0.7 : 0.3);
+            g.lineStyle(this.p(6), 0x000000, unlocked ? 0.55 : 0.3);
           } else {
-            g.lineStyle(this.p(3), unlocked ? 0x3a2a18 : 0x2a2018, unlocked ? 0.9 : 0.4);
+            // Unlocked paths use the same tan as the unlocked-node ring so
+            // the "you've earned this" signal carries from node to path.
+            g.lineStyle(this.p(3), unlocked ? 0xc8a86a : 0x2a2018, unlocked ? 1 : 0.4);
           }
           for (let i = 0; i < segments; i++) {
             if (i % 2 !== 0) continue;
