@@ -770,6 +770,10 @@ export class GameScene extends Phaser.Scene {
 
   // ---------- PLAYER ----------
   updatePlayer(time: number, _delta: number) {
+    // Physics-paused covers tutorial step prompts and the upgrade panel.
+    // Returning here freezes facing, animation, and the auto-fire loop so
+    // the world feels actually paused rather than just no-movement.
+    if (this.physics.world.isPaused) return;
     const k = this.keys;
     let vx = 0, vy = 0;
     if (k.A.isDown || k.LEFT.isDown) vx -= 1;

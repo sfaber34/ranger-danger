@@ -244,8 +244,8 @@ export class UIScene extends Phaser.Scene {
     this.btnSpeed.add(this.speedLabel);
 
     // Speed is locked during the tutorial. Lock state survives the lock
-    // overlay so SPACE / 5 / hotbar-click all share the same gate, and we
-    // can tear the overlay back off later from showSpeedUnlockToast.
+    // overlay so SPACE / 5 / hotbar-click all share the same gate; the
+    // `tutorial-finished` listener tears the overlay back off.
     this.speedLocked = !!getRegistry(this.game).get('tutorialActive');
     if (this.speedLocked) {
       this.speedLockOverlay = buildLockOverlay();
@@ -370,11 +370,14 @@ export class UIScene extends Phaser.Scene {
     getEvents(this.game.events).on('boss-spawn', (s: any) => this.showBossBar(s));
     getEvents(this.game.events).on('boss-hp', (s: any) => this.updateBossBar(s));
     getEvents(this.game.events).on('boss-died', () => this.hideBossBar());
-    // After the tutorial wraps, give the player a couple seconds to read
-    // "Great job, Ranger!", then pop the speed-up unlock toast and
-    // remove the speed slot's padlock.
+    // Tutorial wrapped — drop the speed-slot lock. The earlier game_speed
+    // step already explained the slot, so no toast is needed here.
     getEvents(this.game.events).on('tutorial-finished', () => {
-      this.time.delayedCall(2000, () => this.showSpeedUnlockToast());
+      this.speedLocked = false;
+      if (this.speedLockOverlay) {
+        this.speedLockOverlay.destroy();
+        this.speedLockOverlay = null;
+      }
     });
     getEvents(this.game.events).on('build-error', (msg: string) => {
       if (msg) {
@@ -1218,25 +1221,6 @@ export class UIScene extends Phaser.Scene {
       'YOUR FIRST BOSS IS SPAWNING!\n\nCareful — bosses have special abilities\nand can destroy walls and towers.',
       0xd94a4a, // red danger accent
       this.p(160)
-    );
-  }
-
-  /** Speed-up tutorial — fired ~2s after the tutorial finishes. Removes
-   *  the speed-slot lock at the moment the tip shows so the player can
-   *  try it immediately. Stays on screen for 5s total. */
-  private showSpeedUnlockToast() {
-    this.speedLocked = false;
-    if (this.speedLockOverlay) {
-      this.speedLockOverlay.destroy();
-      this.speedLockOverlay = null;
-    }
-    this.showIntroToast(
-      this.isMobile
-        ? 'SPEED UP UNLOCKED!\n\nTap the speed slot to cycle through game speeds.'
-        : 'SPEED UP UNLOCKED!\n\nClick the speed slot or press SPACE\nto cycle through game speeds.',
-      0xc4a850, // gold/yellow accent matching the speed label
-      this.p(150), // matches the in-game tutorial prompt y so it clears the wave bar
-      5000
     );
   }
 
