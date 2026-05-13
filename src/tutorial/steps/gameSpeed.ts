@@ -1,19 +1,24 @@
 import type { Step, StepContext } from '../Step';
+import { getEvents } from '../../core/events';
 
-/** Informational beat that points at the speed hotbar slot and explains
- *  the 1x → 2x → 3x cycle. The slot itself stays locked until the
- *  tutorial finishes (UIScene gates click + SPACE on speedLocked), so
- *  this step just highlights and advances on click. */
+/** Highlights the speed hotbar slot and explains the 1x → 2x → 3x cycle.
+ *  Emits `tutorial-speed-unlocked` on entry so the player can actually
+ *  press the slot while reading the prompt — the broader UPGRADES lock
+ *  stays on until `tutorial-finished` fires after the next beat. */
 export const gameSpeed: Step = {
   name: 'game_speed',
+
+  enter(ctx: StepContext) {
+    getEvents(ctx.scene.game.events).emit('tutorial-speed-unlocked');
+  },
 
   render(ctx: StepContext) {
     const { W, H, p } = ctx;
 
     ctx.showClickPrompt(
       ctx.isMobile
-        ? 'This slot cycles game speed: 1x → 2x → 3x.\nTap it (once the tutorial ends) to speed things up.'
-        : 'This slot cycles game speed: 1x → 2x → 3x.\nPress SPACE or click it (once the tutorial ends) to speed things up.',
+        ? 'This slot cycles game speed: 1x → 2x → 3x.\nTap it to speed things up!'
+        : 'This slot cycles game speed: 1x → 2x → 3x.\nPress SPACE or click it to speed things up!',
       H - p(160),
       'game_done',
     );
