@@ -387,7 +387,7 @@ export class EnemyBossSystem {
   updateBoss(time: number) {
     const scene = this.scene;
     if (scene.bossState.boss) this._updateOneBoss(scene.bossState.boss, time);
-    if (scene.difficulty === 'infinite'
+    if (scene.difficulty === 'endless'
       && scene.bossState.midBoss
       && scene.bossState.midBoss !== scene.bossState.boss
       && scene.bossState.midBoss.active

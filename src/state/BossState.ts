@@ -13,10 +13,10 @@ export type CastlePhase = 0 | 1 | 2 | 3;
 
 /**
  * Boss-fight state. Replaces the seven scattered fields that used to live
- * on GameScene: boss, midBoss (castle queen + infinite secondary), the
+ * on GameScene: boss, midBoss (castle queen + endless secondary), the
  * `bossSpawned` latch, the `midBossDefeated` latch (castle queen death),
- * the castlePhase counter, and the two infinite-mode counters
- * (infiniteBossesCleared, infiniteResetUntil).
+ * the castlePhase counter, and the two endless-mode counters
+ * (endlessBossesCleared, endlessResetUntil).
  */
 export class BossState {
   /** Primary boss, or null when no boss is on the field. */
@@ -24,7 +24,7 @@ export class BossState {
 
   /**
    * Secondary boss in either the castle (queen, while phase 1) or in
-   * infinite mode's double-boss events (slot 1). Aliases `boss` while the
+   * endless mode's double-boss events (slot 1). Aliases `boss` while the
    * castle queen is alive; null otherwise.
    */
   midBoss: Boss | null = null;
@@ -39,12 +39,12 @@ export class BossState {
   /** Castle phase 0–3 (see CastlePhase). 0 outside castle. */
   castlePhase: CastlePhase = 0;
 
-  /** Cumulative count of bosses defeated in infinite mode. */
-  infiniteBossesCleared = 0;
+  /** Cumulative count of bosses defeated in endless mode. */
+  endlessBossesCleared = 0;
 
-  /** vTime at which the next infinite cycle should kick off (set when a
-   *  boss dies in infinite mode). 0 = unset. */
-  infiniteResetUntil = 0;
+  /** vTime at which the next endless cycle should kick off (set when a
+   *  boss dies in endless mode). 0 = unset. */
+  endlessResetUntil = 0;
 
   // ---------- transitions ----------
 
@@ -84,29 +84,29 @@ export class BossState {
     this.bossSpawned = true;
   }
 
-  /** Infinite-mode primary boss spawn (slot 0). */
-  enterInfinitePrimary(b: Boss) {
+  /** Endless-mode primary boss spawn (slot 0). */
+  enterEndlessPrimary(b: Boss) {
     this.boss = b;
     this.bossSpawned = true;
   }
 
-  /** Infinite-mode secondary boss spawn (slot 1, double-boss events). */
-  enterInfiniteSecondary(b: Boss) {
+  /** Endless-mode secondary boss spawn (slot 1, double-boss events). */
+  enterEndlessSecondary(b: Boss) {
     this.midBoss = b;
   }
 
-  /** Infinite cycle reset — boss died, queue the next cycle. */
-  startInfiniteReset(now: number, ms: number) {
-    this.infiniteBossesCleared++;
-    this.infiniteResetUntil = now + ms;
+  /** Endless cycle reset — boss died, queue the next cycle. */
+  startEndlessReset(now: number, ms: number) {
+    this.endlessBossesCleared++;
+    this.endlessResetUntil = now + ms;
   }
 
-  /** Called when the next infinite cycle actually starts. */
-  finishInfiniteReset() {
+  /** Called when the next endless cycle actually starts. */
+  finishEndlessReset() {
     this.bossSpawned = false;
     this.boss = null;
     this.midBoss = null;
-    this.infiniteResetUntil = 0;
+    this.endlessResetUntil = 0;
   }
 
   /** Reset everything for a fresh level. */
@@ -116,7 +116,7 @@ export class BossState {
     this.bossSpawned = false;
     this.midBossDefeated = false;
     this.castlePhase = 0;
-    this.infiniteBossesCleared = 0;
-    this.infiniteResetUntil = 0;
+    this.endlessBossesCleared = 0;
+    this.endlessResetUntil = 0;
   }
 }

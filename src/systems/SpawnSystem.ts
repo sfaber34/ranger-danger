@@ -38,8 +38,8 @@ const INF_DOUBLES: { bosses: [InfBossDef, InfBossDef]; baseHpMult: number }[] = 
   { bosses: [INF_QUEEN,  INF_DRAGON], baseHpMult: 1.15 },
 ];
 
-/** Pick the boss(es) for a 0-indexed boss event in infinite mode. */
-export function pickInfiniteBosses(eventIdx: number): { bosses: InfBossDef[]; hpMult: number } {
+/** Pick the boss(es) for a 0-indexed boss event in endless mode. */
+export function pickEndlessBosses(eventIdx: number): { bosses: InfBossDef[]; hpMult: number } {
   if (eventIdx < INF_SINGLES.length) {
     return { bosses: [INF_SINGLES[eventIdx]], hpMult: 1 };
   }
@@ -54,7 +54,7 @@ export function pickInfiniteBosses(eventIdx: number): { bosses: InfBossDef[]; hp
 }
 
 /** Title text used by the boss-warning countdown / "X APPROACHES" banner. */
-export function infiniteBossTitle(def: InfBossDef): string {
+export function endlessBossTitle(def: InfBossDef): string {
   if (def.kind === 'queen') return 'PHANTOM QUEEN';
   if (def.kind === 'dragon') return 'CASTLE DRAGON';
   if (def.biome === 'forest') return 'WENDIGO';
@@ -64,7 +64,7 @@ export function infiniteBossTitle(def: InfBossDef): string {
 }
 
 // ---------------------------------------------------------------------------
-// Infinite-mode enemy theme rotation
+// Endless-mode enemy theme rotation
 // ---------------------------------------------------------------------------
 // Normal-wave enemy pool grows with bossesCleared:
 //   events 1-2 (cycles 0-1): home biome only
@@ -80,7 +80,7 @@ type SpawnBiome = 'grasslands' | 'forest' | 'infected' | 'river' | 'castle';
 const BIOME_RAMP: SpawnBiome[] = ['grasslands', 'forest', 'infected', 'river', 'castle'];
 
 /** Pool of biomes the normal-wave picker may sample from for this run. */
-function getInfinitePool(home: SpawnBiome, bossesCleared: number): SpawnBiome[] {
+function getEndlessPool(home: SpawnBiome, bossesCleared: number): SpawnBiome[] {
   if (bossesCleared < 2) return [home];
   const others = BIOME_RAMP.filter(b => b !== home);
   if (bossesCleared < 4) return [home, others[0]];
@@ -89,7 +89,7 @@ function getInfinitePool(home: SpawnBiome, bossesCleared: number): SpawnBiome[] 
 }
 
 /** Per-biome kind picker — same odds as the campaign-mode spawnEnemy
- *  branches, just factored out so the infinite picker can reuse them
+ *  branches, just factored out so the endless picker can reuse them
  *  for any biome it samples. */
 function pickKindForBiome(biome: SpawnBiome, heavyChance: number): EnemyKind {
   if (biome === 'forest') return Math.random() < heavyChance ? 'bear' : 'spider';
@@ -116,7 +116,7 @@ function pickKindForBiome(biome: SpawnBiome, heavyChance: number): EnemyKind {
 }
 
 /** Maps an enemy kind back to its "home" biome — used for cluster sizing
- *  / spread now that infinite mode mixes kinds across biomes. */
+ *  / spread now that endless mode mixes kinds across biomes. */
 function biomeOfKind(kind: EnemyKind): SpawnBiome {
   switch (kind) {
     case 'bear': case 'spider': case 'wolf':
@@ -133,9 +133,9 @@ function biomeOfKind(kind: EnemyKind): SpawnBiome {
   }
 }
 
-/** Pick a normal-wave enemy kind in infinite mode. Honours theme
+/** Pick a normal-wave enemy kind in endless mode. Honours theme
  *  rotation and the castle-elite trickle. */
-function pickInfiniteEnemyKind(home: SpawnBiome, bossesCleared: number, heavyChance: number): EnemyKind {
+function pickEndlessEnemyKind(home: SpawnBiome, bossesCleared: number, heavyChance: number): EnemyKind {
   // Castle elite trickle starts at event 5 (after 4 bosses cleared).
   if (bossesCleared >= 4) {
     const eliteChance = Math.min(0.3, 0.05 + (bossesCleared - 4) * 0.05);
@@ -147,15 +147,15 @@ function pickInfiniteEnemyKind(home: SpawnBiome, bossesCleared: number, heavyCha
       return 'golem';
     }
   }
-  const pool = getInfinitePool(home, bossesCleared);
+  const pool = getEndlessPool(home, bossesCleared);
   const biome = pool[Math.floor(Math.random() * pool.length)];
   return pickKindForBiome(biome, heavyChance);
 }
 
-/** Pool of pack KINDS available for runner-pack bursts in infinite mode.
+/** Pool of pack KINDS available for runner-pack bursts in endless mode.
  *  Same theme-rotation rules as normal enemies. */
-function pickInfinitePackKind(home: SpawnBiome, bossesCleared: number): EnemyKind {
-  const pool = getInfinitePool(home, bossesCleared);
+function pickEndlessPackKind(home: SpawnBiome, bossesCleared: number): EnemyKind {
+  const pool = getEndlessPool(home, bossesCleared);
   const biome = pool[Math.floor(Math.random() * pool.length)];
   if (biome === 'castle') {
     const r = Math.random();
@@ -170,10 +170,10 @@ function pickInfinitePackKind(home: SpawnBiome, bossesCleared: number): EnemyKin
 /**
  * Wave-driven spawning: ramps difficulty, fires runner-pack bursts, picks
  * enemy types per biome, and triggers the boss lead-in / spawn for each
- * mode (campaign, castle, infinite).
+ * mode (campaign, castle, endless).
  */
 export class SpawnSystem {
-  private infiniteFirstCorner: number | undefined = undefined;
+  private endlessFirstCorner: number | undefined = undefined;
 
   constructor(private scene: GameScene) {}
 
@@ -314,7 +314,7 @@ export class SpawnSystem {
     scene.cameras.main.shake(300, 0.005);
   }
 
-  spawnInfiniteBoss(def: InfBossDef, hpMult: number, slotIdx: number) {
+  spawnEndlessBoss(def: InfBossDef, hpMult: number, slotIdx: number) {
     const scene = this.scene;
     const spawnR = scene.spawnDist * CFG.tile;
     const px = scene.player.x, py = scene.player.y;
@@ -327,9 +327,9 @@ export class SpawnSystem {
     let cornerIdx: number;
     if (slotIdx === 0) {
       cornerIdx = Math.floor(Math.random() * corners.length);
-      this.infiniteFirstCorner = cornerIdx;
+      this.endlessFirstCorner = cornerIdx;
     } else {
-      const taken = this.infiniteFirstCorner ?? 0;
+      const taken = this.endlessFirstCorner ?? 0;
       const others = [0, 1, 2, 3].filter(c => c !== taken);
       cornerIdx = others[Math.floor(Math.random() * others.length)];
     }
@@ -392,17 +392,17 @@ export class SpawnSystem {
     }
 
     const waveSize = scene.levelWaveSize;
-    const isInfinite = scene.difficulty === 'infinite';
-    const totalWaves = isInfinite ? 4 : (scene.biome === 'castle' ? 4 : CFG.spawn.waveCount);
+    const isEndless = scene.difficulty === 'endless';
+    const totalWaves = isEndless ? 4 : (scene.biome === 'castle' ? 4 : CFG.spawn.waveCount);
     const lastWaveIdx = totalWaves - 1;
-    const isBossWave = isInfinite
+    const isBossWave = isEndless
       ? scene.waveState.wave % 4 === 3
       : scene.biome === 'castle'
         ? (scene.bossState.castlePhase === 0 && scene.waveState.wave === 1) || (scene.bossState.castlePhase === 2 && scene.waveState.wave === 3)
         : scene.waveState.wave >= lastWaveIdx;
 
     // Castle mid-boss phase: waiting for queen to die before resuming waves
-    if (!isInfinite && scene.biome === 'castle' && scene.bossState.castlePhase === 1) {
+    if (!isEndless && scene.biome === 'castle' && scene.bossState.castlePhase === 1) {
       if (scene.bossState.midBossDefeated) {
         scene.bossState.enterPostQueenWaves();
         scene.waveState.enterCastlePhase2(time, CFG.spawn.waveBreak);
@@ -438,10 +438,10 @@ export class SpawnSystem {
       scene.hud.pushHud();
     }
 
-    // Infinite-mode boss waves are *boss-only* — no preceding enemy
+    // Endless-mode boss waves are *boss-only* — no preceding enemy
     // spawn phase. Fast-forward the wave counters so the boss-lead-in
     // branch below kicks straight into the boss-prep countdown.
-    if (isInfinite && isBossWave && scene.waveState.waveSpawned === 0) {
+    if (isEndless && isBossWave && scene.waveState.waveSpawned === 0) {
       scene.waveState.waveSpawned = waveSize;
       scene.waveState.waveKills = waveSize;
     }
@@ -456,13 +456,13 @@ export class SpawnSystem {
           scene.waveState.startBossPrep(time, CFG.boss.prepTime);
         }
         if (time >= scene.waveState.bossCountdownUntil) {
-          if (isInfinite) {
-            const pick = pickInfiniteBosses(scene.bossState.infiniteBossesCleared);
-            this.infiniteFirstCorner = undefined;
+          if (isEndless) {
+            const pick = pickEndlessBosses(scene.bossState.endlessBossesCleared);
+            this.endlessFirstCorner = undefined;
             for (let i = 0; i < pick.bosses.length; i++) {
-              this.spawnInfiniteBoss(pick.bosses[i], pick.hpMult, i);
+              this.spawnEndlessBoss(pick.bosses[i], pick.hpMult, i);
             }
-            const titles = pick.bosses.map(infiniteBossTitle);
+            const titles = pick.bosses.map(endlessBossTitle);
             const banner = titles.length === 1
               ? `THE ${titles[0]} APPROACHES`
               : `${titles[0]} & ${titles[1]} APPROACH`;
@@ -483,9 +483,9 @@ export class SpawnSystem {
         }
         const secs = Math.ceil((scene.waveState.bossCountdownUntil - time) / 1000);
         let bossName: string;
-        if (isInfinite) {
-          const pick = pickInfiniteBosses(scene.bossState.infiniteBossesCleared);
-          bossName = pick.bosses.map(infiniteBossTitle).join(' & ');
+        if (isEndless) {
+          const pick = pickEndlessBosses(scene.bossState.endlessBossesCleared);
+          bossName = pick.bosses.map(endlessBossTitle).join(' & ');
         } else {
           bossName = scene.biome === 'forest' ? 'WENDIGO'
                        : scene.biome === 'infected' ? 'BLIGHTED ONE'
@@ -514,9 +514,9 @@ export class SpawnSystem {
     if (scene.rampTimer > CFG.spawn.rampEvery) {
       scene.rampTimer = 0;
       scene.spawnInterval = Math.max(scene.levelMinInterval, scene.spawnInterval * scene.levelRampFactor);
-      // Infinite mode lets heavyChance climb past the campaign cap so
+      // Endless mode lets heavyChance climb past the campaign cap so
       // late-run waves shift toward the tougher enemy variants.
-      const heavyCap = scene.difficulty === 'infinite' ? 0.6 : CFG.spawn.heavyChanceMax;
+      const heavyCap = scene.difficulty === 'endless' ? 0.6 : CFG.spawn.heavyChanceMax;
       scene.heavyChance = Math.min(heavyCap, scene.heavyChance + CFG.spawn.heavyChanceStep);
     }
     if (scene.spawnTimer > scene.spawnInterval && scene.waveState.waveSpawned < waveSize) {
@@ -563,10 +563,10 @@ export class SpawnSystem {
         cy: py + sa * spawnR + ty * jitter,
       };
     };
-    // Infinite mode rotates through biome packs after a couple of bosses
+    // Endless mode rotates through biome packs after a couple of bosses
     // are cleared; campaign mode stays on the home biome's pack.
-    const packKind: EnemyKind = scene.difficulty === 'infinite'
-      ? pickInfinitePackKind(scene.biome as SpawnBiome, scene.bossState.infiniteBossesCleared)
+    const packKind: EnemyKind = scene.difficulty === 'endless'
+      ? pickEndlessPackKind(scene.biome as SpawnBiome, scene.bossState.endlessBossesCleared)
       : (scene.biome === 'forest' ? 'wolf'
         : scene.biome === 'infected' ? 'infected_runner'
         : scene.biome === 'river' ? 'dragonfly'
@@ -622,8 +622,8 @@ export class SpawnSystem {
     const x = px + Math.cos(angle) * spawnR;
     const y = py + Math.sin(angle) * spawnR;
     let kind: EnemyKind;
-    if (scene.difficulty === 'infinite') {
-      kind = pickInfiniteEnemyKind(scene.biome as SpawnBiome, scene.bossState.infiniteBossesCleared, scene.heavyChance);
+    if (scene.difficulty === 'endless') {
+      kind = pickEndlessEnemyKind(scene.biome as SpawnBiome, scene.bossState.endlessBossesCleared, scene.heavyChance);
     } else if (scene.biome === 'forest') {
       kind = Math.random() < scene.heavyChance ? 'bear' : 'spider';
     } else if (scene.biome === 'infected') {
@@ -647,7 +647,7 @@ export class SpawnSystem {
     }
 
     // Cluster behaviour was originally biome-keyed but enemy kind alone
-    // determines whether/how to cluster. Infinite-mode mixed-biome rolls
+    // determines whether/how to cluster. Endless-mode mixed-biome rolls
     // need this kind-keyed check to still get the right cluster shape
     // even though scene.biome != biomeOfKind(kind).
     const kindBiome = biomeOfKind(kind);

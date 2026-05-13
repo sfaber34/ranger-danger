@@ -6,7 +6,7 @@ import { Difficulty, saveMedal, LEVELS, Biome } from '../levels';
 import { SFX } from '../audio/sfx';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
 import { UpgradePanel } from '../ui/UpgradePanel';
-import { loadInfiniteBest, saveInfiniteBest, RunStatsSnapshot } from '../state/RunStats';
+import { loadEndlessBest, saveEndlessBest, RunStatsSnapshot } from '../state/RunStats';
 
 export class UIScene extends Phaser.Scene {
   hpBarGfx!: Phaser.GameObjects.Graphics;
@@ -65,12 +65,12 @@ export class UIScene extends Phaser.Scene {
   /** Scale a base-resolution value to native */
   p(v: number) { return v * this.sf; }
   /** Convert a 1-indexed cumulative wave number into the display number
-   *  shown to the player. In infinite mode, every 4th wave is a boss
+   *  shown to the player. In endless mode, every 4th wave is a boss
    *  event that doesn't get a number — so the visible sequence reads
-   *  1, 2, 3, [boss], 4, 5, 6, [boss], 7, 8, 9, ... For non-infinite
+   *  1, 2, 3, [boss], 4, 5, 6, [boss], 7, 8, 9, ... For non-endless
    *  difficulties this is a no-op (the number is shown as-is). */
   private displayWaveNum(cumulativeWave: number): number {
-    if (this.difficulty !== 'infinite') return cumulativeWave;
+    if (this.difficulty !== 'endless') return cumulativeWave;
     return cumulativeWave - Math.floor(cumulativeWave / 4);
   }
   /** Draw a small skull-and-jaw icon into the given Graphics object,
@@ -280,11 +280,11 @@ export class UIScene extends Phaser.Scene {
     this.progressLabels = [];
     this.progressIcons = [];
     this.progressLines = [];
-    // Infinite mode: 6 rolling nodes (current wave + next 5). Updated
+    // Endless mode: 6 rolling nodes (current wave + next 5). Updated
     // dynamically in updateHud.
     // Castle: 4 waves + queen skull + dragon skull = 6 nodes
     // Others: waveCount waves + 1 boss = waveCount+1 nodes
-    const totalNodes = this.difficulty === 'infinite' ? 6
+    const totalNodes = this.difficulty === 'endless' ? 6
       : this.biome === 'castle' ? 6
       : CFG.spawn.waveCount + 1;
     const nodeSpacing = this.p(36);
@@ -308,8 +308,8 @@ export class UIScene extends Phaser.Scene {
       items.push(circle);
       // label (number or skull)
       // Castle: nodes 2 (queen) and 5 (dragon) are boss skulls
-      // Infinite: labels are dynamic \u2014 placeholder, updateHud sets them
-      const isBoss = this.difficulty === 'infinite' ? false
+      // Endless: labels are dynamic \u2014 placeholder, updateHud sets them
+      const isBoss = this.difficulty === 'endless' ? false
         : this.biome === 'castle' ? (i === 2 || i === 5)
         : i === totalNodes - 1;
       const waveNum = this.biome === 'castle'
@@ -834,7 +834,7 @@ export class UIScene extends Phaser.Scene {
 
     // Update level progress circles
     const currentWave = s.wave ?? 1; // 1-indexed
-    if (this.difficulty === 'infinite') {
+    if (this.difficulty === 'endless') {
       // Rolling 6-node strip: leftmost = current wave, then next 5.
       // Wave numbering is cumulative (no reset across cycles), and
       // every 4th wave (4, 8, 12, ...) is a boss event.
@@ -1000,13 +1000,13 @@ export class UIScene extends Phaser.Scene {
 
     // Wave progress bar
     this.waveBarGfx.clear();
-    // Infinite boss waves spawn no enemies — there's no progress to show
+    // Endless boss waves spawn no enemies — there's no progress to show
     // once the boss prep starts, so hide the bar/label then. Keep it
     // visible during the lead-in break so the player still sees the
     // "BOSS IN Ns" countdown.
     const inWaveBreak = s.waveBreakUntil > 0 && s.vTime < s.waveBreakUntil;
-    const infiniteBossWave = this.difficulty === 'infinite' && s.wave % 4 === 0;
-    if (s.bossSpawned || (infiniteBossWave && !inWaveBreak)) {
+    const endlessBossWave = this.difficulty === 'endless' && s.wave % 4 === 0;
+    if (s.bossSpawned || (endlessBossWave && !inWaveBreak)) {
       // Hide wave bar when boss is active (boss bar takes its place)
       this.waveLabel.setVisible(false);
       this.waveBarGfx.setVisible(false);
@@ -1026,10 +1026,10 @@ export class UIScene extends Phaser.Scene {
         this.waveBarGfx.fillRoundedRect(wbX + this.p(2), wbY + this.p(2), wbFillW, wbH - this.p(4), wbR - this.p(1));
       }
 
-      // In infinite mode every 4th wave (cumulative) is a boss event
+      // In endless mode every 4th wave (cumulative) is a boss event
       // and shouldn't share a number with the surrounding numbered
       // waves. Label it "BOSS" instead.
-      const isBossWave = this.difficulty === 'infinite' && s.wave % 4 === 0;
+      const isBossWave = this.difficulty === 'endless' && s.wave % 4 === 0;
       const displayWave = this.displayWaveNum(s.wave);
       if (s.waveBreakUntil > 0 && s.vTime < s.waveBreakUntil) {
         const secs = Math.ceil((s.waveBreakUntil - s.vTime) / 1000);
@@ -1131,7 +1131,7 @@ export class UIScene extends Phaser.Scene {
       }
     }
 
-    // ---- Boss indicators (primary + castle queen mid-boss + infinite secondary).
+    // ---- Boss indicators (primary + castle queen mid-boss + endless secondary).
     // During the castle queen fight, bossState.boss === bossState.midBoss, so
     // we de-dupe by identity before drawing.
     const bs = game.bossState;
@@ -1264,8 +1264,8 @@ export class UIScene extends Phaser.Scene {
   showEnd(s: any) {
     if (this.endPanel) return;
     if (s.win) saveMedal(this.levelId, this.difficulty);
-    if (s.runStats && this.difficulty === 'infinite') {
-      this.showInfiniteEnd(s);
+    if (s.runStats && this.difficulty === 'endless') {
+      this.showEndlessEnd(s);
       return;
     }
     const W = this.scale.width, H = this.scale.height;
@@ -1335,9 +1335,9 @@ export class UIScene extends Phaser.Scene {
     this.endPanel = this.add.container(0, 0, [bg, panel, title, sub, btnG, btnText, btnHit]).setDepth(1000);
   }
 
-  /** Infinite-mode death screen — shows the full RunStats breakdown plus
+  /** Endless-mode death screen — shows the full RunStats breakdown plus
    *  ★ markers next to any field that beat the persisted best. */
-  private showInfiniteEnd(s: any) {
+  private showEndlessEnd(s: any) {
     const W = this.scale.width, H = this.scale.height;
     const stats: RunStatsSnapshot = {
       wavesCleared: s.runStats.wavesCleared,
@@ -1355,9 +1355,9 @@ export class UIScene extends Phaser.Scene {
       damageTaken: s.runStats.damageTaken,
       timeSurvived: s.runStats.timeSurvived,
     };
-    const newRecords = saveInfiniteBest(this.levelId, stats);
+    const newRecords = saveEndlessBest(this.levelId, stats);
 
-    const accent = 0xc040c0; // infinite-mode purple
+    const accent = 0xc040c0; // endless-mode purple
     const titleHex = '#e090e0';
 
     const bg = this.add.rectangle(0, 0, W, H, 0x000000, 0.78).setOrigin(0);

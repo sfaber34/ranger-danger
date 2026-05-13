@@ -8,7 +8,7 @@ import type { GameScene } from '../scenes/GameScene';
 
 /**
  * End-of-level lifecycle: the post-boss-death loot collection window, the
- * win + lose screens, and (in infinite mode) the next-cycle reset that
+ * win + lose screens, and (in endless mode) the next-cycle reset that
  * recycles wave state instead of dropping into the victory screen.
  */
 export class EndSystem {
@@ -16,22 +16,22 @@ export class EndSystem {
 
   checkEndConditions() {
     const scene = this.scene;
-    // Infinite double-boss events keep the secondary in midBoss. The
+    // Endless double-boss events keep the secondary in midBoss. The
     // cycle is over only when BOTH are dying/inactive — guard for that
     // before falling through to the (single-boss) win path.
-    if (scene.difficulty === 'infinite' && scene.bossState.bossSpawned) {
+    if (scene.difficulty === 'endless' && scene.bossState.bossSpawned) {
       const primaryDone = !scene.bossState.boss || scene.bossState.boss.dying || !scene.bossState.boss.active;
       const secondaryDone = !scene.bossState.midBoss || scene.bossState.midBoss === scene.bossState.boss || scene.bossState.midBoss.dying || !scene.bossState.midBoss.active;
       if (!primaryDone || !secondaryDone) return;
     }
     if (scene.bossState.bossSpawned && (!scene.bossState.boss || scene.bossState.boss.dying || !scene.bossState.boss.active)) {
-      if (scene.difficulty === 'infinite') {
-        if (scene.bossState.infiniteResetUntil === 0) {
+      if (scene.difficulty === 'endless') {
+        if (scene.bossState.endlessResetUntil === 0) {
           getEvents(scene.game.events).emit('boss-died');
-          scene.bossState.startInfiniteReset(scene.vTime, 8000);
+          scene.bossState.startEndlessReset(scene.vTime, 8000);
           // Per-boss-cleared difficulty ramp. Compounds forever, no
           // cap — paired with the per-cycle boss HP scaling already
-          // baked into pickInfiniteBosses(), this is what makes deep
+          // baked into pickEndlessBosses(), this is what makes deep
           // runs increasingly nasty.
           scene.enemyHpMult *= 1.08;
           scene.enemyDmgMult *= 1.05;
@@ -48,14 +48,14 @@ export class EndSystem {
             });
           }
         }
-        const remaining = Math.max(0, Math.ceil((scene.bossState.infiniteResetUntil - scene.vTime) / 1000));
-        scene.hud.syncCountdown(`Boss ${scene.bossState.infiniteBossesCleared} cleared! Next cycle in ${remaining}s`, '#7cf29a');
-        if (scene.vTime >= scene.bossState.infiniteResetUntil) {
-          this.startNextInfiniteCycle();
+        const remaining = Math.max(0, Math.ceil((scene.bossState.endlessResetUntil - scene.vTime) / 1000));
+        scene.hud.syncCountdown(`Boss ${scene.bossState.endlessBossesCleared} cleared! Next cycle in ${remaining}s`, '#7cf29a');
+        if (scene.vTime >= scene.bossState.endlessResetUntil) {
+          this.startNextEndlessCycle();
         } else if (scene.coins.countActive() === 0 && this.scene.endState.winCollectedAt === 0) {
           this.scene.endState.winCollectedAt = scene.vTime;
         } else if (this.scene.endState.winCollectedAt > 0 && scene.vTime >= this.scene.endState.winCollectedAt + 2000) {
-          this.startNextInfiniteCycle();
+          this.startNextEndlessCycle();
         }
         return;
       }
@@ -95,11 +95,11 @@ export class EndSystem {
     }
   }
 
-  /** Reset wave state for the next infinite-mode cycle. */
-  startNextInfiniteCycle() {
+  /** Reset wave state for the next endless-mode cycle. */
+  startNextEndlessCycle() {
     const scene = this.scene;
-    scene.bossState.finishInfiniteReset();
-    scene.waveState.enterNextInfiniteCycle(scene.vTime, CFG.spawn.waveBreak);
+    scene.bossState.finishEndlessReset();
+    scene.waveState.enterNextEndlessCycle(scene.vTime, CFG.spawn.waveBreak);
     this.scene.endState.winCollectedAt = 0;
     scene.hud.pushHud();
   }
@@ -185,11 +185,11 @@ export class EndSystem {
       // bossesKilled from bossState for the death panel.
       scene.runStats.wavesCleared = scene.waveState.wave;
       scene.runStats.timeSurvived = scene.vTime;
-      scene.runStats.bossesKilled = scene.bossState.infiniteBossesCleared;
+      scene.runStats.bossesKilled = scene.bossState.endlessBossesCleared;
       const payload = {
         win: false, name: 'Ranger',
         kills: scene.player.kills, money: scene.player.money,
-        runStats: scene.difficulty === 'infinite' ? scene.runStats : undefined,
+        runStats: scene.difficulty === 'endless' ? scene.runStats : undefined,
       };
       getRegistry(scene.game).set('gameEndState', payload);
       getEvents(scene.game.events).emit('game-end', payload);
