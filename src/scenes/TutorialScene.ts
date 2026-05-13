@@ -10,6 +10,10 @@ import { buildStepRegistry } from '../tutorial/registry';
 const STORAGE_KEY = 'td_tutorial_done';
 
 export function isTutorialNeeded(): boolean {
+  // Dev/testing hook: ?tutorial=1 force-launches the tutorial regardless
+  // of medal progress or the done flag. Cheap way to share a testable
+  // tutorial link without asking testers to clear localStorage.
+  if (new URLSearchParams(location.search).get('tutorial') === '1') return true;
   if (localStorage.getItem(STORAGE_KEY) === 'true') return false;
   return totalMedals(loadMedals()) === 0;
 }
