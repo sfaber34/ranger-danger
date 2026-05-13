@@ -50,7 +50,7 @@ import {
 // DEBUG: when true, every level skips waves and spawns its boss immediately
 // on load. Castle loads at the Phantom Queen (mid-boss). Temporary — flip to
 // false for normal play. Infinite mode is unaffected.
-const DEBUG_BOSS_RUSH = true;
+const DEBUG_BOSS_RUSH = false;
 
 // BuildKind moved to src/state/BuildState.ts. Re-exported here so existing
 // `import { BuildKind } from '../scenes/GameScene'` callers don't break.
