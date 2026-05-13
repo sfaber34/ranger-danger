@@ -23,7 +23,7 @@ export const LEVELS: LevelDef[] = [
     rampFactor: 0.93, minInterval: 350, waveSize: 100, clusterMax: 4 },
   { id: 2,  name: 'Forest',        biome: 'forest',     x: 265, y: 425, connectsTo: [3],    unlockCost: 1,  implemented: true,
     rampFactor: 0.91, minInterval: 320, waveSize: 110, clusterMax: 3 },
-  { id: 3,  name: 'Infected Lands',      biome: 'infected', x: 410, y: 320, connectsTo: [4],    unlockCost: 3,  implemented: true,
+  { id: 3,  name: 'Infected',      biome: 'infected', x: 410, y: 320, connectsTo: [4],    unlockCost: 3,  implemented: true,
     rampFactor: 0.88, minInterval: 250, waveSize: 120, clusterMax: 3 },
   { id: 4,  name: 'Rivers',        biome: 'river',      x: 168, y: 200, connectsTo: [5],    unlockCost: 4,  implemented: true,
     rampFactor: 0.86, minInterval: 220, waveSize: 130, clusterMax: 2 },
