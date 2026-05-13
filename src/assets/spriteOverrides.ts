@@ -59,6 +59,7 @@ const DEFAULTS: CharacterOverrides = {
 
 const OVERRIDES: Record<string, CharacterOverrides> = {
   rat:  { pngScaleMultiplier: 1.0, anims: { move: { skipLast: 1 } } },
+  castle_rat:  { pngScaleMultiplier: 1.0, anims: { move: { skipLast: 1 } } },
   spider:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 18 } } },
   wolf:  { anims: { move: { fps: 24 } } },
   bear:  { pngScaleMultiplier: 3.0,  anims: { move: { fps: 18 }, atk: { fps: 24 } } },
@@ -67,6 +68,7 @@ const OVERRIDES: Record<string, CharacterOverrides> = {
   dragonfly:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 24 }, atk: { fps: 24 } }  },
   mosquito:  { pngScaleMultiplier: 1.1 },
   bat:  { pngScaleMultiplier: 1.2 },
+  castle_bat:  { pngScaleMultiplier: 1.1 },
   shadow_imp:  { anims: { move: { fps: 18 } } },
   toad:  { pngScaleMultiplier: 1.2 },
   infected_basic:  { pngScaleMultiplier: 1.2,  anims: { atk: { fps: 22 } } },
