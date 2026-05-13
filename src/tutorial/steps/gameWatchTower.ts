@@ -18,7 +18,7 @@ export class GameWatchTowerStep implements Step {
   }
 
   render(ctx: StepContext) {
-    ctx.showPrompt('Your tower shoots enemies automatically!', ctx.p(150));
+    ctx.showPrompt('Your tower will auto-shoot enemies!', ctx.p(150));
   }
 
   update(ctx: StepContext, _time: number, delta: number) {

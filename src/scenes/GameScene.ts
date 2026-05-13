@@ -572,11 +572,6 @@ export class GameScene extends Phaser.Scene {
         // Tutorial caps placements at 1 arrow tower — once placed, don't let
         // the player re-enter tower build mode and try to place another.
         else if (ts === 'game_place_tower' && k === 'tower' && tk === 'arrow' && this.towers.length === 0) { /* allowed */ }
-        // Mobile has no right-click / ESC, so tapping the (already-active)
-        // wall slot is the only way to exit build mode during this step.
-        // Only permit it when wall mode is currently on (i.e. the toggle
-        // turns it OFF) so the player can't re-enter wall mode after exit.
-        else if (ts === 'game_exit_build' && k === 'wall' && this.buildState.kind === 'wall') { /* allowed — toggles off */ }
         else return; // block everything else during tutorial
       }
       this.build.toggleBuild(k, tk);

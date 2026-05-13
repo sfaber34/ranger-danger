@@ -27,11 +27,10 @@ export function markTutorialDone(): void {
  *
  * `pendingStep` is non-null while we're between two steps (the screen
  * is blank during a delay). Some steps care about events that fire
- * while they're pending — game_kill counts kills landed during the
- * 2s lead-in, game_exit_build skips itself if the player already
- * exited build mode. The dispatcher fires both the active step AND
- * the pending step when one is set so those quirks live entirely
- * inside the step files.
+ * while they're pending — e.g. game_kill counts kills landed during
+ * the 2s lead-in. The dispatcher fires both the active step AND the
+ * pending step when one is set so those quirks live entirely inside
+ * the step files.
  */
 export class TutorialScene extends Phaser.Scene {
   step: TutorialStepName = 'ls_click_meadow';
@@ -193,9 +192,8 @@ export class TutorialScene extends Phaser.Scene {
   /**
    * Forward the event to BOTH the active step AND the pending step (when
    * one is set). game_kill counts kills landed during the 2s lead-in,
-   * and game_exit_build skips itself if the player already exited build
-   * mode during the prior step's delay — both rely on this dual fire.
-   * Stateless steps without the matching handler simply ignore it.
+   * which relies on this dual fire. Stateless steps without the
+   * matching handler simply ignore it.
    */
   private dispatchEvent<K extends keyof Step>(
     method: K,

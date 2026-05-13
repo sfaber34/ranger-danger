@@ -19,7 +19,6 @@ export type TutorialStepName =
   | 'game_watch_tower'
   | 'game_press_4'
   | 'game_place_walls'
-  | 'game_exit_build'
   | 'game_loot_coins'
   | 'game_collect_60'
   | 'game_click_tower'

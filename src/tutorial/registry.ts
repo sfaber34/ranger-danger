@@ -11,7 +11,6 @@ import { gamePlaceTower } from './steps/gamePlaceTower';
 import { GameWatchTowerStep } from './steps/gameWatchTower';
 import { gamePress4 } from './steps/gamePress4';
 import { GamePlaceWallsStep } from './steps/gamePlaceWalls';
-import { gameExitBuild } from './steps/gameExitBuild';
 import { GameLootCoinsStep } from './steps/gameLootCoins';
 import { gameCollect60 } from './steps/gameCollect60';
 import { gameClickTower } from './steps/gameClickTower';
@@ -46,7 +45,6 @@ export function buildStepRegistry(): Map<TutorialStepName, Step> {
   reg.set('game_watch_tower', new GameWatchTowerStep());
   reg.set('game_press_4', gamePress4);
   reg.set('game_place_walls', new GamePlaceWallsStep());
-  reg.set('game_exit_build', gameExitBuild);
   reg.set('game_loot_coins', new GameLootCoinsStep());
   reg.set('game_collect_60', gameCollect60);
   reg.set('game_click_tower', gameClickTower);
