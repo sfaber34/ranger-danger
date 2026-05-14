@@ -721,7 +721,7 @@ export class GameScene extends Phaser.Scene {
         const bgmKey = (['grasslands', 'forest', 'infected', 'river', 'castle'] as const)
           .includes(this.biome as any) ? this.biome : 'castle';
         SFX.playBgm(bgmKey);
-        if (DEBUG_BOSS_RUSH && this.difficulty !== 'infinite') {
+        if (DEBUG_BOSS_RUSH && this.difficulty !== 'endless') {
           if (this.biome === 'castle') this.spawn.spawnCastleBoss('queen');
           else this.spawn.spawnBoss();
         }
