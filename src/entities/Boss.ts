@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { Biome } from '../levels';
+import { applyEntityVisual } from '../assets/spriteOverrides';
 
 export type BossState =
   | 'chase'
@@ -47,14 +48,19 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
                  : biome === 'infected' ? 'iboss'
                  : biome === 'river' ? 'rboss'
                  : 'ram';
+    const folder = bossKind === 'queen' ? 'boss_castle_q'
+                 : bossKind === 'dragon' ? 'boss_castle_d'
+                 : biome === 'forest' ? 'boss_forest'
+                 : biome === 'infected' ? 'boss_infected'
+                 : biome === 'river' ? 'boss_river'
+                 : 'boss_meadow';
     super(scene, x, y, `${prefix}_idle0`);
     this.bossKind = bossKind;
     this.animPrefix = prefix;
-    this.setScale(0.5);
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(9);
-    this.setSize(44, 44).setOffset(42, 52);
+    applyEntityVisual(this, folder, 'move', 0.5, 44, 44, 42, 52);
     this.play(`${prefix}-idle`);
 
     this.hpBar = scene.add.graphics().setDepth(20);
@@ -107,13 +113,15 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     this.scene.time.delayedCall(60, () => { if (!this.dying) this.clearTint(); });
     if (this.hp <= 0) {
       this.dying = true;
-      this.state = 'dying';
       this.setVelocity(0, 0);
       (this.body as Phaser.Physics.Arcade.Body).enable = false;
       this.hpBar.destroy();
-      const dieAnim = `${this.animPrefix}-die`;
-      this.play(dieAnim);
-      this.once(`animationcomplete-${dieAnim}`, () => this.destroy());
+      // Boss death uses the same fx-death pop as enemies, scaled up to roughly
+      // match the boss footprint (2× the 64-px enemy pop ≈ 128 world px).
+      const pop = this.scene.add.sprite(this.x, this.y, 'fx_death_0').setDepth(this.depth + 0.5).setScale(2);
+      pop.play('fx-death');
+      pop.once('animationcomplete', () => pop.destroy());
+      this.destroy();
     }
   }
 }
