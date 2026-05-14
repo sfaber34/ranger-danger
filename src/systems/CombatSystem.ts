@@ -311,6 +311,7 @@ export class CombatSystem {
     if (!pr.active || !b.active || b.dying) return;
     // Cannonballs ignore direct hits — they explode on reaching their ground target
     if (pr.groundTarget) return;
+    SFX.play('hit');
     const dmgApplied = Math.min(pr.damage, Math.max(0, b.hp));
     b.hurt(pr.damage);
     scene.runStats.damageDealt += dmgApplied;
