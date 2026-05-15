@@ -566,7 +566,13 @@ export class EnemyBossSystem {
 
     if (b.bossKind === 'dragon') {
       if (time >= scene.nextDragonFireball && onScreen) {
-        this.spawnDragonFireball(b.x, b.y, px, py);
+        // Where the dragon's mouth emits fireballs from. World-pixel offsets
+        // from the boss center — tune for your dragon sprite. X is mirrored
+        // when the dragon faces left.
+        const FIREBALL_OFFSET_X = 40;  // forward of center
+        const FIREBALL_OFFSET_Y = 5;   // negative = above center
+        const headDx = FIREBALL_OFFSET_X * (b.flipX ? -1 : 1);
+        this.spawnDragonFireball(b.x + headDx, b.y + FIREBALL_OFFSET_Y, px, py);
         scene.nextDragonFireball = time + CFG.castle.dragonFireballRate;
       }
       if (time >= b.nextBirth) {

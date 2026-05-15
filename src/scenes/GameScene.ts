@@ -722,7 +722,7 @@ export class GameScene extends Phaser.Scene {
           .includes(this.biome as any) ? this.biome : 'castle';
         SFX.playBgm(bgmKey);
         if (DEBUG_BOSS_RUSH && this.difficulty !== 'endless') {
-          if (this.biome === 'castle') this.spawn.spawnCastleBoss('queen');
+          if (this.biome === 'castle') this.spawn.spawnCastleBoss('dragon');
           else this.spawn.spawnBoss();
         }
       }
