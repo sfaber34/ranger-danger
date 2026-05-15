@@ -175,9 +175,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // Shadow size and ground offset come from the visible pixel bounds of
     // the active texture, so transparent padding in the sheet doesn't shift
     // or oversize the shadow. Flying kinds get an additional altitude bump
-    // applied inside Shadow.
-    this.shadow = Shadow.fromSprite(scene, this, this.texture.key, { flying: this.flying });
-    this.shadow.update(this);
+    // applied inside Shadow. Snakes slither directly on the ground so they
+    // skip the shadow entirely.
+    if (kind !== 'snake') {
+      this.shadow = Shadow.fromSprite(scene, this, this.texture.key, { flying: this.flying });
+      this.shadow.update(this);
+    }
   }
 
   static texPrefix(kind: EnemyKind): string {
