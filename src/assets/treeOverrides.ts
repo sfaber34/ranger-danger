@@ -1,15 +1,15 @@
 import Phaser from 'phaser';
+import { ClusterConfig } from './clusterConfig';
 
 // Drop tree PNGs at src/assets/sprites/trees/*.png (any filenames; sorted
 // alphabetically for stable variant order). The forest-cluster placement in
-// ChunkSystem picks among them at runtime to assemble clusters tile-by-tile,
-// reproducing the same density (2-3 trees per tile, jittered) as the old
-// pre-baked tree_cluster_<i> textures.
+// ChunkSystem picks among them at runtime to assemble clusters tile-by-tile.
 //
 // Each PNG should be drawn with the trunk base at the bottom-center of the
-// canvas (placement uses setOrigin(0.5, 1.0)). Render-time scale targets a
-// ~56 world-px tree height with ±15% jitter, matching the procedural baker's
-// treeH range (48-62).
+// canvas (placement uses setOrigin(0.5, 1.0)).
+//
+// All forest-tree knobs live in this file. Mirror file for infected plants
+// is src/assets/infectedPlantOverrides.ts.
 
 const TREE_URLS = import.meta.glob(
   './sprites/trees/*.png',
@@ -43,6 +43,17 @@ export const TREE_TINTS: number[] = [
   0xb09848, // olive
 ];
 
+/** Minimum trees placed per cluster tile. */
+export const TREE_PER_TILE_BASE = 1;
+/** Probability of adding one extra tree on top of the base count. */
+export const TREE_PER_TILE_EXTRA_CHANCE = 0.5;
+/** Horizontal jitter as a fraction of tile width (centered). */
+export const TREE_JITTER_X_FRACTION = 0.84;
+/** Vertical jitter as a fraction of tile height (centered). */
+export const TREE_JITTER_Y_FRACTION = 0.48;
+/** Anchor Y inside the tile, as a fraction from the top (0.85 ≈ near bottom). */
+export const TREE_TRUNK_Y_FRACTION = 0.85;
+
 export function loadTreeOverrides(scene: Phaser.Scene) {
   sortedTreeUrls.forEach((url, i) => {
     const k = `tree_png_${i}`;
@@ -55,3 +66,16 @@ export function treePngKey(i: number): string | null {
   if (TREE_PNG_COUNT === 0) return null;
   return `tree_png_${i % TREE_PNG_COUNT}`;
 }
+
+export const TREE_CLUSTER_CONFIG: ClusterConfig = {
+  pngCount: TREE_PNG_COUNT,
+  pngKey: treePngKey,
+  targetWorldHeight: TREE_TARGET_WORLD_HEIGHT,
+  scaleJitter: TREE_SCALE_JITTER,
+  tints: TREE_TINTS,
+  perTileBase: TREE_PER_TILE_BASE,
+  perTileExtraChance: TREE_PER_TILE_EXTRA_CHANCE,
+  jitterXFraction: TREE_JITTER_X_FRACTION,
+  jitterYFraction: TREE_JITTER_Y_FRACTION,
+  trunkYFraction: TREE_TRUNK_Y_FRACTION,
+};

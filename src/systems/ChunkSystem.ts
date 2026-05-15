@@ -11,14 +11,12 @@ import {
   riverHorizontalCenterY,
 } from '../assets/generateArt';
 import { canReachFromSpawnDirections, gridGet, gridSet } from './Pathfinding';
-import {
-  TREE_PNG_COUNT,
-  TREE_TARGET_WORLD_HEIGHT,
-  TREE_SCALE_JITTER,
-  TREE_TINTS,
-  treePngKey,
-} from '../assets/treeOverrides';
+import { TREE_CLUSTER_CONFIG } from '../assets/treeOverrides';
+import { INFECTED_PLANT_CLUSTER_CONFIG } from '../assets/infectedPlantOverrides';
+import { ClusterConfig } from '../assets/clusterConfig';
 import type { GameScene } from '../scenes/GameScene';
+
+type ClusterPattern = { tiles: { dx: number; dy: number }[]; w: number; h: number };
 
 /**
  * Streamed ground-chunk generation, plus the per-biome decoration passes
@@ -300,42 +298,16 @@ export class ChunkSystem {
         continue;
       }
 
-      // Place cluster sprite. Forest with PNG trees loaded uses per-tile
-      // placement (matches procedural density of 2-3 jittered trees per
-      // tile). Infected biome and the no-PNG fallback keep the old pre-
-      // baked single-image-per-cluster path.
+      // Place cluster sprite. PNG mode (per-tile placement) when override
+      // PNGs exist for this biome; otherwise fall back to the pre-baked
+      // single-image-per-cluster procedural texture.
       const patIdx = TREE_PATTERNS.indexOf(pattern);
       const sprX = ox * t + (pattern.w * t) / 2;
       const sprY = oy * t + (pattern.h * t) / 2;
       const bottomY = oy * t + pattern.h * t;
-      if (scene.biome !== 'infected' && TREE_PNG_COUNT > 0) {
-        for (const tile of pattern.tiles) {
-          const gx = ox + tile.dx, gy = oy + tile.dy;
-          const tileCx = gx * t + t / 2;
-          const tileCy = gy * t + t * 0.85;
-          const count = 1 + (rng() > 0.5 ? 1 : 0);
-          for (let i = 0; i < count; i++) {
-            const jx = (rng() - 0.5) * t * 0.84;
-            const jy = (rng() - 0.5) * t * 0.48;
-            const variant = Math.floor(rng() * TREE_PNG_COUNT);
-            const key = treePngKey(variant)!;
-            const pngH = scene.textures.get(key).getSourceImage().height || 1;
-            const baseScale = TREE_TARGET_WORLD_HEIGHT / pngH;
-            const scale = baseScale * (1 - TREE_SCALE_JITTER + rng() * TREE_SCALE_JITTER * 2);
-            const treeX = tileCx + jx;
-            const treeY = tileCy + jy;
-            const sprT = scene.add.sprite(treeX, treeY, key)
-              .setOrigin(0.5, 1.0)
-              .setScale(scale)
-              .setDepth(100 + treeY * 0.1);
-            if (rng() > 0.5) sprT.setFlipX(true);
-            const tint = TREE_TINTS[Math.floor(rng() * TREE_TINTS.length)];
-            if (tint !== 0xffffff) sprT.setTint(tint);
-            (sprT as any)._gx = gx;
-            (sprT as any)._gy = gy;
-            scene.treeSprites.push(sprT);
-          }
-        }
+      const cfg = scene.biome === 'infected' ? INFECTED_PLANT_CLUSTER_CONFIG : TREE_CLUSTER_CONFIG;
+      if (cfg.pngCount > 0) {
+        this.placePngCluster(pattern, ox, oy, t, rng, cfg);
       } else {
         const texKey = scene.biome === 'infected' ? `infected_plant_${patIdx}` : `tree_cluster_${patIdx}`;
         const spr = scene.add.image(sprX, sprY, texKey).setDepth(100 + bottomY * 0.1);
@@ -357,6 +329,50 @@ export class ChunkSystem {
         scene.pathing.syncWallTile(gx, gy, true);
       }
       placed++;
+    }
+  }
+
+  /**
+   * Render a tree / infected-plant cluster from individual per-tile PNG
+   * sprites instead of one baked cluster image. Driven by a biome-specific
+   * ClusterConfig — forest trees and infected plants pass independent
+   * configs (densities, scale targets, tints, jitter) but share this loop.
+   */
+  private placePngCluster(
+    pattern: ClusterPattern,
+    ox: number,
+    oy: number,
+    t: number,
+    rng: () => number,
+    cfg: ClusterConfig,
+  ): void {
+    const scene = this.scene;
+    for (const tile of pattern.tiles) {
+      const gx = ox + tile.dx, gy = oy + tile.dy;
+      const tileCx = gx * t + t / 2;
+      const tileCy = gy * t + t * cfg.trunkYFraction;
+      const count = cfg.perTileBase + (rng() < cfg.perTileExtraChance ? 1 : 0);
+      for (let i = 0; i < count; i++) {
+        const jx = (rng() - 0.5) * t * cfg.jitterXFraction;
+        const jy = (rng() - 0.5) * t * cfg.jitterYFraction;
+        const variant = Math.floor(rng() * cfg.pngCount);
+        const key = cfg.pngKey(variant)!;
+        const pngH = (scene.textures.get(key).getSourceImage() as HTMLImageElement | HTMLCanvasElement).height || 1;
+        const baseScale = cfg.targetWorldHeight / pngH;
+        const scale = baseScale * (1 - cfg.scaleJitter + rng() * cfg.scaleJitter * 2);
+        const spriteX = tileCx + jx;
+        const spriteY = tileCy + jy;
+        const spr = scene.add.sprite(spriteX, spriteY, key)
+          .setOrigin(0.5, 1.0)
+          .setScale(scale)
+          .setDepth(100 + spriteY * 0.1);
+        if (rng() > 0.5) spr.setFlipX(true);
+        const tint = cfg.tints[Math.floor(rng() * cfg.tints.length)];
+        if (tint !== 0xffffff) spr.setTint(tint);
+        (spr as any)._gx = gx;
+        (spr as any)._gy = gy;
+        scene.treeSprites.push(spr);
+      }
     }
   }
 

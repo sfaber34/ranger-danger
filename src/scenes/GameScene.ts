@@ -47,6 +47,7 @@ import {
   reregisterSpriteOverrideAnimations,
 } from '../assets/spriteOverrides';
 import { loadTreeOverrides } from '../assets/treeOverrides';
+import { loadInfectedPlantOverrides } from '../assets/infectedPlantOverrides';
 import { exportStaticSprites } from '../debug/exportSprites';
 
 // DEBUG: when true, every level skips waves and spawns its boss immediately
@@ -329,6 +330,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.textures.exists('c_base_2_png')) this.load.image('c_base_2_png', cannonBase2Img);
     loadSpriteOverrides(this);
     loadTreeOverrides(this);
+    loadInfectedPlantOverrides(this);
   }
 
   create() {
