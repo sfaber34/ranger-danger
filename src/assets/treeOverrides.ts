@@ -30,18 +30,17 @@ export const TREE_TARGET_WORLD_HEIGHT = 56;
 /** ±this fraction is applied to base scale per tree for natural variety. */
 export const TREE_SCALE_JITTER = 0.25;
 
-/** Per-tree tint palette. setTint multiplies RGB, so values close to white
- *  are subtle. 0xffffff is the "no tint" identity — included so a fraction
- *  of trees render with the artwork's original colors. Keep these gentle:
- *  big departures from white make the foliage look stained, not varied. */
+/** Per-tree tint palette. setTint multiplies RGB, so further-from-white
+ *  values shift the tree noticeably. 0xffffff is the "no tint" identity —
+ *  one entry kept so some trees render with the artwork's original colors. */
 export const TREE_TINTS: number[] = [
   0xffffff, // unmodified (default tree)
-  0xffffff, // weighted heavier toward "no tint" so the artwork carries
-  0xd8e0b8, // pale yellow-green
-  0xb8c8a0, // sage
-  0xd8c890, // touch of autumn / dry
-  0xa8c0a8, // cool spring green
-  0xc8b890, // earthy / olive
+  0xa0c060, // bright yellow-green (new growth)
+  0x80a060, // deep sage / pine
+  0xc0a050, // autumn / dry
+  0x60a070, // dark forest green
+  0x508c70, // cool deep emerald
+  0xb09848, // olive
 ];
 
 export function loadTreeOverrides(scene: Phaser.Scene) {
