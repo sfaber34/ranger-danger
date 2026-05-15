@@ -85,6 +85,7 @@ export class EnemyBossSystem {
     scene.enemies.children.iterate((c: any) => {
       const e = c as Enemy;
       if (!e || !e.active || e.dying) return true;
+      e.updateShadow();
 
       const tx = scene.player.x, ty = scene.player.y;
       e.targetRef = scene.player;

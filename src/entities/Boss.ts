@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { Biome } from '../levels';
 import { applyEntityVisual } from '../assets/spriteOverrides';
+import { Shadow } from './Shadow';
+import { measureOpaqueBounds } from './spriteBounds';
 
 export type BossState =
   | 'chase'
@@ -23,6 +25,7 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
   nextBoulder = 0;
   contactCd = 0;
   dying = false;
+  flying = false;  // queen + fog phantom hover; controls shadow altitude
 
   chargeDirX = 1;
   chargeDirY = 0;
@@ -35,6 +38,7 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
   _pv = -1; // grid version tracker
 
   hpBar: Phaser.GameObjects.Graphics;
+  shadow: Shadow | null = null;
 
   // Animation prefix — 'boss' for meadow, 'fboss' for forest
   animPrefix: string;
@@ -57,6 +61,7 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     super(scene, x, y, `${prefix}_idle0`);
     this.bossKind = bossKind;
     this.animPrefix = prefix;
+    this.flying = prefix === 'cqboss' || prefix === 'rboss';
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(9);
@@ -67,6 +72,12 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     // sprite rather than overlapping it. Different boss PNGs have wildly
     // different aspect ratios; a fixed offset can't fit all of them.
     this.hpBarYOffset = this.measureBarYOffset(`${prefix}_idle0`);
+
+    // Shadow uses the same visible-pixel measurement under the hood, picking
+    // up the boss's actual silhouette width and feet location regardless of
+    // transparent padding.
+    this.shadow = Shadow.fromSprite(scene, this, `${prefix}_idle0`, { flying: this.flying });
+    this.shadow.update(this);
 
     this.hpBar = scene.add.graphics().setDepth(20);
 
@@ -90,38 +101,14 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
    *  bottom of the sprite even when bosses have very different heights. */
   private hpBarYOffset = 45;
 
-  /** Scan the texture for the lowest opaque row, then convert that
-   *  source-pixel distance below the sprite center into world space using
-   *  the current scaleY. Falls back to 45 if the pixel read fails (e.g.
-   *  a tainted canvas). */
+  /** Distance from sprite center to where the HP bar should sit — just below
+   *  the visible bottom of the boss. Reuses the shared opaque-bounds helper
+   *  so transparent padding doesn't push the bar away. */
   private measureBarYOffset(textureKey: string): number {
-    try {
-      const src = this.scene.textures.get(textureKey).getSourceImage();
-      let canvas: HTMLCanvasElement;
-      if (src instanceof HTMLCanvasElement) {
-        canvas = src;
-      } else {
-        canvas = document.createElement('canvas');
-        canvas.width = (src as HTMLImageElement).width;
-        canvas.height = (src as HTMLImageElement).height;
-        canvas.getContext('2d')!.drawImage(src as HTMLImageElement, 0, 0);
-      }
-      const ctx = canvas.getContext('2d')!;
-      const w = canvas.width, h = canvas.height;
-      const data = ctx.getImageData(0, 0, w, h).data;
-      let lowestY = h - 1;
-      for (let y = h - 1; y >= 0; y--) {
-        let opaque = false;
-        for (let x = 0; x < w; x++) {
-          if (data[(y * w + x) * 4 + 3] > 0) { opaque = true; break; }
-        }
-        if (opaque) { lowestY = y; break; }
-      }
-      const padding = 8;
-      return (lowestY - h / 2) * this.scaleY + padding;
-    } catch {
-      return 45;
-    }
+    const bounds = measureOpaqueBounds(this.scene, textureKey);
+    if (!bounds) return 45;
+    const padding = 8;
+    return (bounds.bottom - bounds.sourceH / 2) * this.scaleY + padding;
   }
 
   drawHpBar() {
@@ -135,6 +122,7 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     // Position the Graphics object to follow the boss; the bar geometry
     // is drawn in local coords (0,0) so we don't need to repaint it.
     this.hpBar.setPosition(this.x, this.y + this.hpBarYOffset);
+    this.shadow?.update(this);
     if (this.hp === this._lastDrawnHp && this.maxHp === this._lastDrawnMaxHp) return;
     this._lastDrawnHp = this.hp;
     this._lastDrawnMaxHp = this.maxHp;
@@ -168,5 +156,11 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
       pop.once('animationcomplete', () => pop.destroy());
       this.destroy();
     }
+  }
+
+  destroy(fromScene?: boolean) {
+    this.shadow?.destroy();
+    this.shadow = null;
+    super.destroy(fromScene);
   }
 }
