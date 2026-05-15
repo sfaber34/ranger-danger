@@ -46,11 +46,19 @@ import {
   applySpriteOverrides,
   reregisterSpriteOverrideAnimations,
 } from '../assets/spriteOverrides';
+import { loadTreeOverrides } from '../assets/treeOverrides';
+import { exportStaticSprites } from '../debug/exportSprites';
 
 // DEBUG: when true, every level skips waves and spawns its boss immediately
 // on load. Castle loads at the Phantom Queen (mid-boss). Temporary — flip to
 // false for normal play. Infinite mode is unaffected.
 const DEBUG_BOSS_RUSH = false;
+
+// DEBUG: when true, the first level load dumps every static texture to disk
+// as a PNG (walls, towers, trees, spikes, indicators, etc.). Flip to false
+// for normal play. Chrome will prompt to "Allow multiple downloads" — click
+// Allow once and the rest stream through.
+const DEBUG_EXPORT_STATIC_SPRITES = false;
 
 // BuildKind moved to src/state/BuildState.ts. Re-exported here so existing
 // `import { BuildKind } from '../scenes/GameScene'` callers don't break.
@@ -320,6 +328,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.textures.exists('c_base_1_png')) this.load.image('c_base_1_png', cannonBase1Img);
     if (!this.textures.exists('c_base_2_png')) this.load.image('c_base_2_png', cannonBase2Img);
     loadSpriteOverrides(this);
+    loadTreeOverrides(this);
   }
 
   create() {
@@ -330,6 +339,7 @@ export class GameScene extends Phaser.Scene {
     registerAnimations(this);
     applySpriteOverrides(this);
     reregisterSpriteOverrideAnimations(this);
+    if (DEBUG_EXPORT_STATIC_SPRITES) exportStaticSprites(this);
 
     // Keep FIT mode — native resolution already matches viewport
     this.scale.scaleMode = Phaser.Scale.ScaleModes.FIT;

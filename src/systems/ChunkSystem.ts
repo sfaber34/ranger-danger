@@ -11,6 +11,13 @@ import {
   riverHorizontalCenterY,
 } from '../assets/generateArt';
 import { canReachFromSpawnDirections, gridGet, gridSet } from './Pathfinding';
+import {
+  TREE_PNG_COUNT,
+  TREE_TARGET_WORLD_HEIGHT,
+  TREE_SCALE_JITTER,
+  TREE_TINTS,
+  treePngKey,
+} from '../assets/treeOverrides';
 import type { GameScene } from '../scenes/GameScene';
 
 /**
@@ -118,14 +125,25 @@ export class ChunkSystem {
       }
     }
 
-    // Destroy any tree sprite overlapping this tile
+    // Destroy tree sprites belonging to this tile. PNG-mode trees are tagged
+    // with _gx/_gy so we hit exactly the right tile's trees; legacy baked
+    // cluster sprites (no tag, one per cluster) fall back to a bounding-box
+    // overlap test, which destroys the whole cluster when any of its tiles
+    // is hit — same behavior the system had before PNG mode was added.
     const px = gx * t + t / 2;
     const py = gy * t + t / 2;
     for (let i = scene.treeSprites.length - 1; i >= 0; i--) {
-      const spr = scene.treeSprites[i] as Phaser.GameObjects.Image;
-      const hw = spr.width * spr.scaleX / 2;
-      const hh = spr.height * spr.scaleY / 2;
-      if (px >= spr.x - hw && px <= spr.x + hw && py >= spr.y - hh && py <= spr.y + hh) {
+      const spr = scene.treeSprites[i] as Phaser.GameObjects.Image & { _gx?: number; _gy?: number };
+      const hasTag = spr._gx !== undefined && spr._gy !== undefined;
+      let hit: boolean;
+      if (hasTag) {
+        hit = spr._gx === gx && spr._gy === gy;
+      } else {
+        const hw = spr.width * spr.scaleX / 2;
+        const hh = spr.height * spr.scaleY / 2;
+        hit = px >= spr.x - hw && px <= spr.x + hw && py >= spr.y - hh && py <= spr.y + hh;
+      }
+      if (hit) {
         spr.destroy();
         scene.treeSprites.splice(i, 1);
       }
@@ -282,14 +300,47 @@ export class ChunkSystem {
         continue;
       }
 
-      // Place cluster sprite
+      // Place cluster sprite. Forest with PNG trees loaded uses per-tile
+      // placement (matches procedural density of 2-3 jittered trees per
+      // tile). Infected biome and the no-PNG fallback keep the old pre-
+      // baked single-image-per-cluster path.
       const patIdx = TREE_PATTERNS.indexOf(pattern);
       const sprX = ox * t + (pattern.w * t) / 2;
       const sprY = oy * t + (pattern.h * t) / 2;
       const bottomY = oy * t + pattern.h * t;
-      const texKey = scene.biome === 'infected' ? `infected_plant_${patIdx}` : `tree_cluster_${patIdx}`;
-      const spr = scene.add.image(sprX, sprY, texKey).setDepth(100 + bottomY * 0.1);
-      scene.treeSprites.push(spr);
+      if (scene.biome !== 'infected' && TREE_PNG_COUNT > 0) {
+        for (const tile of pattern.tiles) {
+          const gx = ox + tile.dx, gy = oy + tile.dy;
+          const tileCx = gx * t + t / 2;
+          const tileCy = gy * t + t * 0.85;
+          const count = 1 + (rng() > 0.5 ? 1 : 0);
+          for (let i = 0; i < count; i++) {
+            const jx = (rng() - 0.5) * t * 0.84;
+            const jy = (rng() - 0.5) * t * 0.48;
+            const variant = Math.floor(rng() * TREE_PNG_COUNT);
+            const key = treePngKey(variant)!;
+            const pngH = scene.textures.get(key).getSourceImage().height || 1;
+            const baseScale = TREE_TARGET_WORLD_HEIGHT / pngH;
+            const scale = baseScale * (1 - TREE_SCALE_JITTER + rng() * TREE_SCALE_JITTER * 2);
+            const treeX = tileCx + jx;
+            const treeY = tileCy + jy;
+            const sprT = scene.add.sprite(treeX, treeY, key)
+              .setOrigin(0.5, 1.0)
+              .setScale(scale)
+              .setDepth(100 + treeY * 0.1);
+            if (rng() > 0.5) sprT.setFlipX(true);
+            const tint = TREE_TINTS[Math.floor(rng() * TREE_TINTS.length)];
+            if (tint !== 0xffffff) sprT.setTint(tint);
+            (sprT as any)._gx = gx;
+            (sprT as any)._gy = gy;
+            scene.treeSprites.push(sprT);
+          }
+        }
+      } else {
+        const texKey = scene.biome === 'infected' ? `infected_plant_${patIdx}` : `tree_cluster_${patIdx}`;
+        const spr = scene.add.image(sprX, sprY, texKey).setDepth(100 + bottomY * 0.1);
+        scene.treeSprites.push(spr);
+      }
 
       // Place per-tile collision blockers
       for (const tile of pattern.tiles) {
