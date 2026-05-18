@@ -85,7 +85,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.play('ew-move');
         break;
       case 'bear':
-        applyEntityVisual(this, 'bear', 'move', 0.55, 30, 30, 17, 20);
+        // Body sized to the visible bear silhouette in bear/move.png. The bear's
+        // pngScaleMultiplier of 3.0 magnifies any padding around the character,
+        // so the body's source values need to match the PNG, not a 32×32 stub.
+        applyEntityVisual(this, 'bear', 'move', 0.55, 23, 15, 5, 8);
         this.play('ear-move');
         break;
       case 'spider': {
@@ -153,8 +156,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         break;
       case 'golem':
         // Wider body than other enemies — needed for the same-kind collider in
-        // GameScene to give visible spacing between golems.
-        applyEntityVisual(this, 'golem', 'move', 0.55, 50, 50, 7, 14);
+        // GameScene to give visible spacing between golems. Width narrowed to
+        // fit inside the golem PNG silhouette so arrows don't trigger in the
+        // empty pixels beside it.
+        applyEntityVisual(this, 'golem', 'move', 0.55, 38, 50, 13, 14);
         this.play('ego-move');
         break;
       case 'shadow_imp':
