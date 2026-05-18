@@ -1056,9 +1056,22 @@ export class UIScene extends Phaser.Scene {
     if (this.upgradePanel || !this.upgradeBtnAnchor || this.upgradesLocked) return;
     const game = this.scene.get('Game') as any;
     if (!game || !game.player || game.endState?.gameOver) return;
-    game.physics?.pause();
+    // Match the tower-panel pause set: pausing physics alone leaves the
+    // GameScene update loop running, so towers keep re-triggering their
+    // attack animations every fireRate while the menu is open.
+    if (!game.buildState.paused) {
+      game.buildState.paused = true;
+      game.physics?.pause();
+      game.tweens?.pauseAll();
+      game.anims?.pauseAll();
+    }
     this.upgradePanel = new UpgradePanel(this, game, this.upgradeBtnAnchor, () => {
-      game.physics?.resume();
+      if (game.buildState.paused && game.buildState.kind === 'none') {
+        game.buildState.paused = false;
+        game.physics?.resume();
+        game.tweens?.resumeAll();
+        game.anims?.resumeAll();
+      }
       this.upgradePanel = null;
     });
   }
