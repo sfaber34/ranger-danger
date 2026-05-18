@@ -120,7 +120,7 @@ export const CFG = {
     toadGlobSplash: 12,         // smaller than half a tile — easier to sidestep
     toadGlobLifetime: 3500,
     toadGlobArcHeight: 60,      // px — peak height of the arc
-    toadHopInterval: 800,       // ms between hops
+    toadHopInterval: 500,       // ms between hops
     toadHopDuration: 350,       // ms a hop takes (airborne)
     toadChance: 0.15,           // chance a spawn is a toad instead of normal infected
   },

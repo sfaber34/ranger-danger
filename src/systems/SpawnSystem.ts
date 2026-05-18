@@ -90,10 +90,14 @@ function getEndlessPool(home: SpawnBiome, bossesCleared: number): SpawnBiome[] {
 
 /** Per-biome kind picker — same odds as the campaign-mode spawnEnemy
  *  branches, just factored out so the endless picker can reuse them
- *  for any biome it samples. */
-function pickKindForBiome(biome: SpawnBiome, heavyChance: number): EnemyKind {
+ *  for any biome it samples. `blockToads` is set in the last 15% of an
+ *  infected wave so the tail doesn't trickle to a halt on slow toads. */
+function pickKindForBiome(biome: SpawnBiome, heavyChance: number, blockToads = false): EnemyKind {
   if (biome === 'forest') return Math.random() < heavyChance ? 'bear' : 'spider';
   if (biome === 'infected') {
+    if (blockToads) {
+      return Math.random() < heavyChance ? 'infected_heavy' : 'infected_basic';
+    }
     const r = Math.random();
     if (r < CFG.infected.toadChance) return 'toad';
     if (r < CFG.infected.toadChance + heavyChance) return 'infected_heavy';
@@ -135,7 +139,7 @@ function biomeOfKind(kind: EnemyKind): SpawnBiome {
 
 /** Pick a normal-wave enemy kind in endless mode. Honours theme
  *  rotation and the castle-elite trickle. */
-function pickEndlessEnemyKind(home: SpawnBiome, bossesCleared: number, heavyChance: number): EnemyKind {
+function pickEndlessEnemyKind(home: SpawnBiome, bossesCleared: number, heavyChance: number, blockToads = false): EnemyKind {
   // Castle elite trickle starts at event 5 (after 4 bosses cleared).
   if (bossesCleared >= 4) {
     const eliteChance = Math.min(0.3, 0.05 + (bossesCleared - 4) * 0.05);
@@ -149,7 +153,7 @@ function pickEndlessEnemyKind(home: SpawnBiome, bossesCleared: number, heavyChan
   }
   const pool = getEndlessPool(home, bossesCleared);
   const biome = pool[Math.floor(Math.random() * pool.length)];
-  return pickKindForBiome(biome, heavyChance);
+  return pickKindForBiome(biome, heavyChance, blockToads);
 }
 
 /** Pool of pack KINDS available for runner-pack bursts in endless mode.
@@ -622,15 +626,22 @@ export class SpawnSystem {
     const x = px + Math.cos(angle) * spawnR;
     const y = py + Math.sin(angle) * spawnR;
     let kind: EnemyKind;
+    // Last 15% of the wave: drop toads from the picker so the wave doesn't
+    // end on a trail of slow hoppers the player has to wait out.
+    const blockToads = scene.waveState.waveSpawned / scene.levelWaveSize >= 0.85;
     if (scene.difficulty === 'endless') {
-      kind = pickEndlessEnemyKind(scene.biome as SpawnBiome, scene.bossState.endlessBossesCleared, scene.heavyChance);
+      kind = pickEndlessEnemyKind(scene.biome as SpawnBiome, scene.bossState.endlessBossesCleared, scene.heavyChance, blockToads);
     } else if (scene.biome === 'forest') {
       kind = Math.random() < scene.heavyChance ? 'bear' : 'spider';
     } else if (scene.biome === 'infected') {
-      const r = Math.random();
-      if (r < CFG.infected.toadChance) kind = 'toad';
-      else if (r < CFG.infected.toadChance + scene.heavyChance) kind = 'infected_heavy';
-      else kind = 'infected_basic';
+      if (blockToads) {
+        kind = Math.random() < scene.heavyChance ? 'infected_heavy' : 'infected_basic';
+      } else {
+        const r = Math.random();
+        if (r < CFG.infected.toadChance) kind = 'toad';
+        else if (r < CFG.infected.toadChance + scene.heavyChance) kind = 'infected_heavy';
+        else kind = 'infected_basic';
+      }
     } else if (scene.biome === 'river') {
       const r = Math.random();
       if (r < scene.heavyChance) kind = 'bat';
