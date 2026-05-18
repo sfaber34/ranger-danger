@@ -24,4 +24,9 @@ export type ClusterConfig = {
   jitterYFraction: number;
   /** Anchor Y inside the tile, as a fraction from the top (0.85 ≈ near bottom). */
   trunkYFraction: number;
+  /** Optional per-variant scale multiplier applied on top of the base scale.
+   *  Indices map to the variant returned by pngKey(); missing entries default
+   *  to 1.0. Use this to shrink/grow specific plants without touching the
+   *  source PNG dimensions. */
+  variantScales?: number[];
 };

@@ -29,7 +29,7 @@ export const INFECTED_PLANT_PNG_COUNT = sortedInfectedPlantUrls.length;
 export const INFECTED_PLANT_TARGET_WORLD_HEIGHT = 40;
 
 /** ±this fraction is applied to base scale per plant for natural variety. */
-export const INFECTED_PLANT_SCALE_JITTER = 0.25;
+export const INFECTED_PLANT_SCALE_JITTER = 0.10;
 
 /** Per-plant tint palette. Sickly / poisoned tones befitting the biome.
  *  0xffffff renders the artwork untinted; further-from-white shifts harder. */
@@ -37,22 +37,33 @@ export const INFECTED_PLANT_TINTS: number[] = [
   0xffffff, // unmodified (default plant)
   0xa080c0, // sickly purple
   0x80c080, // toxic green
-  0x705080, // deep purple
   0xc090a0, // pink rot
-  0x806840, // dying brown
   0x90a060, // jaundiced yellow-green
 ];
 
-/** Minimum plants placed per cluster tile. */
+/** Minimum plants placed per cluster tile. Must stay >= 1 — every infected-
+ *  plant tile is a path blocker, so dropping below 1 would leave invisible
+ *  walls. The placement helper enforces this with a Math.max(1, ...) safety
+ *  net, but keep the value explicit here so the intent is clear. */
 export const INFECTED_PLANT_PER_TILE_BASE = 1;
-/** Probability of adding one extra plant on top of the base count. */
-export const INFECTED_PLANT_PER_TILE_EXTRA_CHANCE = 0.5;
+/** Probability of adding one extra plant on top of the base count. Wider
+ *  plant sprites look cluttered with multiples per tile, so default to 0. */
+export const INFECTED_PLANT_PER_TILE_EXTRA_CHANCE = 0;
 /** Horizontal jitter as a fraction of tile width (centered). */
 export const INFECTED_PLANT_JITTER_X_FRACTION = 0.84;
 /** Vertical jitter as a fraction of tile height (centered). */
 export const INFECTED_PLANT_JITTER_Y_FRACTION = 0.48;
 /** Anchor Y inside the tile, as a fraction from the top (0.85 ≈ near bottom). */
 export const INFECTED_PLANT_TRUNK_Y_FRACTION = 0.85;
+
+/** Per-variant render-scale multiplier. Indices map to the alphabetical sort
+ *  order of the PNGs in src/assets/sprites/infected_plants/, so:
+ *    [0] → first file (e.g. infected_plant_1.png)
+ *    [1] → second file
+ *    [2..5] → remaining files (typically infected_plant_3..6.png)
+ *  Missing entries default to 1.0. Adjust to make some variants visibly
+ *  smaller / larger than others without resizing the source art. */
+export const INFECTED_PLANT_VARIANT_SCALES: number[] = [1.8, 1.8, 0.75, 0.75, 0.75, 0.75];
 
 export function loadInfectedPlantOverrides(scene: Phaser.Scene) {
   sortedInfectedPlantUrls.forEach((url, i) => {
@@ -78,4 +89,5 @@ export const INFECTED_PLANT_CLUSTER_CONFIG: ClusterConfig = {
   jitterXFraction: INFECTED_PLANT_JITTER_X_FRACTION,
   jitterYFraction: INFECTED_PLANT_JITTER_Y_FRACTION,
   trunkYFraction: INFECTED_PLANT_TRUNK_Y_FRACTION,
+  variantScales: INFECTED_PLANT_VARIANT_SCALES,
 };

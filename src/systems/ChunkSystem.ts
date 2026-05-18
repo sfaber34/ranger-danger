@@ -351,14 +351,18 @@ export class ChunkSystem {
       const gx = ox + tile.dx, gy = oy + tile.dy;
       const tileCx = gx * t + t / 2;
       const tileCy = gy * t + t * cfg.trunkYFraction;
-      const count = cfg.perTileBase + (rng() < cfg.perTileExtraChance ? 1 : 0);
+      // Cluster tiles are path blockers, so leaving a tile without a sprite
+      // would create an invisible wall. Floor of 1 guards against any config
+      // that sums to less than 1 sprite per tile.
+      const count = Math.max(1, cfg.perTileBase + (rng() < cfg.perTileExtraChance ? 1 : 0));
       for (let i = 0; i < count; i++) {
         const jx = (rng() - 0.5) * t * cfg.jitterXFraction;
         const jy = (rng() - 0.5) * t * cfg.jitterYFraction;
         const variant = Math.floor(rng() * cfg.pngCount);
         const key = cfg.pngKey(variant)!;
         const pngH = (scene.textures.get(key).getSourceImage() as HTMLImageElement | HTMLCanvasElement).height || 1;
-        const baseScale = cfg.targetWorldHeight / pngH;
+        const variantScale = cfg.variantScales?.[variant] ?? 1;
+        const baseScale = (cfg.targetWorldHeight / pngH) * variantScale;
         const scale = baseScale * (1 - cfg.scaleJitter + rng() * cfg.scaleJitter * 2);
         const spriteX = tileCx + jx;
         const spriteY = tileCy + jy;
