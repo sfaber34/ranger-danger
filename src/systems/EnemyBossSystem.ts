@@ -886,7 +886,7 @@ export class EnemyBossSystem {
       const jx = Phaser.Math.Between(-10, 10);
       const jy = Phaser.Math.Between(-8, 8);
       const r = Phaser.Math.Between(12, 18);
-      const shade = [0xd060a0, 0xe878b8, 0xc04888, 0xd06898][i % 4];
+      const shade = [0x66ff33, 0x88ff44, 0x44dd22, 0x99ff66][i % 4];
       const c = scene.add.circle(x + jx, y + jy, r, shade, 0.35).setDepth(7);
       sprites.push(c);
       scene.tweens.add({
