@@ -576,6 +576,13 @@ export class LevelSelectScene extends Phaser.Scene {
       this.closeDifficultyPanel();
     });
 
+    // Transparent interactive rect sized to the modal box — sits above the
+    // backdrop so missed clicks inside the panel (between buttons) don't fall
+    // through and close the panel. Clicks outside the modal still hit the
+    // backdrop and close it.
+    const panelBlocker = this.add.rectangle(0, 0, pw + this.p(6), ph + this.p(6), 0x000000, 0)
+      .setInteractive();
+
     // Panel box
     const outerBox = this.add.graphics();
     outerBox.fillStyle(0x0d1220, 0.95);
@@ -627,7 +634,7 @@ export class LevelSelectScene extends Phaser.Scene {
     const btnStartY = dividerY + blockTopGap + btnH / 2;
     this.diffBtnW = btnW;
     this.diffBtnH = btnH;
-    const items: Phaser.GameObjects.GameObject[] = [backdrop, outerBox, innerBox, title, tag, divider];
+    const items: Phaser.GameObjects.GameObject[] = [backdrop, panelBlocker, outerBox, innerBox, title, tag, divider];
 
     for (let i = 0; i < DIFFICULTY_ORDER.length; i++) {
       const diff = DIFFICULTY_ORDER[i];
