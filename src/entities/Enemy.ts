@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { CFG } from '../config';
 import { applyEntityVisual } from '../assets/spriteOverrides';
+import { Shadow } from './Shadow';
 
 export type EnemyKind = 'basic' | 'heavy' | 'runner' | 'snake' | 'rat' | 'deer' | 'wolf' | 'bear' | 'spider' | 'infected_basic' | 'infected_heavy' | 'infected_runner' | 'toad' | 'crow' | 'bat' | 'dragonfly' | 'mosquito' | 'skeleton' | 'warlock' | 'golem' | 'shadow_imp' | 'castle_bat' | 'castle_rat';
 
@@ -21,6 +22,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   noCoinDrop = false; // boss-spawned enemies don't drop coins
   targetRef: any = null; // current target object (player, tower, wall)
   facing: 'r' | 'l' = 'r'; // directional facing for bear
+  shadow: Shadow | null = null;
   /** vTime of the last frame this enemy was actually moving. Used by the
    *  stragglers-phase stuck-teleport in EnemyBossSystem to unwedge the
    *  last enemy or two when terrain blocks the path or the AI cull
@@ -169,6 +171,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.play('ecrat-move');
         break;
     }
+
+    // Shadow size and ground offset come from the visible pixel bounds of
+    // the active texture, so transparent padding in the sheet doesn't shift
+    // or oversize the shadow. Flying kinds get an additional altitude bump
+    // applied inside Shadow. Snakes slither directly on the ground so they
+    // skip the shadow entirely.
+    if (kind !== 'snake') {
+      this.shadow = Shadow.fromSprite(scene, this, this.texture.key, { flying: this.flying });
+      this.shadow.update(this);
+    }
   }
 
   static texPrefix(kind: EnemyKind): string {
@@ -254,5 +266,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       pop.once('animationcomplete', () => pop.destroy());
       this.destroy();
     }
+  }
+
+  /** Keep the cast shadow tracking the sprite's current world position.
+   *  Called from EnemyBossSystem.updateEnemies each frame. */
+  updateShadow(): void {
+    this.shadow?.update(this);
+  }
+
+  destroy(fromScene?: boolean) {
+    this.shadow?.destroy();
+    this.shadow = null;
+    super.destroy(fromScene);
   }
 }
