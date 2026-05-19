@@ -58,6 +58,48 @@ export class EnemyBossSystem {
         && e.y > wv.y + inset && e.y < wv.bottom - inset;
   }
 
+  /** Move an enemy back to the spawn ring along a direction that has
+   *  clear line-of-sight to the player. Falls back to the enemy's current
+   *  bearing if nothing else is clear. Resets stuck/window/path state so
+   *  the enemy gets a fresh start.
+   *
+   *  Without the LOS-aware direction pick, a wedged enemy could teleport
+   *  back to the same forested quadrant it came from and immediately get
+   *  re-stuck — producing a loop where the enemy keeps teleporting without
+   *  ever reaching the player. */
+  private teleportEnemyToSpawnRing(e: Enemy, time: number) {
+    const scene = this.scene;
+    const respawnR = scene.spawnDist * CFG.tile;
+    const tx = scene.player.x, ty = scene.player.y;
+    const dx0 = e.x - tx, dy0 = e.y - ty;
+    const d0 = Math.sqrt(dx0 * dx0 + dy0 * dy0) || 1;
+    const baseAngle = Math.atan2(dy0, dx0);
+    const offsets = [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8, Math.PI];
+    let nx = tx + (dx0 / d0) * respawnR;
+    let ny = ty + (dy0 / d0) * respawnR;
+    for (const off of offsets) {
+      const a = baseAngle + off;
+      const cx = tx + Math.cos(a) * respawnR;
+      const cy = ty + Math.sin(a) * respawnR;
+      if (!scene.pathing.lineBlocked(cx, cy, tx, ty)) {
+        nx = cx;
+        ny = cy;
+        break;
+      }
+    }
+    e.setPosition(nx, ny);
+    if (e.body && (e.body as any).enable) e.setVelocity(0, 0);
+    e.path = [];
+    e.pathIdx = 0;
+    e.lastMovingAt = time;
+    e.stuckMsec = 0;
+    e.prevX = e.x;
+    e.prevY = e.y;
+    e.windowStartedAt = time;
+    e.windowStartX = e.x;
+    e.windowStartY = e.y;
+  }
+
   updateEnemies(time: number, delta: number) {
     const scene = this.scene;
     const respawnR = scene.spawnDist * CFG.tile;
@@ -136,16 +178,7 @@ export class EnemyBossSystem {
       // Stage 3 (last resort): teleport to the spawn ring. Same effect as the
       // stragglers teleport below, but fires mid-wave too.
       if (!skipsStuckCheck && e.stuckMsec >= STAGE_TELEPORT_MS_WEDGED) {
-        const dx = e.x - tx, dy = e.y - ty;
-        const d = Math.sqrt(dx * dx + dy * dy) || 1;
-        e.setPosition(tx + (dx / d) * respawnR, ty + (dy / d) * respawnR);
-        if (e.body && (e.body as any).enable) e.setVelocity(0, 0);
-        e.path = [];
-        e.pathIdx = 0;
-        e.lastMovingAt = time;
-        e.stuckMsec = 0;
-        e.prevX = e.x;
-        e.prevY = e.y;
+        this.teleportEnemyToSpawnRing(e, time);
         return true;
       }
       // Stage 1 (300ms): clear the cached path so the AI replans this frame.
@@ -178,19 +211,7 @@ export class EnemyBossSystem {
       if (!skipsStuckCheck && time - e.windowStartedAt > WINDOW_MSEC) {
         const wdx = e.x - e.windowStartX, wdy = e.y - e.windowStartY;
         if (wdx * wdx + wdy * wdy < WINDOW_MIN_PROGRESS_SQ) {
-          const dx = e.x - tx, dy = e.y - ty;
-          const d = Math.sqrt(dx * dx + dy * dy) || 1;
-          e.setPosition(tx + (dx / d) * respawnR, ty + (dy / d) * respawnR);
-          if (e.body && (e.body as any).enable) e.setVelocity(0, 0);
-          e.path = [];
-          e.pathIdx = 0;
-          e.lastMovingAt = time;
-          e.stuckMsec = 0;
-          e.prevX = e.x;
-          e.prevY = e.y;
-          e.windowStartedAt = time;
-          e.windowStartX = e.x;
-          e.windowStartY = e.y;
+          this.teleportEnemyToSpawnRing(e, time);
           return true;
         }
         // Slide the window forward to start a new 4s observation.
