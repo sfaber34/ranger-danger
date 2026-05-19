@@ -91,6 +91,12 @@ export class EnemyBossSystem {
     const STAGE_RECOMPUTE_MS = 300;       // force a fresh path
     const STAGE_NUDGE_MS = 600;           // sidestep perpendicular for one frame
     const STAGE_TELEPORT_MS_WEDGED = 2000; // last resort: teleport to spawn ring
+    // Sliding-window safety net — catches enemies that ARE moving per-frame
+    // (so the displacement check thinks they're fine) but never making net
+    // progress: e.g. sliding tangentially along a tree edge, or oscillating
+    // back and forth at a corner. 4s and 16px = half a tile of progress.
+    const WINDOW_MSEC = 4000;
+    const WINDOW_MIN_PROGRESS_SQ = 16 * 16;
 
     scene.enemies.children.iterate((c: any) => {
       const e = c as Enemy;
@@ -158,6 +164,39 @@ export class EnemyBossSystem {
           e.setVelocity((-dy / d) * perpSign * e.speed, (dx / d) * perpSign * e.speed);
         }
         return true;
+      }
+
+      // Sliding-window net-displacement check. Every WINDOW_MSEC, compare
+      // the enemy's current position to where it was at window-start; if
+      // it covered less than 16 px total, it's wedged or sliding without
+      // progress and gets teleported to the spawn ring.
+      if (e.windowStartedAt === 0) {
+        e.windowStartedAt = time;
+        e.windowStartX = e.x;
+        e.windowStartY = e.y;
+      }
+      if (!skipsStuckCheck && time - e.windowStartedAt > WINDOW_MSEC) {
+        const wdx = e.x - e.windowStartX, wdy = e.y - e.windowStartY;
+        if (wdx * wdx + wdy * wdy < WINDOW_MIN_PROGRESS_SQ) {
+          const dx = e.x - tx, dy = e.y - ty;
+          const d = Math.sqrt(dx * dx + dy * dy) || 1;
+          e.setPosition(tx + (dx / d) * respawnR, ty + (dy / d) * respawnR);
+          if (e.body && (e.body as any).enable) e.setVelocity(0, 0);
+          e.path = [];
+          e.pathIdx = 0;
+          e.lastMovingAt = time;
+          e.stuckMsec = 0;
+          e.prevX = e.x;
+          e.prevY = e.y;
+          e.windowStartedAt = time;
+          e.windowStartX = e.x;
+          e.windowStartY = e.y;
+          return true;
+        }
+        // Slide the window forward to start a new 4s observation.
+        e.windowStartedAt = time;
+        e.windowStartX = e.x;
+        e.windowStartY = e.y;
       }
 
       if (dist2 > TELEPORT_DIST_SQ) {

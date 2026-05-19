@@ -38,6 +38,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
    *  actually moving. EnemyBossSystem escalates: 300ms → force path recompute,
    *  600ms → perpendicular nudge, 2000ms → teleport to spawn ring. */
   stuckMsec = 0;
+  /** Sliding-window stuck check: position at the start of the current
+   *  4-second window. If net displacement across the window is below a
+   *  threshold, the enemy is wedged or sliding tangentially along terrain
+   *  without progress, and EnemyBossSystem teleports them. 0 = uninit. */
+  windowStartX = 0;
+  windowStartY = 0;
+  windowStartedAt = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number, kind: EnemyKind) {
     const dataMap: Record<EnemyKind, typeof CFG.enemy.basic> = {
