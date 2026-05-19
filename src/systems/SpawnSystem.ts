@@ -71,6 +71,9 @@ export function endlessBossTitle(def: InfBossDef): string {
 //   events 3-4 (cycles 2-3): home + 1 neighbour
 //   events 5-6 (cycles 4-5): home + 2 neighbours
 //   events 7+  (cycles 6+) : all 5 biomes mixed
+// The upcoming boss's biome is ALWAYS added to the pool too (when not
+// already present), so the 3 waves leading up to a boss sprinkle in
+// that biome's enemies as a visual telegraph of what's coming.
 // "Castle elites" (warlock / golem / shadow_imp / skeleton) trickle in
 // starting event 5 with 5% chance, +5% per event, capped at 30%.
 
@@ -81,11 +84,25 @@ const BIOME_RAMP: SpawnBiome[] = ['grasslands', 'forest', 'infected', 'river', '
 
 /** Pool of biomes the normal-wave picker may sample from for this run. */
 function getEndlessPool(home: SpawnBiome, bossesCleared: number): SpawnBiome[] {
-  if (bossesCleared < 2) return [home];
-  const others = BIOME_RAMP.filter(b => b !== home);
-  if (bossesCleared < 4) return [home, others[0]];
-  if (bossesCleared < 6) return [home, others[0], others[1]];
-  return BIOME_RAMP.slice();
+  let pool: SpawnBiome[];
+  if (bossesCleared < 2) {
+    pool = [home];
+  } else {
+    const others = BIOME_RAMP.filter(b => b !== home);
+    if (bossesCleared < 4) pool = [home, others[0]];
+    else if (bossesCleared < 6) pool = [home, others[0], others[1]];
+    else pool = BIOME_RAMP.slice();
+  }
+  // Foreshadow the upcoming boss: mix that biome's enemies into the
+  // normal waves leading up to it so the player can recognize what's
+  // coming. No-op when the boss biome is already in the rotation pool
+  // (e.g. matches the home biome, or after enough bosses cleared).
+  const upcoming = pickEndlessBosses(bossesCleared);
+  for (const def of upcoming.bosses) {
+    const biome = def.biome as SpawnBiome;
+    if (!pool.includes(biome)) pool.push(biome);
+  }
+  return pool;
 }
 
 /** Per-biome kind picker — same odds as the campaign-mode spawnEnemy
