@@ -16,6 +16,9 @@ import type { GameScene } from '../scenes/GameScene';
  */
 export class EnemyBossSystem {
   constructor(private scene: GameScene) {}
+  /** vTime of the last DEBUG_STUCK snapshot. Throttles the per-enemy
+   *  state log to once every 3 seconds when the flag is on. */
+  private _lastStuckSnapshotAt = 0;
 
   updateWebs(time: number) {
     const scene = this.scene;
@@ -67,12 +70,16 @@ export class EnemyBossSystem {
    *  back to the same forested quadrant it came from and immediately get
    *  re-stuck — producing a loop where the enemy keeps teleporting without
    *  ever reaching the player. */
-  private teleportEnemyToSpawnRing(e: Enemy, time: number) {
+  private teleportEnemyToSpawnRing(e: Enemy, time: number, source: string = '') {
     const scene = this.scene;
     const respawnR = scene.spawnDist * CFG.tile;
     const tx = scene.player.x, ty = scene.player.y;
     const dx0 = e.x - tx, dy0 = e.y - ty;
     const d0 = Math.sqrt(dx0 * dx0 + dy0 * dy0) || 1;
+    if ((window as any).DEBUG_STUCK) {
+      // eslint-disable-next-line no-console
+      console.log(`[STUCK ${source}] ${e.kind} teleport from (${e.x.toFixed(0)},${e.y.toFixed(0)}) — player at (${tx.toFixed(0)},${ty.toFixed(0)}), dist=${d0.toFixed(0)}, stuckMsec=${e.stuckMsec.toFixed(0)}`);
+    }
     const baseAngle = Math.atan2(dy0, dx0);
     const offsets = [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8, Math.PI];
     let nx = tx + (dx0 / d0) * respawnR;
@@ -140,6 +147,22 @@ export class EnemyBossSystem {
     const WINDOW_MSEC = 4000;
     const WINDOW_MIN_PROGRESS_SQ = 16 * 16;
 
+    if ((window as any).DEBUG_STUCK && time - this._lastStuckSnapshotAt > 3000) {
+      this._lastStuckSnapshotAt = time;
+      const tx0 = scene.player.x, ty0 = scene.player.y;
+      const rows: string[] = [];
+      scene.enemies.children.iterate((c: any) => {
+        const e = c as Enemy;
+        if (!e || !e.active || e.dying) return true;
+        const d = Math.hypot(e.x - tx0, e.y - ty0);
+        const wd = Math.hypot(e.x - e.windowStartX, e.y - e.windowStartY);
+        rows.push(`${e.kind} pos=(${e.x.toFixed(0)},${e.y.toFixed(0)}) dist=${d.toFixed(0)} stuckMs=${e.stuckMsec.toFixed(0)} winAge=${(time - e.windowStartedAt).toFixed(0)} winDisp=${wd.toFixed(1)}`);
+        return true;
+      });
+      // eslint-disable-next-line no-console
+      console.log(`[STUCK snapshot t=${time.toFixed(0)} live=${liveCount} stragglers=${stragglersPhase} respawnR=${respawnR.toFixed(0)} cullR=${Math.sqrt(FAR_AI_CULL_SQ).toFixed(0)}]\n  ${rows.join('\n  ')}`);
+    }
+
     scene.enemies.children.iterate((c: any) => {
       const e = c as Enemy;
       if (!e || !e.active || e.dying) return true;
@@ -178,7 +201,7 @@ export class EnemyBossSystem {
       // Stage 3 (last resort): teleport to the spawn ring. Same effect as the
       // stragglers teleport below, but fires mid-wave too.
       if (!skipsStuckCheck && e.stuckMsec >= STAGE_TELEPORT_MS_WEDGED) {
-        this.teleportEnemyToSpawnRing(e, time);
+        this.teleportEnemyToSpawnRing(e, time, 'frame');
         return true;
       }
       // Stage 1 (300ms): clear the cached path so the AI replans this frame.
@@ -211,7 +234,7 @@ export class EnemyBossSystem {
       if (!skipsStuckCheck && time - e.windowStartedAt > WINDOW_MSEC) {
         const wdx = e.x - e.windowStartX, wdy = e.y - e.windowStartY;
         if (wdx * wdx + wdy * wdy < WINDOW_MIN_PROGRESS_SQ) {
-          this.teleportEnemyToSpawnRing(e, time);
+          this.teleportEnemyToSpawnRing(e, time, 'window');
           return true;
         }
         // Slide the window forward to start a new 4s observation.
