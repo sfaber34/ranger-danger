@@ -597,7 +597,11 @@ export class EnemyBossSystem {
       b.play(scene.anims.exists(windAnim) ? windAnim : `${ap}-chargewind`);
       return;
     }
-    if (!isCastleBoss && scene.biome !== 'grasslands' && time >= b.nextBoulder && onScreen) {
+    // Boulder throw belongs to every non-castle boss EXCEPT the grasslands
+    // ram (intentionally simpler as the tutorial boss). Key off boss identity,
+    // not scene.biome, so the Wendigo/Blighted/Fog Phantom still throw when
+    // they appear on a non-home map in endless mode.
+    if (!isCastleBoss && b.animPrefix !== 'ram' && time >= b.nextBoulder && onScreen) {
       const boulderRange = 280;
       let bestDist = boulderRange;
       let target: { x: number; y: number } | null = null;
@@ -625,7 +629,10 @@ export class EnemyBossSystem {
     }
 
     let moveX = 0, moveY = 0;
-    const clear = scene.biome === 'river' || !scene.pathing.lineBlocked(b.x, b.y, px, py);
+    // Flying bosses (Fog Phantom, Queen) ignore wall-blocked pathing — they
+    // fly straight at the player. Keyed off b.flying so a flying boss in any
+    // biome still passes over terrain in endless mode.
+    const clear = b.flying || !scene.pathing.lineBlocked(b.x, b.y, px, py);
     if (clear) {
       const dx = px - b.x, dy = py - b.y;
       const d = Math.hypot(dx, dy) || 1;
@@ -846,16 +853,19 @@ export class EnemyBossSystem {
     const backDist = 26;
     const baseX = b.x - b.chargeDirX * backDist;
     const baseY = b.y - b.chargeDirY * backDist + 4;
+    // Blighted One's purple-poison smoke trails the boss regardless of which
+    // map it's fighting on. Key on boss identity, not scene.biome.
+    const isBlighted = b.animPrefix === 'iboss';
     for (let i = 0; i < puffs; i++) {
       const jx = Phaser.Math.Between(-6, 6);
       const jy = Phaser.Math.Between(-4, 4);
       const r = Phaser.Math.Between(8, 12);
-      const shade = scene.biome === 'infected'
+      const shade = isBlighted
         ? [0xd060a0, 0xe080c0, 0xc04890][i % 3]
         : [0x9a9aa8, 0xb8b8c4, 0x7e7e8a][i % 3];
       const puff = scene.add.circle(baseX + jx, baseY + jy, r, shade, 0.7)
         .setDepth(8)
-        .setStrokeStyle(1, scene.biome === 'infected' ? 0x8a2060 : 0x5a5a66, 0.5);
+        .setStrokeStyle(1, isBlighted ? 0x8a2060 : 0x5a5a66, 0.5);
       const driftX = -b.chargeDirX * 14 + Phaser.Math.Between(-6, 6);
       const driftY = -b.chargeDirY * 14 + Phaser.Math.Between(-14, -6);
       scene.tweens.add({
@@ -870,7 +880,9 @@ export class EnemyBossSystem {
       });
     }
 
-    if (scene.biome === 'infected') {
+    // Gas cloud is the Blighted One's signature trail — leave it tied to
+    // boss identity so it appears wherever the Blighted spawns.
+    if (b.animPrefix === 'iboss') {
       this.spawnGasCloud(baseX, baseY);
     }
   }
@@ -1060,11 +1072,14 @@ export class EnemyBossSystem {
       const dist = 18;
       const ex = b.x + Math.cos(a) * dist;
       const ey = b.y + Math.sin(a) * dist - 6;
-      const kind: EnemyKind = scene.biome === 'forest'
+      // Boss summons its OWN biome's minions, not the map biome's — so the
+      // Wendigo still calls spider/wolf when fighting on the meadow in
+      // endless mode.
+      const kind: EnemyKind = b.animPrefix === 'fboss'
         ? (Math.random() < 0.4 ? 'spider' : 'wolf')
-        : scene.biome === 'infected'
+        : b.animPrefix === 'iboss'
         ? (Math.random() < 0.4 ? 'infected_heavy' : 'infected_basic')
-        : scene.biome === 'river'
+        : b.animPrefix === 'rboss'
         ? (Math.random() < 0.4 ? 'bat' : 'crow')
         : (Math.random() < 0.4 ? 'deer' : 'snake');
       const e = new Enemy(scene, ex, ey, kind);
