@@ -45,6 +45,7 @@ import {
   loadSpriteOverrides,
   applySpriteOverrides,
   reregisterSpriteOverrideAnimations,
+  biomeFolderFilter,
 } from '../assets/spriteOverrides';
 import { loadTreeOverrides } from '../assets/treeOverrides';
 import { loadInfectedPlantOverrides } from '../assets/infectedPlantOverrides';
@@ -328,9 +329,17 @@ export class GameScene extends Phaser.Scene {
     if (!this.textures.exists('c_base_png')) this.load.image('c_base_png', cannonBaseImg);
     if (!this.textures.exists('c_base_1_png')) this.load.image('c_base_1_png', cannonBase1Img);
     if (!this.textures.exists('c_base_2_png')) this.load.image('c_base_2_png', cannonBase2Img);
-    loadSpriteOverrides(this);
-    loadTreeOverrides(this);
-    loadInfectedPlantOverrides(this);
+
+    // Biome-aware sprite loading: campaign runs only load PNG sheets for
+    // characters that can spawn in the chosen biome. Endless mode rotates
+    // through all biomes, so it falls back to loading everything.
+    const folderFilter = biomeFolderFilter(this.biome, this.difficulty);
+    loadSpriteOverrides(this, folderFilter);
+    // Trees and infected plants are biome-specific terrain props. Endless
+    // can rotate into either, so load them when the filter is null
+    // (endless / unknown biome) or when the active campaign biome needs them.
+    if (folderFilter === null || this.biome === 'forest') loadTreeOverrides(this);
+    if (folderFilter === null || this.biome === 'infected') loadInfectedPlantOverrides(this);
   }
 
   create() {

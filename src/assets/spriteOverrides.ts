@@ -1,4 +1,35 @@
 import Phaser from 'phaser';
+import { Biome, Difficulty } from '../levels';
+
+/** Folders whose sheets are needed in every level — Player is always rendered;
+ *  endless mode loads everything else on top. */
+const UNIVERSAL_FOLDERS = ['player'];
+
+/** Campaign-mode roster per biome. Endless ignores this and loads every
+ *  folder. Keys in the inner arrays match the `folder` field in BUILTIN /
+ *  the on-disk src/assets/sprites/<folder>/ directories. */
+const CAMPAIGN_BIOME_FOLDERS: Record<Biome, string[]> = {
+  grasslands: ['basic', 'heavy', 'snake', 'rat', 'deer', 'boss_meadow', 'boss_grasslands'],
+  forest:     ['bear', 'spider', 'wolf', 'boss_forest'],
+  infected:   ['toad', 'infected_basic', 'infected_heavy', 'boss_infected'],
+  river:      ['crow', 'bat', 'dragonfly', 'mosquito', 'boss_river'],
+  castle:     ['skeleton', 'warlock', 'golem', 'shadow_imp', 'castle_bat', 'castle_rat', 'boss_castle_q', 'boss_castle_d'],
+  // Unimplemented biomes — fall back to loading everything if a future level
+  // somehow routes here, so a missing entry doesn't ship as broken sprites.
+  desert:   [],
+  tundra:   [],
+  volcanic: [],
+};
+
+/** Returns the set of CHARACTER folders to load for this (biome, difficulty)
+ *  combination, or `null` to mean "load everything" — endless mode and
+ *  unrecognized/unimplemented biomes. */
+export function biomeFolderFilter(biome: Biome, difficulty: Difficulty): Set<string> | null {
+  if (difficulty === 'endless') return null;
+  const biomeFolders = CAMPAIGN_BIOME_FOLDERS[biome];
+  if (!biomeFolders || biomeFolders.length === 0) return null;
+  return new Set([...UNIVERSAL_FOLDERS, ...biomeFolders]);
+}
 
 // ============================================================================
 // USER CONFIG
@@ -267,8 +298,9 @@ function mirrorCanonicalKey(c: CharacterSpec, spec: AnimSpec, i: number): string
     : `${c.mirrorTexPrefix}_${spec.suffix}`;
 }
 
-export function loadSpriteOverrides(scene: Phaser.Scene) {
+export function loadSpriteOverrides(scene: Phaser.Scene, folderFilter: Set<string> | null = null) {
   for (const c of CHARACTERS) {
+    if (folderFilter && !folderFilter.has(c.folder)) continue;
     for (const a of c.anims) {
       if (a.derivedFrom || a.derivedAllFrames) continue;
       const url = findSheet(c.folder, a.suffix);
