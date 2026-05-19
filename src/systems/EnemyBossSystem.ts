@@ -81,9 +81,13 @@ export class EnemyBossSystem {
     const stragglersPhase = liveCount > 0 && liveCount <= 3;
     const STUCK_TELEPORT_MS = 3000;
     const MOVING_SPEED_THRESH = 5;
-    // Displacement-based stuck detector (wedged-on-tree case): commanding
-    // full velocity but actually not moving. Escalates in stages.
-    const STUCK_MOVE_THRESH = 0.5;        // world px / frame considered "not moving"
+    // Displacement-based stuck detector. Tracks ACTUAL position change so it
+    // catches both wedged-on-terrain (full velocity, zero movement) and AI-
+    // culled-but-stranded (zero velocity, zero movement) cases. Don't gate on
+    // commanded velocity — the AI cull zeros velocity every frame for far
+    // enemies, which would otherwise reset the counter when a wedged enemy
+    // drifts past the cull boundary. Escalates in stages.
+    const STUCK_MOVE_THRESH = 0.1;        // world px / frame considered "not moving"
     const STAGE_RECOMPUTE_MS = 300;       // force a fresh path
     const STAGE_NUDGE_MS = 600;           // sidestep perpendicular for one frame
     const STAGE_TELEPORT_MS_WEDGED = 2000; // last resort: teleport to spawn ring
@@ -107,13 +111,15 @@ export class EnemyBossSystem {
       if (commandedSpeed > MOVING_SPEED_THRESH) e.lastMovingAt = time;
 
       // Displacement-based stuck detection — measures ACTUAL position change
-      // since last frame, so it catches enemies pressed into a tree corner
-      // (full velocity, zero displacement) that the velocity-based lastMovingAt
-      // check misses. Skip kinds that intentionally stand still mid-action.
+      // since last frame. Catches enemies pressed into a tree corner (full
+      // velocity, zero displacement) AND enemies the AI-cull has frozen
+      // mid-wedge (zero velocity, zero displacement) — without the gate the
+      // counter survives the cull-kick-in moment when a wedged enemy drifts
+      // past the cull boundary. Skip kinds that intentionally stand still.
       const movedDist = Math.hypot(e.x - e.prevX, e.y - e.prevY);
       const skipsStuckCheck = e.kind === 'toad' || e.kind === 'warlock' || e.flying;
       const wasStuckMsec = e.stuckMsec;
-      if (!skipsStuckCheck && commandedSpeed > MOVING_SPEED_THRESH && movedDist < STUCK_MOVE_THRESH) {
+      if (!skipsStuckCheck && movedDist < STUCK_MOVE_THRESH) {
         e.stuckMsec += delta;
       } else {
         e.stuckMsec = 0;
