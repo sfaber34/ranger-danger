@@ -28,6 +28,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
    *  last enemy or two when terrain blocks the path or the AI cull
    *  freezes them off-screen. 0 = uninitialized; set on first iteration. */
   lastMovingAt = 0;
+  /** Previous-frame world position. Compared against the current position to
+   *  detect "commanding velocity but not displacing" — i.e. wedged on a tree
+   *  corner. Initialized to spawn position in the constructor so the first
+   *  frame doesn't register as a huge displacement. */
+  prevX = 0;
+  prevY = 0;
+  /** Accumulated ms the enemy has been pressing into something without
+   *  actually moving. EnemyBossSystem escalates: 300ms → force path recompute,
+   *  600ms → perpendicular nudge, 2000ms → teleport to spawn ring. */
+  stuckMsec = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number, kind: EnemyKind) {
     const dataMap: Record<EnemyKind, typeof CFG.enemy.basic> = {
@@ -186,6 +196,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.shadow = Shadow.fromSprite(scene, this, this.texture.key, { flying: this.flying });
       this.shadow.update(this);
     }
+
+    this.prevX = this.x;
+    this.prevY = this.y;
   }
 
   static texPrefix(kind: EnemyKind): string {

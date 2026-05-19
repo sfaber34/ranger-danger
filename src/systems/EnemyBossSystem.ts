@@ -58,7 +58,7 @@ export class EnemyBossSystem {
         && e.y > wv.y + inset && e.y < wv.bottom - inset;
   }
 
-  updateEnemies(time: number, _delta: number) {
+  updateEnemies(time: number, delta: number) {
     const scene = this.scene;
     const respawnR = scene.spawnDist * CFG.tile;
     // Cull/teleport thresholds must stay outside the spawn ring — spawnDist
@@ -81,6 +81,12 @@ export class EnemyBossSystem {
     const stragglersPhase = liveCount > 0 && liveCount <= 3;
     const STUCK_TELEPORT_MS = 3000;
     const MOVING_SPEED_THRESH = 5;
+    // Displacement-based stuck detector (wedged-on-tree case): commanding
+    // full velocity but actually not moving. Escalates in stages.
+    const STUCK_MOVE_THRESH = 0.5;        // world px / frame considered "not moving"
+    const STAGE_RECOMPUTE_MS = 300;       // force a fresh path
+    const STAGE_NUDGE_MS = 600;           // sidestep perpendicular for one frame
+    const STAGE_TELEPORT_MS_WEDGED = 2000; // last resort: teleport to spawn ring
 
     scene.enemies.children.iterate((c: any) => {
       const e = c as Enemy;
@@ -97,9 +103,55 @@ export class EnemyBossSystem {
       // the entire vTime so far" on their first iteration.
       if (e.lastMovingAt === 0) e.lastMovingAt = time;
       const body = e.body as Phaser.Physics.Arcade.Body | null;
-      if (body) {
-        const speedNow = Math.hypot(body.velocity.x, body.velocity.y);
-        if (speedNow > MOVING_SPEED_THRESH) e.lastMovingAt = time;
+      const commandedSpeed = body ? Math.hypot(body.velocity.x, body.velocity.y) : 0;
+      if (commandedSpeed > MOVING_SPEED_THRESH) e.lastMovingAt = time;
+
+      // Displacement-based stuck detection — measures ACTUAL position change
+      // since last frame, so it catches enemies pressed into a tree corner
+      // (full velocity, zero displacement) that the velocity-based lastMovingAt
+      // check misses. Skip kinds that intentionally stand still mid-action.
+      const movedDist = Math.hypot(e.x - e.prevX, e.y - e.prevY);
+      const skipsStuckCheck = e.kind === 'toad' || e.kind === 'warlock' || e.flying;
+      const wasStuckMsec = e.stuckMsec;
+      if (!skipsStuckCheck && commandedSpeed > MOVING_SPEED_THRESH && movedDist < STUCK_MOVE_THRESH) {
+        e.stuckMsec += delta;
+      } else {
+        e.stuckMsec = 0;
+      }
+      e.prevX = e.x;
+      e.prevY = e.y;
+
+      // Stage 3 (last resort): teleport to the spawn ring. Same effect as the
+      // stragglers teleport below, but fires mid-wave too.
+      if (!skipsStuckCheck && e.stuckMsec >= STAGE_TELEPORT_MS_WEDGED) {
+        const dx = e.x - tx, dy = e.y - ty;
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        e.setPosition(tx + (dx / d) * respawnR, ty + (dy / d) * respawnR);
+        if (e.body && (e.body as any).enable) e.setVelocity(0, 0);
+        e.path = [];
+        e.pathIdx = 0;
+        e.lastMovingAt = time;
+        e.stuckMsec = 0;
+        e.prevX = e.x;
+        e.prevY = e.y;
+        return true;
+      }
+      // Stage 1 (300ms): clear the cached path so the AI replans this frame.
+      if (!skipsStuckCheck && wasStuckMsec < STAGE_RECOMPUTE_MS && e.stuckMsec >= STAGE_RECOMPUTE_MS) {
+        e.lastPath = 0;
+        e.path = [];
+        e.pathIdx = 0;
+      }
+      // Stage 2 (600ms): perpendicular sidestep for one frame, then return so
+      // the per-kind AI doesn't immediately overwrite the nudge velocity.
+      if (!skipsStuckCheck && wasStuckMsec < STAGE_NUDGE_MS && e.stuckMsec >= STAGE_NUDGE_MS) {
+        const dx = tx - e.x, dy = ty - e.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const perpSign = Math.random() < 0.5 ? 1 : -1;
+        if (e.body && (e.body as any).enable) {
+          e.setVelocity((-dy / d) * perpSign * e.speed, (dx / d) * perpSign * e.speed);
+        }
+        return true;
       }
 
       if (dist2 > TELEPORT_DIST_SQ) {
@@ -120,12 +172,11 @@ export class EnemyBossSystem {
         return true;
       }
 
-      // Stragglers wedged behind terrain (path keeps returning empty) or
-      // pinned by the cull edge case: teleport to the spawn ring along
-      // their current bearing so the wave can resolve. Skip kinds that
-      // intentionally stand still (toad between hops, warlock standoff,
-      // any flying kind that can't get terrain-wedged).
-      const skipsStuckCheck = e.kind === 'toad' || e.kind === 'warlock' || e.flying;
+      // Stragglers wedged with NO commanded velocity (path keeps returning
+      // empty, or pinned by the cull edge case): teleport to the spawn ring
+      // along their current bearing so the wave can resolve. The mid-wave
+      // wedged-on-tree case is handled by the displacement check above; this
+      // covers the complementary "AI couldn't even pick a velocity" case.
       if (stragglersPhase && !skipsStuckCheck && time - e.lastMovingAt > STUCK_TELEPORT_MS) {
         const dx = e.x - tx, dy = e.y - ty;
         const d = Math.sqrt(dx * dx + dy * dy) || 1;
