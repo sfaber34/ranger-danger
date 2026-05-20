@@ -1006,7 +1006,13 @@ export class UIScene extends Phaser.Scene {
     // "BOSS IN Ns" countdown.
     const inWaveBreak = s.waveBreakUntil > 0 && s.vTime < s.waveBreakUntil;
     const endlessBossWave = this.difficulty === 'endless' && s.wave % 4 === 0;
-    if (s.bossSpawned || (endlessBossWave && !inWaveBreak)) {
+    // Boss-prep phase on a campaign boss wave (or castle queen/dragon, or
+    // the final endless straggler-clear): wave is fully killed and we're
+    // counting down to the boss. The wave bar would be sitting at 0% with
+    // a stale "WAVE N" label, which the user reads as the wave still
+    // running. Hide it; the boss-approach banner / countdown takes over.
+    const inBossPrep = s.bossCountdownUntil > 0 && s.vTime < s.bossCountdownUntil;
+    if (s.bossSpawned || (endlessBossWave && !inWaveBreak) || inBossPrep) {
       // Hide wave bar when boss is active (boss bar takes its place)
       this.waveLabel.setVisible(false);
       this.waveBarGfx.setVisible(false);
