@@ -8,6 +8,7 @@ import { Projectile } from '../entities/Projectile';
 import { SFX } from '../audio/sfx';
 import { Biome } from '../levels';
 import { computeViewport, viewportWorldSize } from '../viewport';
+import { gridGet } from './Pathfinding';
 import type { GameScene } from '../scenes/GameScene';
 
 // Singles run events 1-6 (one boss per event, fixed order regardless of
@@ -197,6 +198,32 @@ export class SpawnSystem {
   private endlessFirstCorner: number | undefined = undefined;
 
   constructor(private scene: GameScene) {}
+
+  /** Returns (wx, wy) unchanged if the world position is on a walkable tile;
+   *  otherwise spirals outward to find the nearest empty tile and returns its
+   *  center. Used by every enemy-spawn site to avoid placing enemies inside
+   *  tree/wall blockers — when a dynamic body is fully inside a static body,
+   *  Phaser's separation step can shove the enemy out on the opposite side,
+   *  which on Forest reads as the enemy "walking through" a tree cluster. */
+  safeSpawnPos(wx: number, wy: number): { x: number; y: number } {
+    const t = CFG.tile;
+    const grid = this.scene.grid;
+    const tx = Math.floor(wx / t), ty = Math.floor(wy / t);
+    const v = gridGet(grid, tx, ty);
+    if (v === 0 || v === 5) return { x: wx, y: wy };
+    for (let r = 1; r <= 4; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+          const nv = gridGet(grid, tx + dx, ty + dy);
+          if (nv === 0 || nv === 5) {
+            return { x: (tx + dx) * t + t / 2, y: (ty + dy) * t + t / 2 };
+          }
+        }
+      }
+    }
+    return { x: wx, y: wy };
+  }
 
   recomputeSpawnDist() {
     const scene = this.scene;
@@ -609,14 +636,16 @@ export class SpawnSystem {
       scene.waveState.recordSpawn();
       if (i === 0) {
         const { cx, cy } = computeSpawnPos();
-        const e = new Enemy(scene, cx, cy, packKind);
+        const safe = this.safeSpawnPos(cx, cy);
+        const e = new Enemy(scene, safe.x, safe.y, packKind);
         this.applyEnemyDifficulty(e);
         scene.enemies.add(e);
       } else {
         scene.time.delayedCall(delay * i, () => {
           if (scene.endState.gameOver) return;
           const { cx, cy } = computeSpawnPos();
-          const e = new Enemy(scene, cx + Phaser.Math.Between(-8, 8), cy + Phaser.Math.Between(-8, 8), packKind);
+          const safe = this.safeSpawnPos(cx + Phaser.Math.Between(-8, 8), cy + Phaser.Math.Between(-8, 8));
+          const e = new Enemy(scene, safe.x, safe.y, packKind);
           this.applyEnemyDifficulty(e);
           scene.enemies.add(e);
         });
@@ -686,9 +715,8 @@ export class SpawnSystem {
       const waveSize = scene.levelWaveSize;
       const toSpawn = Math.min(n, waveSize - scene.waveState.waveSpawned);
       for (let i = 0; i < toSpawn; i++) {
-        const sx = x + Phaser.Math.Between(-spread, spread);
-        const sy = y + Phaser.Math.Between(-spread, spread);
-        const se = new Enemy(scene, sx, sy, 'spider');
+        const safe = this.safeSpawnPos(x + Phaser.Math.Between(-spread, spread), y + Phaser.Math.Between(-spread, spread));
+        const se = new Enemy(scene, safe.x, safe.y, 'spider');
         this.applyEnemyDifficulty(se);
         scene.enemies.add(se);
         if (i > 0) scene.waveState.recordSpawn();
@@ -702,9 +730,8 @@ export class SpawnSystem {
       const waveSize = scene.levelWaveSize;
       const toSpawn = Math.min(n, waveSize - scene.waveState.waveSpawned);
       for (let i = 0; i < toSpawn; i++) {
-        const sx = x + Phaser.Math.Between(-spread, spread);
-        const sy = y + Phaser.Math.Between(-spread, spread);
-        const se = new Enemy(scene, sx, sy, kind);
+        const safe = this.safeSpawnPos(x + Phaser.Math.Between(-spread, spread), y + Phaser.Math.Between(-spread, spread));
+        const se = new Enemy(scene, safe.x, safe.y, kind);
         this.applyEnemyDifficulty(se);
         scene.enemies.add(se);
         if (i > 0) scene.waveState.recordSpawn();
@@ -718,9 +745,8 @@ export class SpawnSystem {
       const waveSize = scene.levelWaveSize;
       const toSpawn = Math.min(n, waveSize - scene.waveState.waveSpawned);
       for (let i = 0; i < toSpawn; i++) {
-        const sx = x + Phaser.Math.Between(-spread, spread);
-        const sy = y + Phaser.Math.Between(-spread, spread);
-        const se = new Enemy(scene, sx, sy, kind);
+        const safe = this.safeSpawnPos(x + Phaser.Math.Between(-spread, spread), y + Phaser.Math.Between(-spread, spread));
+        const se = new Enemy(scene, safe.x, safe.y, kind);
         this.applyEnemyDifficulty(se);
         scene.enemies.add(se);
         if (i > 0) scene.waveState.recordSpawn();
@@ -734,9 +760,8 @@ export class SpawnSystem {
       const waveSize = scene.levelWaveSize;
       const toSpawn = Math.min(n, waveSize - scene.waveState.waveSpawned);
       for (let i = 0; i < toSpawn; i++) {
-        const sx = x + Phaser.Math.Between(-spread, spread);
-        const sy = y + Phaser.Math.Between(-spread, spread);
-        const se = new Enemy(scene, sx, sy, kind);
+        const safe = this.safeSpawnPos(x + Phaser.Math.Between(-spread, spread), y + Phaser.Math.Between(-spread, spread));
+        const se = new Enemy(scene, safe.x, safe.y, kind);
         this.applyEnemyDifficulty(se);
         scene.enemies.add(se);
         if (i > 0) scene.waveState.recordSpawn();
@@ -744,7 +769,8 @@ export class SpawnSystem {
       return;
     }
 
-    const e = new Enemy(scene, x, y, kind);
+    const safe = this.safeSpawnPos(x, y);
+    const e = new Enemy(scene, safe.x, safe.y, kind);
     this.applyEnemyDifficulty(e);
     scene.enemies.add(e);
   }

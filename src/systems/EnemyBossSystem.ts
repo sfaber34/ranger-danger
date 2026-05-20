@@ -720,7 +720,8 @@ export class EnemyBossSystem {
         const spawnCount = 3;
         for (let i = 0; i < spawnCount; i++) {
           const sa = (i / spawnCount) * Math.PI * 2;
-          const se = new Enemy(scene, b.x + Math.cos(sa) * 40, b.y + Math.sin(sa) * 40, 'skeleton');
+          const safe = scene.spawn.safeSpawnPos(b.x + Math.cos(sa) * 40, b.y + Math.sin(sa) * 40);
+          const se = new Enemy(scene, safe.x, safe.y, 'skeleton');
           scene.spawn.applyEnemyDifficulty(se);
           se.noCoinDrop = true;
           scene.enemies.add(se);
@@ -1222,7 +1223,8 @@ export class EnemyBossSystem {
         : b.animPrefix === 'rboss'
         ? (Math.random() < 0.4 ? 'bat' : 'crow')
         : (Math.random() < 0.4 ? 'deer' : 'snake');
-      const e = new Enemy(scene, ex, ey, kind);
+      const safe = scene.spawn.safeSpawnPos(ex, ey);
+      const e = new Enemy(scene, safe.x, safe.y, kind);
       e.noCoinDrop = true;
       scene.spawn.applyEnemyDifficulty(e);
       scene.enemies.add(e);
