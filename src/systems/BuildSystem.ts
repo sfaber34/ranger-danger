@@ -146,7 +146,10 @@ export class BuildSystem {
       return;
     }
 
-    // click an existing tower with no active build = select it
+    // click an existing tower with no active build = select it.
+    // Wall deletion is gated to wall build mode only (handled further down)
+    // so that a stray click outside any build mode never starts a sell
+    // countdown on a wall the player meant to walk past.
     if (scene.buildState.kind === 'none') {
       const hit = scene.towers.find(t =>
         tx >= t.tileX && tx < t.tileX + t.size &&
@@ -154,16 +157,6 @@ export class BuildSystem {
       if (hit) {
         scene.towerSelect.selectTower(hit);
         return;
-      }
-      // No tower under cursor — if it's a wall, start the sell countdown
-      // (click it again to cancel). Towers still need the upgrade panel
-      // for sell, so we don't auto-sell them on click.
-      if (!getRegistry(scene.game).get('tutorialActive')) {
-        const wHit = scene.walls.find(w => w.tileX === tx && w.tileY === ty);
-        if (wHit) {
-          scene.sell.startSellTimer(wHit);
-          return;
-        }
       }
       scene.towerSelect.deselectTower();
       return;

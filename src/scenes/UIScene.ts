@@ -263,12 +263,14 @@ export class UIScene extends Phaser.Scene {
     }
 
     const tryCycleSpeed = () => {
-      // While a build mode is active, the speed key bails out of build
-      // instead of cycling — gives the player a quick exit during wall
-      // placement without reaching for ESC.
+      // While a build mode is active, SPACE bails out of build instead of
+      // cycling speed — gives the player a quick exit during wall/tower
+      // placement without reaching for ESC. (Property paths matter: the
+      // earlier `game.buildKind` / `game.setBuild` aliases never existed,
+      // so this branch was silently dead and SPACE always cycled speed.)
       const game = this.scene.get('Game') as any;
-      if (game?.buildKind && game.buildKind !== 'none') {
-        game.setBuild('none');
+      if (game?.buildState?.kind && game.buildState.kind !== 'none') {
+        game.build?.setBuild('none');
         return;
       }
       if (!this.speedLocked) this.cycleSpeed();
