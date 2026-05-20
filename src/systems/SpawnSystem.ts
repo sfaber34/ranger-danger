@@ -567,10 +567,32 @@ export class SpawnSystem {
       const heavyCap = scene.difficulty === 'endless' ? 0.6 : CFG.spawn.heavyChanceMax;
       scene.heavyChance = Math.min(heavyCap, scene.heavyChance + CFG.spawn.heavyChanceStep);
     }
-    if (scene.spawnTimer > scene.spawnInterval && scene.waveState.waveSpawned < waveSize) {
+    // Wave-end climax: in the last 25% of a wave, three layered effects
+    // build a ramping climax so the tail doesn't trickle off.
+    //   1. spawnInterval linearly compresses from 1.0x at 0.75 progress to
+    //      0.5x at 1.0 progress, doubling the cadence by wave end.
+    //   2. One-shot forced pack burst at 0.85 progress (per wave),
+    //      ignoring the normal pack cooldown for a punctuation moment.
+    //   3. In the last 10% (>= 0.90 progress), each scheduled spawn fires
+    //      a second sister spawn at a fresh random angle so the player
+    //      can't just hold one corridor.
+    const progress = waveSize > 0 ? scene.waveState.waveSpawned / waveSize : 0;
+    const climaxActive = !isBossWave && progress >= 0.75;
+    const intervalScale = climaxActive ? 1 - (progress - 0.75) * 2 : 1;
+    const effectiveInterval = scene.spawnInterval * intervalScale;
+    if (climaxActive && progress >= 0.85 && !scene.waveState.finalePackTriggered
+        && scene.waveState.waveSpawned < waveSize) {
+      scene.waveState.finalePackTriggered = true;
+      this.spawnRunnerPack();
+    }
+    if (scene.spawnTimer > effectiveInterval && scene.waveState.waveSpawned < waveSize) {
       scene.spawnTimer = 0;
       this.spawnEnemy();
       scene.waveState.recordSpawn();
+      if (climaxActive && progress >= 0.90 && scene.waveState.waveSpawned < waveSize) {
+        this.spawnEnemy();
+        scene.waveState.recordSpawn();
+      }
     }
 
     // Runner/wolf pack bursts, independent of the normal spawn cadence.

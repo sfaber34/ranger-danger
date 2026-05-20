@@ -21,6 +21,11 @@ export class WaveState {
   /** Kills counted toward the current wave's size. */
   waveKills = 0;
 
+  /** SpawnSystem's wave-end climax fires one mandatory pack burst at
+   *  ~85% progress. This flag is reset on every wave-break transition so
+   *  the climax repeats for each new wave. */
+  finalePackTriggered = false;
+
   /**
    * Real-time vTime when the initial pre-game build phase ends. Set to
    * Infinity by the tutorial to suppress all spawning.
@@ -44,6 +49,7 @@ export class WaveState {
     this.waveSpawned = 0;
     this.waveKills = 0;
     this.waveBreakUntil = now + breakMs;
+    this.finalePackTriggered = false;
   }
 
   /**
@@ -57,6 +63,7 @@ export class WaveState {
     this.waveKills = 0;
     this.bossCountdownUntil = 0;
     this.waveBreakUntil = now + breakMs;
+    this.finalePackTriggered = false;
   }
 
   /**
@@ -71,6 +78,7 @@ export class WaveState {
     this.waveKills = 0;
     this.bossCountdownUntil = 0;
     this.waveBreakUntil = now + breakMs;
+    this.finalePackTriggered = false;
   }
 
   recordSpawn() { this.waveSpawned++; }
@@ -109,5 +117,6 @@ export class WaveState {
     this.waveStartAt = 0;
     this.waveBreakUntil = 0;
     this.bossCountdownUntil = 0;
+    this.finalePackTriggered = false;
   }
 }
