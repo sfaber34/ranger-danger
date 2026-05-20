@@ -567,9 +567,9 @@ export class SpawnSystem {
       const heavyCap = scene.difficulty === 'endless' ? 0.6 : CFG.spawn.heavyChanceMax;
       scene.heavyChance = Math.min(heavyCap, scene.heavyChance + CFG.spawn.heavyChanceStep);
     }
-    // Wave-end climax: in the last 25% of a wave, three layered effects
+    // Wave-end climax: in the last 35% of a wave, three layered effects
     // build a ramping climax so the tail doesn't trickle off.
-    //   1. spawnInterval linearly compresses from 1.0x at 0.75 progress to
+    //   1. spawnInterval linearly compresses from 1.0x at 0.65 progress to
     //      0.3x at 1.0 progress, tripling+ the cadence by wave end.
     //   2. One-shot forced pack burst at 0.85 progress (per wave),
     //      ignoring the normal pack cooldown for a punctuation moment.
@@ -577,8 +577,8 @@ export class SpawnSystem {
     //      sister spawn at a fresh random angle so the player can't
     //      just hold one corridor.
     const progress = waveSize > 0 ? scene.waveState.waveSpawned / waveSize : 0;
-    const climaxActive = !isBossWave && progress >= 0.75;
-    const intervalScale = climaxActive ? 1 - (progress - 0.75) * 2.8 : 1;
+    const climaxActive = !isBossWave && progress >= 0.65;
+    const intervalScale = climaxActive ? 1 - (progress - 0.65) * 2.0 : 1;
     const effectiveInterval = scene.spawnInterval * intervalScale;
     if (climaxActive && progress >= 0.85 && !scene.waveState.finalePackTriggered
         && scene.waveState.waveSpawned < waveSize) {
