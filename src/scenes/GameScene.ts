@@ -689,6 +689,7 @@ export class GameScene extends Phaser.Scene {
       waveKills: this.waveState.waveKills,
       waveSize: this.levelWaveSize,
       waveBreakUntil: this.waveState.waveBreakUntil,
+      bossCountdownUntil: this.waveState.bossCountdownUntil,
       vTime: this.vTime,
       countdownMsg: this.countdownMsg,
       countdownColor: this.countdownColor,
