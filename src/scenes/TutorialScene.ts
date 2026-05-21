@@ -4,6 +4,7 @@ import { getEvents } from '../core/events';
 import { CFG } from '../config';
 import { loadMedals, totalMedals } from '../levels';
 import { Enemy } from '../entities/Enemy';
+import type { GameScene } from './GameScene';
 import type { Step, StepContext, TutorialStepName } from '../tutorial/Step';
 import { buildStepRegistry } from '../tutorial/registry';
 
@@ -20,6 +21,10 @@ export function isTutorialNeeded(): boolean {
 
 export function markTutorialDone(): void {
   localStorage.setItem(STORAGE_KEY, 'true');
+}
+
+function getGameScene(scene: Phaser.Scene): GameScene {
+  return scene.scene.get('Game') as GameScene;
 }
 
 /**
@@ -181,13 +186,13 @@ export class TutorialScene extends Phaser.Scene {
       overlay: this.overlay,
       pauseGame: () => this.pauseGame(),
       resumeGame: () => this.resumeGame(),
-      spawnTutorialEnemies: (count) => this.spawnTutorialEnemies(this.scene.get('Game') as any, count),
+      spawnTutorialEnemies: (count) => this.spawnTutorialEnemies(getGameScene(this), count),
       advanceTo: (step, delayMs) => this.advanceTo(step, delayMs ?? 0),
       showStep: () => this.showStep(),
       step: this.step,
       pendingStep: this.pendingStep,
       setPendingStep: (s) => { this.pendingStep = s; },
-      gameScene: this.scene.get('Game') as any,
+      gameScene: getGameScene(this),
     };
   }
 
@@ -328,13 +333,13 @@ export class TutorialScene extends Phaser.Scene {
   // ---------- Helpers exposed via StepContext ----------
 
   pauseGame() {
-    const gameScene = this.scene.get('Game') as any;
-    if (gameScene?.physics?.world) gameScene.physics.pause();
+    const gameScene = getGameScene(this);
+    if (gameScene.physics.world) gameScene.physics.pause();
   }
 
   resumeGame() {
-    const gameScene = this.scene.get('Game') as any;
-    if (gameScene?.physics?.world) gameScene.physics.resume();
+    const gameScene = getGameScene(this);
+    if (gameScene.physics.world) gameScene.physics.resume();
   }
 
   /** Show prompt with "Click/Tap to continue" and advance to nextStep on click */
@@ -469,8 +474,8 @@ export class TutorialScene extends Phaser.Scene {
     this.tweens.add({ targets: this.arrowGfx, alpha: 0.4, yoyo: true, repeat: -1, duration: 600 });
   }
 
-  spawnTutorialEnemies(gameScene: any, count: number) {
-    if (!gameScene?.player) return;
+  spawnTutorialEnemies(gameScene: GameScene, count: number) {
+    if (!gameScene.player) return;
     const px = gameScene.player.x;
     const py = gameScene.player.y;
     for (let i = 0; i < count; i++) {
@@ -496,8 +501,8 @@ export class TutorialScene extends Phaser.Scene {
 
     // Resume normal spawning in GameScene — skip the standard build break
     // since the tutorial already walked the player through placement.
-    const gameScene = this.scene.get('Game') as any;
-    if (gameScene?.loadingDone) {
+    const gameScene = getGameScene(this);
+    if (gameScene.loadingDone) {
       gameScene.waveState.resumeInitialBuildPhase(gameScene.vTime);
     }
 

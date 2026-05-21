@@ -66,6 +66,10 @@ const DEBUG_EXPORT_STATIC_SPRITES = false;
 // `import { BuildKind } from '../scenes/GameScene'` callers don't break.
 export type { BuildKind } from '../state/BuildState';
 
+type GameSceneInitData = {
+  levelId?: number;
+  difficulty?: Difficulty;
+};
 
 export class GameScene extends Phaser.Scene {
   player!: Player;
@@ -216,7 +220,7 @@ export class GameScene extends Phaser.Scene {
 
   constructor() { super('Game'); }
 
-  init(data: any) {
+  init(data: GameSceneInitData) {
     this.levelId = data?.levelId ?? 1;
     this.difficulty = data?.difficulty ?? 'easy';
     const levelDef = LEVELS.find(l => l.id === this.levelId);
