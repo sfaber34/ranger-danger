@@ -111,7 +111,7 @@ export function installViewportResizeListener(
   window.addEventListener('orientationchange', handler);
   // visualViewport gives more accurate values when iOS Safari shows/hides the
   // address bar. Not all browsers expose it.
-  const vv = (window as any).visualViewport as VisualViewport | undefined;
+  const vv = window.visualViewport;
   vv?.addEventListener('resize', handler);
   return () => {
     window.removeEventListener('resize', handler);

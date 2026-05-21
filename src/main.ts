@@ -20,12 +20,22 @@ let started = false;
 let playBtnBuffer: ArrayBuffer | null = null;
 fetch('/audio/PlayButton.wav').then(r => r.arrayBuffer()).then(b => { playBtnBuffer = b; }).catch(() => {});
 
+type ScreenWakeLockSentinel = EventTarget & {
+  release?: () => Promise<void>;
+};
+
+type WakeLockNavigator = Navigator & {
+  wakeLock?: {
+    request(type: 'screen'): Promise<ScreenWakeLockSentinel>;
+  };
+};
+
 // Keep the screen awake so the game doesn't pause/restart when the user
 // walks away. Re-acquires the lock whenever the tab becomes visible again.
-let wakeLock: any = null;
+let wakeLock: ScreenWakeLockSentinel | null = null;
 async function requestWakeLock() {
   try {
-    const nav: any = navigator;
+    const nav = navigator as WakeLockNavigator;
     if (nav.wakeLock && typeof nav.wakeLock.request === 'function') {
       wakeLock = await nav.wakeLock.request('screen');
       wakeLock.addEventListener?.('release', () => { wakeLock = null; });

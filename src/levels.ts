@@ -112,7 +112,7 @@ function requestPersistentStorage(): void {
   if (_persistRequested) return;
   _persistRequested = true;
   try {
-    const s = (navigator as any).storage;
+    const s = navigator.storage;
     if (s && typeof s.persist === 'function') {
       // Don't await — this isn't on any critical path.
       s.persist().catch(() => { /* user denied / unsupported — fine */ });

@@ -71,6 +71,30 @@ type GameSceneInitData = {
   difficulty?: Difficulty;
 };
 
+type GameKeys = Record<
+  'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'ONE' | 'TWO' | 'THREE' | 'FOUR' | 'X' | 'ESC',
+  Phaser.Input.Keyboard.Key
+>;
+
+type BgmBiome = 'grasslands' | 'forest' | 'infected' | 'river' | 'castle';
+const BGM_BIOMES: readonly BgmBiome[] = ['grasslands', 'forest', 'infected', 'river', 'castle'];
+
+function isBgmBiome(biome: Biome): biome is BgmBiome {
+  return BGM_BIOMES.includes(biome as BgmBiome);
+}
+
+function randomRectZone(x: number, y: number, width: number, height: number): Phaser.Types.GameObjects.Particles.ParticleEmitterRandomZoneConfig {
+  return {
+    type: 'random',
+    source: {
+      getRandomPoint(point) {
+        point.x = x + Math.random() * width;
+        point.y = y + Math.random() * height;
+      },
+    },
+  };
+}
+
 export class GameScene extends Phaser.Scene {
   player!: Player;
   enemies!: Phaser.Physics.Arcade.Group;
@@ -92,7 +116,7 @@ export class GameScene extends Phaser.Scene {
   lastChunkCy = -9999;
   loadingDone = false;
 
-  keys!: any;
+  keys!: GameKeys;
   /** Build-mode state machine — kind ('none'|'tower'|'wall'), last-selected
    *  towerKind, and the shared paused flag. Mutate via setKind() and
    *  paused = true/false (the BuildSystem coordinates pause/resume). */
@@ -526,7 +550,7 @@ export class GameScene extends Phaser.Scene {
     // boss overlaps set up when boss spawns (since it's created later)
 
     // input
-    this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE,FOUR,X,ESC');
+    this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,ONE,TWO,THREE,FOUR,X,ESC') as GameKeys;
     this.input.keyboard!.on('keydown-ONE', () => {
       const ts = getRegistry(this.game).get('tutorialStep');
       if (ts && ts !== 'game_press_1' && ts !== 'game_place_tower') return;
@@ -636,7 +660,7 @@ export class GameScene extends Phaser.Scene {
         blendMode: 'ADD'
       });
       fireflyEmitter.setDepth(15);
-      fireflyEmitter.addEmitZone({ type: 'random', source: new Phaser.Geom.Rectangle(-400, -300, 800, 600) } as any);
+      fireflyEmitter.addEmitZone(randomRectZone(-400, -300, 800, 600));
 
       // removed vignette — was too distracting
     }
@@ -653,7 +677,7 @@ export class GameScene extends Phaser.Scene {
         blendMode: 'ADD'
       });
       sporeEmitter.setDepth(15);
-      sporeEmitter.addEmitZone({ type: 'random', source: new Phaser.Geom.Rectangle(-500, -400, 1000, 800) } as any);
+      sporeEmitter.addEmitZone(randomRectZone(-500, -400, 1000, 800));
 
       // Green infection spores — medium density, slightly faster
       const sporeGreenEmitter = this.add.particles(0, 0, 'infection_spore_green', {
@@ -666,7 +690,7 @@ export class GameScene extends Phaser.Scene {
         blendMode: 'ADD'
       });
       sporeGreenEmitter.setDepth(15);
-      sporeGreenEmitter.addEmitZone({ type: 'random', source: new Phaser.Geom.Rectangle(-500, -400, 1000, 800) } as any);
+      sporeGreenEmitter.addEmitZone(randomRectZone(-500, -400, 1000, 800));
     }
 
     // Warm-up phase: pause physics and run several real frames so the browser
@@ -744,8 +768,7 @@ export class GameScene extends Phaser.Scene {
         getEvents(this.game.events).emit('game-ready');
         // Pick the biome's BGM. Falls through to 'castle' for any biome
         // that doesn't yet have its own track.
-        const bgmKey = (['grasslands', 'forest', 'infected', 'river', 'castle'] as const)
-          .includes(this.biome as any) ? this.biome : 'castle';
+        const bgmKey = isBgmBiome(this.biome) ? this.biome : 'castle';
         SFX.playBgm(bgmKey);
         if (DEBUG_BOSS_RUSH && this.difficulty !== 'endless') {
           if (this.biome === 'castle') this.spawn.spawnCastleBoss('dragon');
@@ -815,8 +838,8 @@ export class GameScene extends Phaser.Scene {
     // stick vector to the registry every frame. A generous deadzone (0.3
     // magnitude) ignores thumb rest / jitter; outside the deadzone the input
     // snaps to a unit vector so movement is binary (full speed, no analog).
-    const jx = (getRegistry(this.game).get('joystickX') as number) || 0;
-    const jy = (getRegistry(this.game).get('joystickY') as number) || 0;
+    const jx = getRegistry(this.game).get('joystickX') || 0;
+    const jy = getRegistry(this.game).get('joystickY') || 0;
     const jmag2 = jx * jx + jy * jy;
     const JOYSTICK_DEADZONE_SQ = 0.3 * 0.3;
     if (jmag2 >= JOYSTICK_DEADZONE_SQ) {
