@@ -55,6 +55,44 @@ export class UIScene extends Phaser.Scene {
    *  speed hotbar slot, the SPACE keybind, and the new `5` keybind. */
   private speedLocked = false;
   private speedLockOverlay: Phaser.GameObjects.Graphics | null = null;
+  private readonly onHud = (s: any) => this.updateHud(s);
+  private readonly onGameEnd = (s: any) => this.showEnd(s);
+  private readonly onBossSpawn = (s: any) => this.showBossBar(s);
+  private readonly onBossHp = (s: any) => this.updateBossBar(s);
+  private readonly onBossDied = () => this.hideBossBar();
+  private readonly onTutorialSpeedUnlocked = () => {
+    this.speedLocked = false;
+    if (this.speedLockOverlay) {
+      this.speedLockOverlay.destroy();
+      this.speedLockOverlay = null;
+    }
+  };
+  private readonly onTutorialFinished = () => {
+    this.speedLocked = false;
+    if (this.speedLockOverlay) {
+      this.speedLockOverlay.destroy();
+      this.speedLockOverlay = null;
+    }
+    this.upgradesLocked = false;
+    if (this.upgradesLockOverlay) {
+      this.upgradesLockOverlay.destroy();
+      this.upgradesLockOverlay = null;
+    }
+  };
+  private readonly onBuildError = (msg: string) => {
+    if (msg) {
+      this.buildErrorText.setText(msg).setVisible(true);
+    } else {
+      this.buildErrorText.setVisible(false);
+    }
+  };
+  private readonly onBuildMode = (active: boolean, kind?: string, towerKind?: string) => {
+    this.buildHintText.setVisible(active);
+    if (!active) this.buildErrorText.setVisible(false);
+    (this.btnTower as any).setSelected?.(active && kind === 'tower' && towerKind === 'arrow');
+    (this.btnCannon as any).setSelected?.(active && kind === 'tower' && towerKind === 'cannon');
+    (this.btnWall as any).setSelected?.(active && kind === 'wall');
+  };
 
   levelId = 1;
   difficulty: Difficulty = 'easy';
@@ -377,52 +415,21 @@ export class UIScene extends Phaser.Scene {
     ).setOrigin(0.5, 1).setDepth(900).setVisible(false);
 
     // listen for HUD updates
-    getEvents(this.game.events).on('hud', (s: any) => this.updateHud(s));
-    getEvents(this.game.events).on('game-end', (s: any) => this.showEnd(s));
-    getEvents(this.game.events).on('boss-spawn', (s: any) => this.showBossBar(s));
-    getEvents(this.game.events).on('boss-hp', (s: any) => this.updateBossBar(s));
-    getEvents(this.game.events).on('boss-died', () => this.hideBossBar());
+    getEvents(this.game.events).on('hud', this.onHud);
+    getEvents(this.game.events).on('game-end', this.onGameEnd);
+    getEvents(this.game.events).on('boss-spawn', this.onBossSpawn);
+    getEvents(this.game.events).on('boss-hp', this.onBossHp);
+    getEvents(this.game.events).on('boss-died', this.onBossDied);
     // game_speed tutorial step fires this so the player can press the
     // speed slot while reading its prompt (the broader UPGRADES lock
     // stays on until tutorial-finished).
-    getEvents(this.game.events).on('tutorial-speed-unlocked', () => {
-      this.speedLocked = false;
-      if (this.speedLockOverlay) {
-        this.speedLockOverlay.destroy();
-        this.speedLockOverlay = null;
-      }
-    });
+    getEvents(this.game.events).on('tutorial-speed-unlocked', this.onTutorialSpeedUnlocked);
     // Tutorial wrapped — drop the UPGRADES lock (speed already unlocked
     // a step earlier). Also a safety net for the speed slot in case a
     // skip-path bypassed game_speed entirely.
-    getEvents(this.game.events).on('tutorial-finished', () => {
-      this.speedLocked = false;
-      if (this.speedLockOverlay) {
-        this.speedLockOverlay.destroy();
-        this.speedLockOverlay = null;
-      }
-      this.upgradesLocked = false;
-      if (this.upgradesLockOverlay) {
-        this.upgradesLockOverlay.destroy();
-        this.upgradesLockOverlay = null;
-      }
-    });
-    getEvents(this.game.events).on('build-error', (msg: string) => {
-      if (msg) {
-        this.buildErrorText.setText(msg).setVisible(true);
-      } else {
-        this.buildErrorText.setVisible(false);
-      }
-    });
-    getEvents(this.game.events).on('build-mode', (active: boolean, kind?: string, towerKind?: string) => {
-      this.buildHintText.setVisible(active);
-      if (!active) this.buildErrorText.setVisible(false);
-      // Highlight the matching hotbar slot so the player can see at a glance
-      // which build is active (and which to re-tap to exit on mobile).
-      (this.btnTower as any).setSelected?.(active && kind === 'tower' && towerKind === 'arrow');
-      (this.btnCannon as any).setSelected?.(active && kind === 'tower' && towerKind === 'cannon');
-      (this.btnWall as any).setSelected?.(active && kind === 'wall');
-    });
+    getEvents(this.game.events).on('tutorial-finished', this.onTutorialFinished);
+    getEvents(this.game.events).on('build-error', this.onBuildError);
+    getEvents(this.game.events).on('build-mode', this.onBuildMode);
 
     // Recover the end-panel after a UI restart (e.g. mid-rotation): if the
     // game already ended and we missed the live event, replay it now.
@@ -1493,14 +1500,14 @@ export class UIScene extends Phaser.Scene {
     for (const [, ind] of this.bossIndicators) { ind.bg.destroy(); ind.ptr.destroy(); }
     this.bossIndicators.clear();
     if (this.upgradePanel) { this.upgradePanel.close(); this.upgradePanel = null; }
-    getEvents(this.game.events).off('hud');
-    getEvents(this.game.events).off('game-end');
-    getEvents(this.game.events).off('boss-spawn');
-    getEvents(this.game.events).off('boss-hp');
-    getEvents(this.game.events).off('boss-died');
-    getEvents(this.game.events).off('tutorial-finished');
-    getEvents(this.game.events).off('tutorial-speed-unlocked');
-    getEvents(this.game.events).off('build-error');
-    getEvents(this.game.events).off('build-mode');
+    getEvents(this.game.events).off('hud', this.onHud);
+    getEvents(this.game.events).off('game-end', this.onGameEnd);
+    getEvents(this.game.events).off('boss-spawn', this.onBossSpawn);
+    getEvents(this.game.events).off('boss-hp', this.onBossHp);
+    getEvents(this.game.events).off('boss-died', this.onBossDied);
+    getEvents(this.game.events).off('tutorial-finished', this.onTutorialFinished);
+    getEvents(this.game.events).off('tutorial-speed-unlocked', this.onTutorialSpeedUnlocked);
+    getEvents(this.game.events).off('build-error', this.onBuildError);
+    getEvents(this.game.events).off('build-mode', this.onBuildMode);
   }
 }

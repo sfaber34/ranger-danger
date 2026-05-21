@@ -90,7 +90,11 @@ export function saveMedal(levelId: number, diff: Difficulty): void {
   const key = String(levelId);
   if (!store[key]) store[key] = { easy: false, medium: false, hard: false, oneHP: false, endless: false };
   store[key][diff] = true;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    return;
+  }
   // Engaged player just earned progress — ask the browser to mark this
   // origin's storage as persistent so it survives ITP / quota eviction.
   // Silent in Chrome (engagement-gated auto-grant); a small infobar in

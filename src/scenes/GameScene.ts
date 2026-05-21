@@ -585,9 +585,9 @@ export class GameScene extends Phaser.Scene {
     // the previous shutdown), which would leave us with two listeners both
     // toggling buildKind on the same singleton scene instance — they cancel
     // each other and the build menu never opens.
-    getEvents(this.game.events).off('ui-build');
-    getEvents(this.game.events).off('ui-sell');
-    getEvents(this.game.events).off('ui-speed');
+    if (this._onUiBuild) getEvents(this.game.events).off('ui-build', this._onUiBuild);
+    if (this._onUiSell) getEvents(this.game.events).off('ui-sell', this._onUiSell);
+    if (this._onUiSpeed) getEvents(this.game.events).off('ui-speed', this._onUiSpeed);
     this._onUiBuild = (k: BuildKind, tk?: TowerKind) => {
       const ts = getRegistry(this.game).get('tutorialStep');
       if (ts) {

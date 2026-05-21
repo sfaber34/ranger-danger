@@ -28,7 +28,10 @@ export class Wall extends Phaser.Physics.Arcade.Sprite {
   hurt(amount: number) {
     this.hp -= amount;
     this.setTintFill(0xffffff);
-    this.scene.time.delayedCall(60, () => this.clearTint());
+    this.scene.time.delayedCall(60, () => {
+      if (!this.scene) return;
+      this.clearTint();
+    });
     this.updateTexture();
   }
 
