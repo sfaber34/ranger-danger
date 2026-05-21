@@ -1,4 +1,5 @@
 import type { Biome } from '../levels';
+import type { RunStatsSnapshot } from '../state/RunStats';
 
 /**
  * Payload of the `game-end` event AND of the `gameEndState` registry key.
@@ -10,6 +11,7 @@ export type GameEndState = {
   name: string;
   kills: number;
   money: number;
+  runStats?: RunStatsSnapshot;
 };
 
 /**

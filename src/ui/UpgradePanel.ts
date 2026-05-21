@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { UIScene } from '../scenes/UIScene';
+import type { GameScene } from '../scenes/GameScene';
 import { UPGRADABLE_STATS, STAT_LABEL, type UpgradableStat } from '../state/PlayerUpgradeState';
 
 /**
@@ -15,13 +16,13 @@ export class UpgradePanel {
   private buyTexts: Phaser.GameObjects.Text[] = [];
   private buyRects: { x: number; y: number; w: number; h: number }[] = [];
   private uiScene: UIScene;
-  private gameScene: any;
+  private gameScene: GameScene;
   private onClose: () => void;
   private destroyed = false;
 
   constructor(
     uiScene: UIScene,
-    gameScene: any,
+    gameScene: GameScene,
     anchor: { x: number; y: number; w: number; h: number },
     onClose: () => void,
   ) {

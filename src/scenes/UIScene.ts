@@ -2,21 +2,36 @@ import Phaser from 'phaser';
 import { getRegistry } from '../core/registry';
 import { getEvents } from '../core/events';
 import { CFG } from '../config';
-import { Difficulty, saveMedal, LEVELS, Biome } from '../levels';
+import { saveMedal, LEVELS } from '../levels';
 import { SFX } from '../audio/sfx';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
 import { UpgradePanel } from '../ui/UpgradePanel';
 import { loadEndlessBest, saveEndlessBest, RunStatsSnapshot } from '../state/RunStats';
+import type { Boss } from '../entities/Boss';
+import type { Tower } from '../entities/Tower';
+import type { GameScene } from './GameScene';
+import type { GameEndState } from '../core/registry';
+import type { Biome, Difficulty } from '../levels';
+import type { BossHpPayload, BossSpawnPayload, HudState } from '../core/events';
+
+type SelectableContainer = Phaser.GameObjects.Container & {
+  setSelected?: (selected: boolean) => void;
+};
+
+type UISceneInitData = {
+  levelId?: number;
+  difficulty?: Difficulty;
+};
 
 export class UIScene extends Phaser.Scene {
   hpBarGfx!: Phaser.GameObjects.Graphics;
   private hpBarX = 0; private hpBarY = 0; private hpBarW = 0; private hpBarH = 0;
   nameText!: Phaser.GameObjects.Text;
   moneyText!: Phaser.GameObjects.Text;
-  btnTower!: Phaser.GameObjects.Container;
-  btnCannon!: Phaser.GameObjects.Container;
+  btnTower!: SelectableContainer;
+  btnCannon!: SelectableContainer;
   btnMage!: Phaser.GameObjects.Container;
-  btnWall!: Phaser.GameObjects.Container;
+  btnWall!: SelectableContainer;
   btnSpeed!: Phaser.GameObjects.Container;
   speedLabel!: Phaser.GameObjects.Text;
   speedIdx = 0;
@@ -44,8 +59,8 @@ export class UIScene extends Phaser.Scene {
   /** Off-screen markers — drawn here so they sit above the HUD elements
    *  rather than under them (would happen if drawn in GameScene since
    *  scenes layer in registration order). */
-  private towerIndicators = new Map<any, { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite }>();
-  private bossIndicators = new Map<any, { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite }>();
+  private towerIndicators = new Map<Tower, { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite }>();
+  private bossIndicators = new Map<Boss, { bg: Phaser.GameObjects.Sprite; ptr: Phaser.GameObjects.Sprite }>();
   private upgradePanel: UpgradePanel | null = null;
   private upgradeBtnAnchor: { x: number; y: number; w: number; h: number } | null = null;
   private upgradesLocked = false;
@@ -55,10 +70,10 @@ export class UIScene extends Phaser.Scene {
    *  speed hotbar slot, the SPACE keybind, and the new `5` keybind. */
   private speedLocked = false;
   private speedLockOverlay: Phaser.GameObjects.Graphics | null = null;
-  private readonly onHud = (s: any) => this.updateHud(s);
-  private readonly onGameEnd = (s: any) => this.showEnd(s);
-  private readonly onBossSpawn = (s: any) => this.showBossBar(s);
-  private readonly onBossHp = (s: any) => this.updateBossBar(s);
+  private readonly onHud = (s: HudState) => this.updateHud(s);
+  private readonly onGameEnd = (s: GameEndState) => this.showEnd(s);
+  private readonly onBossSpawn = (s: BossSpawnPayload) => this.showBossBar(s);
+  private readonly onBossHp = (s: BossHpPayload) => this.updateBossBar(s);
   private readonly onBossDied = () => this.hideBossBar();
   private readonly onTutorialSpeedUnlocked = () => {
     this.speedLocked = false;
@@ -89,9 +104,9 @@ export class UIScene extends Phaser.Scene {
   private readonly onBuildMode = (active: boolean, kind?: string, towerKind?: string) => {
     this.buildHintText.setVisible(active);
     if (!active) this.buildErrorText.setVisible(false);
-    (this.btnTower as any).setSelected?.(active && kind === 'tower' && towerKind === 'arrow');
-    (this.btnCannon as any).setSelected?.(active && kind === 'tower' && towerKind === 'cannon');
-    (this.btnWall as any).setSelected?.(active && kind === 'wall');
+    this.btnTower.setSelected?.(active && kind === 'tower' && towerKind === 'arrow');
+    this.btnCannon.setSelected?.(active && kind === 'tower' && towerKind === 'cannon');
+    this.btnWall.setSelected?.(active && kind === 'wall');
   };
 
   levelId = 1;
@@ -153,7 +168,7 @@ export class UIScene extends Phaser.Scene {
 
   constructor() { super({ key: 'UI', active: false }); }
 
-  init(data: any) {
+  init(data: UISceneInitData) {
     this.levelId = data?.levelId ?? 1;
     this.difficulty = data?.difficulty ?? 'easy';
     const levelDef = LEVELS.find(l => l.id === this.levelId);
@@ -306,9 +321,9 @@ export class UIScene extends Phaser.Scene {
       // placement without reaching for ESC. (Property paths matter: the
       // earlier `game.buildKind` / `game.setBuild` aliases never existed,
       // so this branch was silently dead and SPACE always cycled speed.)
-      const game = this.scene.get('Game') as any;
-      if (game?.buildState?.kind && game.buildState.kind !== 'none') {
-        game.build?.setBuild('none');
+      const game = this.scene.get('Game') as GameScene;
+      if (game.buildState.kind !== 'none') {
+        game.build.setBuild('none');
         return;
       }
       if (!this.speedLocked) this.cycleSpeed();
@@ -433,26 +448,24 @@ export class UIScene extends Phaser.Scene {
 
     // Recover the end-panel after a UI restart (e.g. mid-rotation): if the
     // game already ended and we missed the live event, replay it now.
-    const gameEndState = getRegistry(this.game).get('gameEndState') as any;
+    const gameEndState = getRegistry(this.game).get('gameEndState');
     if (gameEndState) this.showEnd(gameEndState);
 
     // Pull the current HUD state from GameScene so the HP / wave bars
     // render at their real values immediately on rotation, instead of
     // showing as empty until the next hud event fires.
-    const game = this.scene.get('Game') as any;
-    if (game && typeof game.hudState === 'function') {
-      this.updateHud(game.hudState());
-    }
+    const game = this.scene.get('Game') as GameScene;
+    this.updateHud(game.hudState());
 
     // Re-apply the active build-mode highlight after a UI restart (rotation),
     // since the new hotbar slots default to !isSelected. Also reshow the
     // build hint text if a build is in progress.
-    const activeKind = game?.buildKind;
-    const activeTowerKind = game?.buildTowerKind;
+    const activeKind = game.buildState.kind;
+    const activeTowerKind = game.buildState.towerKind;
     if (activeKind && activeKind !== 'none') {
-      (this.btnTower as any).setSelected?.(activeKind === 'tower' && activeTowerKind === 'arrow');
-      (this.btnCannon as any).setSelected?.(activeKind === 'tower' && activeTowerKind === 'cannon');
-      (this.btnWall as any).setSelected?.(activeKind === 'wall');
+      this.btnTower.setSelected?.(activeKind === 'tower' && activeTowerKind === 'arrow');
+      this.btnCannon.setSelected?.(activeKind === 'tower' && activeTowerKind === 'cannon');
+      this.btnWall.setSelected?.(activeKind === 'wall');
       this.buildHintText.setVisible(true);
     }
 
@@ -529,10 +542,10 @@ export class UIScene extends Phaser.Scene {
     // boss bar from registry state since boss-spawn is one-shot and we missed
     // the original event.
     if (getRegistry(this.game).get('bossActive')) {
-      const bossMaxHp = (getRegistry(this.game).get('bossMaxHp') as number) || 1;
-      const bossHp = (getRegistry(this.game).get('bossHp') as number) || 0;
-      const biome = getRegistry(this.game).get('bossBiome') as string;
-      this.showBossBar({ maxHp: bossMaxHp, biome });
+      const bossMaxHp = getRegistry(this.game).get('bossMaxHp') || 1;
+      const bossHp = getRegistry(this.game).get('bossHp') || 0;
+      const biome = getRegistry(this.game).get('bossBiome') ?? this.biome;
+      this.showBossBar({ hp: bossHp, maxHp: bossMaxHp, biome });
       this.updateBossBar({ hp: bossHp, maxHp: bossMaxHp });
     }
 
@@ -551,7 +564,7 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
-  showBossBar(s: any) {
+  showBossBar(s: BossSpawnPayload) {
     const W = this.scale.width;
     const barW = this.p(Math.min(420, this.dw() - 40));
     const x = (W - barW) / 2;
@@ -591,7 +604,7 @@ export class UIScene extends Phaser.Scene {
     if (this.bossLabel) { this.bossLabel.destroy(); this.bossLabel = undefined; }
   }
 
-  updateBossBar(s: any) {
+  updateBossBar(s: BossHpPayload) {
     if (!this.bossBarGfx) return;
     const maxHp = this.bossBarMaxHp || s.maxHp || 1;
     const pct = Math.max(0, (s.hp ?? 0) / maxHp);
@@ -632,9 +645,9 @@ export class UIScene extends Phaser.Scene {
     return c;
   }
 
-  makeHotbarSlot(cx: number, topY: number, w: number, h: number, key: string, icon: string, name: string, cost: string, onClick: () => void) {
+  makeHotbarSlot(cx: number, topY: number, w: number, h: number, key: string, icon: string, name: string, cost: string, onClick: () => void): SelectableContainer {
     const my = topY + h / 2;
-    const c = this.add.container(cx, my);
+    const c = this.add.container(cx, my) as SelectableContainer;
 
     const g = this.add.graphics();
     let isHover = false;
@@ -707,7 +720,7 @@ export class UIScene extends Phaser.Scene {
     c.add(items);
     // Expose a setter so the build-mode listener can highlight this slot
     // when it matches the active build kind.
-    (c as any).setSelected = (sel: boolean) => { isSelected = sel; drawSlot(); };
+    c.setSelected = (sel: boolean) => { isSelected = sel; drawSlot(); };
     return c;
   }
 
@@ -811,8 +824,7 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
-  updateHud(s: any) {
-    if (!s) return;
+  updateHud(s: HudState) {
     this.nameText.setText(s.name ?? 'Ranger');
     const pct = Math.max(0, s.hp / s.maxHp);
     const hpColor = pct > 0.5 ? 0x4ad96a : pct > 0.25 ? 0xd9a84a : 0xd94a4a;
@@ -1069,7 +1081,7 @@ export class UIScene extends Phaser.Scene {
    *  game-over panel is up or another upgrade panel is already open. */
   private openUpgradePanel() {
     if (this.upgradePanel || !this.upgradeBtnAnchor || this.upgradesLocked) return;
-    const game = this.scene.get('Game') as any;
+    const game = this.scene.get('Game') as GameScene;
     if (!game || !game.player || game.endState?.gameOver) return;
     // Match the tower-panel pause set: pausing physics alone leaves the
     // GameScene update loop running, so towers keep re-triggering their
@@ -1103,8 +1115,8 @@ export class UIScene extends Phaser.Scene {
   }
 
   private updateIndicators() {
-    const game = this.scene.get('Game') as any;
-    if (!game || !game.cameras?.main || !game.towers) return;
+    const game = this.scene.get('Game') as GameScene;
+    if (!game || !game.cameras?.main) return;
     const gameCam = game.cameras.main;
     const wv = gameCam.worldView;
     const mid = gameCam.midPoint;
@@ -1117,7 +1129,7 @@ export class UIScene extends Phaser.Scene {
     const iconScale = this.p(0.5);
 
     // ---- Tower indicators
-    const towers = game.towers as any[];
+    const towers = game.towers;
     const alive = new Set(towers);
     for (const t of towers) {
       const onScreen = t.x > wv.x - margin && t.x < wv.right + margin &&
@@ -1163,7 +1175,7 @@ export class UIScene extends Phaser.Scene {
     // During the castle queen fight, bossState.boss === bossState.midBoss, so
     // we de-dupe by identity before drawing.
     const bs = game.bossState;
-    const bosses: any[] = [];
+    const bosses: Boss[] = [];
     if (bs?.boss && bs.boss.active && !bs.boss.dying) bosses.push(bs.boss);
     if (bs?.midBoss && bs.midBoss !== bs.boss && bs.midBoss.active && !bs.midBoss.dying) bosses.push(bs.midBoss);
     const bossesAlive = new Set(bosses);
@@ -1289,11 +1301,11 @@ export class UIScene extends Phaser.Scene {
     );
   }
 
-  showEnd(s: any) {
+  showEnd(s: GameEndState) {
     if (this.endPanel) return;
     if (s.win) saveMedal(this.levelId, this.difficulty);
     if (s.runStats && this.difficulty === 'endless') {
-      this.showEndlessEnd(s);
+      this.showEndlessEnd(s, s.runStats);
       return;
     }
     const W = this.scale.width, H = this.scale.height;
@@ -1365,23 +1377,23 @@ export class UIScene extends Phaser.Scene {
 
   /** Endless-mode death screen — shows the full RunStats breakdown plus
    *  ★ markers next to any field that beat the persisted best. */
-  private showEndlessEnd(s: any) {
+  private showEndlessEnd(s: GameEndState, runStats: RunStatsSnapshot) {
     const W = this.scale.width, H = this.scale.height;
     const stats: RunStatsSnapshot = {
-      wavesCleared: s.runStats.wavesCleared,
-      bossesKilled: s.runStats.bossesKilled,
-      bossesByKind: { ...s.runStats.bossesByKind },
-      enemiesKilled: s.runStats.enemiesKilled,
-      coinsCollected: s.runStats.coinsCollected,
-      coinsSpent: s.runStats.coinsSpent,
-      towersBuilt: s.runStats.towersBuilt,
-      towersUpgradedToMax: s.runStats.towersUpgradedToMax,
-      highestTowerLevel: s.runStats.highestTowerLevel,
-      wallsBuilt: s.runStats.wallsBuilt,
-      wallsDestroyed: s.runStats.wallsDestroyed,
-      damageDealt: s.runStats.damageDealt,
-      damageTaken: s.runStats.damageTaken,
-      timeSurvived: s.runStats.timeSurvived,
+      wavesCleared: runStats.wavesCleared,
+      bossesKilled: runStats.bossesKilled,
+      bossesByKind: { ...runStats.bossesByKind },
+      enemiesKilled: runStats.enemiesKilled,
+      coinsCollected: runStats.coinsCollected,
+      coinsSpent: runStats.coinsSpent,
+      towersBuilt: runStats.towersBuilt,
+      towersUpgradedToMax: runStats.towersUpgradedToMax,
+      highestTowerLevel: runStats.highestTowerLevel,
+      wallsBuilt: runStats.wallsBuilt,
+      wallsDestroyed: runStats.wallsDestroyed,
+      damageDealt: runStats.damageDealt,
+      damageTaken: runStats.damageTaken,
+      timeSurvived: runStats.timeSurvived,
     };
     const newRecords = saveEndlessBest(this.levelId, stats);
 

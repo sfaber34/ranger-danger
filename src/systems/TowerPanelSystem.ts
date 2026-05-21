@@ -192,7 +192,7 @@ export class TowerPanelSystem {
     panel.add([upG, upTxt]);
     if (canUp) {
       const upHit = scene.add.rectangle(upCX, btnY, btnW, btnH, 0x000000, 0).setInteractive({ useHandCursor: true });
-      upHit.on('pointerdown', (_p: any, _lx: any, _ly: any, ev: any) => {
+      upHit.on('pointerdown', (_p: Phaser.Input.Pointer, _lx: number, _ly: number, ev: Phaser.Types.Input.EventData) => {
         ev?.stopPropagation?.();
         this.doUpgradeSelected();
       });
@@ -218,7 +218,7 @@ export class TowerPanelSystem {
       stroke: '#0b0f1a', strokeThickness: 2 * ms
     }).setOrigin(0.5).setResolution(tr);
     const sellHit = scene.add.rectangle(sellCX, btnY, btnW, btnH, 0x000000, 0).setInteractive({ useHandCursor: true });
-    sellHit.on('pointerdown', (_p: any, _lx: any, _ly: any, ev: any) => {
+    sellHit.on('pointerdown', (_p: Phaser.Input.Pointer, _lx: number, _ly: number, ev: Phaser.Types.Input.EventData) => {
       ev?.stopPropagation?.();
       if (getRegistry(scene.game).get('tutorialActive')) return;
       this.doSellSelected();
