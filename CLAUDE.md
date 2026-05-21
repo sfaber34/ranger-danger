@@ -1,6 +1,23 @@
 # Ranger Danger — Working Notes
 
-A Phaser 3 tower-defense game. The codebase was split out of a few mega-files in 2026-Q2 (see `REFACTOR_PLAN.md`); these rules exist to keep it that way.
+## Project context
+
+- **What I'm working on:** Ranger Danger — a top-down hybrid roguelite + tower-defense game.
+- **Goal:** Ship a Steam Early Access build.
+- **Audience:** Steam players on desktop.
+- **Stack context:** Phaser 3 + TypeScript, bundled with Vite. Steam release will wrap the web build in Electron / Tauri / NW.js — write code that runs in a browser runtime but stays portable across that wrapping (no Node-only or Electron-only APIs in game code).
+- **What to avoid:** Mobile-only features and patterns (touch-only inputs, virtual joysticks as the *only* control scheme, mobile-store-specific hooks). Keyboard + mouse is the primary surface; existing mobile-friendly affordances stay but shouldn't lead design.
+
+Apply this context to every task. When something doesn't fit, flag it before proceeding.
+
+The codebase was split out of a few mega-files in 2026-Q2 (see `REFACTOR_PLAN.md`); the rules below exist to keep it that way.
+
+## Workflow
+
+- **No filler openings.** Start every response with the actual answer. No "Great question!", "Of course!", "Certainly!", or other warmups, no preamble, no restating the question.
+- **Match response length to task complexity.** Simple questions get short, direct answers. Complex tasks get full, detailed responses. Don't pad with restatements or recap closers.
+- **Design choices need options first.** For tasks with a real design choice (gameplay mechanism, UX shape, structural refactor): present 2-4 approaches with tradeoffs and wait for me to pick before implementing. For clear bug fixes or trivial tweaks: diagnose, propose the fix directly, then confirm before applying. Don't pad with contrived alternatives.
+- **Flag uncertainty explicitly.** If you're not sure about something, say so before including it. Don't fill gaps with plausible-sounding information.
 
 ## Where things live
 
@@ -13,7 +30,6 @@ A Phaser 3 tower-defense game. The codebase was split out of a few mega-files in
 
 ## Coding rules
 
-- **Don't grow files past ~500 lines** for the modules above. If you're tempted, you're adding to the wrong file — extract a sibling instead.
 - **Don't add fallbacks for "can't happen" cases.** Trust internal invariants. Validate at boundaries (user input, external APIs) only.
 - **Don't add backwards-compat shims** (re-exports of old names, "removed" comments, unused `_var` renames). Delete cleanly.
 - **Don't write comments that explain *what* code does** — well-named identifiers do that. Comment only the non-obvious *why*: a hidden constraint, a workaround, an invariant a future reader would miss.
