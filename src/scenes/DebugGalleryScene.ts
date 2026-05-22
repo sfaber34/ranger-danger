@@ -3,6 +3,7 @@ import { CFG } from '../config';
 import { generateAllArt } from '../assets/generateArt';
 import {
   applySpriteOverrides,
+  getEntityVisualScale,
   getSpriteDebugCatalog,
   loadSpriteOverrides,
   reregisterSpriteOverrideAnimations,
@@ -16,6 +17,14 @@ const TEXT = '#d8e6ff';
 const MUTED = '#7f93b3';
 const ACCENT = '#4ad96a';
 const WARN = '#ffd36a';
+
+const ENTITY_PROC_SCALES: Record<string, number> = {
+  rat: 0.45,
+  deer: 0.55,
+  wolf: 0.45,
+  bear: 0.55,
+  spider: 0.45,
+};
 
 export function isDebugGalleryRequested(): boolean {
   if (new URLSearchParams(window.location.search).get('debug') !== 'gallery') return false;
@@ -116,6 +125,8 @@ export class DebugGalleryScene extends Phaser.Scene {
   private sandboxHpValue: Phaser.GameObjects.Text | null = null;
   private sandboxMoveValue: Phaser.GameObjects.Text | null = null;
   private sandboxDamageValue: Phaser.GameObjects.Text | null = null;
+  private sandboxLineupSprite: Phaser.GameObjects.Sprite | null = null;
+  private sandboxLineupScaleValue: Phaser.GameObjects.Text | null = null;
   private sandboxHpBar: Phaser.GameObjects.Graphics | null = null;
   private sandboxBgIndex = 0;
   private readonly sandboxBgs = [0x070a0f, 0x151515, 0x263044, 0x304226, 0x56302c];
@@ -414,6 +425,8 @@ export class DebugGalleryScene extends Phaser.Scene {
     this.sandboxHpValue = null;
     this.sandboxMoveValue = null;
     this.sandboxDamageValue = null;
+    this.sandboxLineupSprite = null;
+    this.sandboxLineupScaleValue = null;
     this.sandboxHpBar = null;
 
     const W = this.layoutW;
@@ -463,6 +476,7 @@ export class DebugGalleryScene extends Phaser.Scene {
     this.sandbox.add(this.sandboxHpBar);
     this.applySandboxPlayback();
     this.drawSandboxHpBar();
+    this.addSandboxScaleLineup(entry, anim.animKey);
 
     const controlsX = compact ? W / 2 : Math.min(W - 210, Math.max(stageX + stageW / 2 + 236, W * 0.72));
     const controlsTop = compact ? 392 : 96;
@@ -628,6 +642,90 @@ export class DebugGalleryScene extends Phaser.Scene {
     this.sandbox.add([track, fill, handle]);
   }
 
+  private addSandboxScaleLineup(entry: SpriteDebugEntry, animKey: string) {
+    const { x, y, w, h } = this.sandboxStage;
+    const baseY = y + h / 2 - 26;
+    const labelY = baseY + 10;
+    const items = [
+      { label: 'player', key: 'p_idle_0', anim: 'player-idle', scale: 0.5 },
+      { label: entry.folder, key: this.firstTextureFor(animKey), anim: animKey, selected: true },
+      { label: 'arrow tower', key: 't_base', scale: 0.5 },
+      { label: 'cannon', key: 'c_base', scale: 0.5 },
+      { label: 'trees', key: 'tree_cluster_0', scale: 1 },
+      { label: 'plant', key: 'infected_plant_0', scale: 1 },
+      { label: 'wall', key: 'wall_15', scale: 0.5 },
+    ];
+    const step = w / items.length;
+    const startX = x - w / 2 + step / 2;
+
+    this.sandbox.add(this.add.rectangle(x, baseY + 6, w - 24, 3, 0x5c6f50, 0.9));
+    this.sandbox.add(this.add.text(x - w / 2 + 14, y + h / 2 - 88, 'World Scale Lineup', {
+      fontFamily: 'monospace', fontSize: '13px', color: ACCENT,
+    }));
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!this.textures.exists(item.key)) continue;
+      const itemX = startX + step * i;
+      const sprite = this.add.sprite(itemX, baseY, item.key).setOrigin(0.5, 1);
+      if (item.anim && this.anims.exists(item.anim)) sprite.play(item.anim);
+      if (item.selected) {
+        this.sandboxLineupSprite = sprite;
+        this.updateSandboxLineupScale();
+      } else {
+        sprite.setScale(item.scale ?? 1);
+        this.capLineupSprite(sprite, step - 8, 76);
+      }
+      this.sandbox.add(sprite);
+      if (item.label === 'arrow tower') this.addLineupTowerTop(itemX, baseY, sprite.displayHeight);
+      if (item.label === 'cannon') this.addLineupCannonTop(itemX, baseY, sprite.displayHeight);
+      this.sandbox.add(this.add.text(itemX, labelY, item.label, {
+        fontFamily: 'monospace', fontSize: '10px', color: item.selected ? TEXT : MUTED,
+      }).setOrigin(0.5, 0));
+    }
+
+    this.sandboxLineupScaleValue = this.add.text(x + w / 2 - 14, y + h / 2 - 88, '', {
+      fontFamily: 'monospace', fontSize: '12px', color: MUTED,
+    }).setOrigin(1, 0);
+    this.sandbox.add(this.sandboxLineupScaleValue);
+    this.updateSandboxLineupScale();
+  }
+
+  private updateSandboxLineupScale() {
+    if (!this.sandboxLineupSprite || !this.selected) return;
+    const baseScale = this.selected.kind === 'player'
+      ? 0.5
+      : getEntityVisualScale(this, this.selected.folder, 'move', ENTITY_PROC_SCALES[this.selected.folder] ?? 0.5);
+    this.sandboxLineupSprite.setScale(baseScale * this.previewScale);
+    this.sandboxLineupSprite.anims.timeScale = this.playbackSpeed;
+    if (this.paused) this.sandboxLineupSprite.anims.pause();
+    else this.sandboxLineupSprite.anims.resume();
+    const maxItemW = Math.max(36, this.sandboxStage.w / 7 - 8);
+    this.capLineupSprite(this.sandboxLineupSprite, maxItemW, 86);
+    this.sandboxLineupScaleValue?.setText(`selected ${this.previewScale.toFixed(2)}x`);
+  }
+
+  private addLineupTowerTop(x: number, baseY: number, baseH: number) {
+    const centerY = baseY - baseH / 2;
+    for (const [key, offY] of [['t_archer', -24], ['t_top_0', -24]] as const) {
+      if (!this.textures.exists(key)) continue;
+      this.sandbox.add(this.add.sprite(x, centerY + offY, key).setScale(0.5));
+    }
+  }
+
+  private addLineupCannonTop(x: number, baseY: number, baseH: number) {
+    const centerY = baseY - baseH / 2;
+    for (const [key, offY] of [['c_mount', -20], ['c_top_0', -20]] as const) {
+      if (!this.textures.exists(key)) continue;
+      this.sandbox.add(this.add.sprite(x, centerY + offY, key).setScale(0.5));
+    }
+  }
+
+  private capLineupSprite(sprite: Phaser.GameObjects.Sprite, maxW: number, maxH: number) {
+    const cap = Math.min(1, maxW / Math.max(1, sprite.displayWidth), maxH / Math.max(1, sprite.displayHeight));
+    if (cap < 1) sprite.setScale(sprite.scaleX * cap, sprite.scaleY * cap);
+  }
+
   private cycleAnim(dir: number) {
     if (!this.selected) return;
     const anims = this.selected.anims.filter(a => this.anims.exists(a.animKey));
@@ -660,6 +758,7 @@ export class DebugGalleryScene extends Phaser.Scene {
     else this.sandboxSprite.anims.resume();
     this.sandboxScaleValue?.setText(`${this.previewScale.toFixed(2)}x`);
     this.sandboxSpeedValue?.setText(`${this.playbackSpeed.toFixed(2)}x`);
+    this.updateSandboxLineupScale();
     this.drawSandboxHpBar();
     this.updateSandboxStatLabels();
   }

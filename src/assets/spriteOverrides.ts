@@ -476,3 +476,20 @@ export function applyEntityVisual(
     sprite.setOffset(procOffsetX, procOffsetY);
   }
 }
+
+export function getEntityVisualScale(
+  scene: Phaser.Scene,
+  characterFolder: string,
+  primarySuffix: string,
+  procScale: number,
+): number {
+  const c = CHARACTERS.find(cs => cs.folder === characterFolder);
+  const sheetK = c ? sheetKey(c.texPrefix, primarySuffix) : '';
+  if (!c || !scene.textures.exists(sheetK)) return procScale;
+
+  const img = scene.textures.get(sheetK).getSourceImage() as HTMLImageElement;
+  const proc = c.proceduralCanvasSize ?? 64;
+  const ratio = img.height / proc;
+  const mult = c.pngScaleMultiplier ?? 1;
+  return (procScale / ratio) * mult;
+}
