@@ -18,8 +18,14 @@ const ACCENT = '#4ad96a';
 const WARN = '#ffd36a';
 
 export function isDebugGalleryRequested(): boolean {
-  if (!import.meta.env.DEV) return false;
-  return new URLSearchParams(window.location.search).get('debug') === 'gallery';
+  if (new URLSearchParams(window.location.search).get('debug') !== 'gallery') return false;
+
+  const hostname = window.location.hostname;
+  return import.meta.env.DEV
+    || import.meta.env.VITE_ENABLE_DEBUG_GALLERY === 'true'
+    || hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname.endsWith('.vercel.app');
 }
 
 function initialDebugTab(): 'gallery' | 'sandbox' {
