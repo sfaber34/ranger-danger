@@ -847,19 +847,23 @@ export class DebugGalleryScene extends Phaser.Scene {
 
   private damageSandboxUnit() {
     if (!this.sandboxSprite) return;
-    this.sandboxHp = Math.max(0, this.sandboxHp - this.sandboxDamage);
+    this.sandboxHp = Math.max(1, this.sandboxHp - this.sandboxDamage);
     const target = this.sandboxSprite;
     target.setTintFill(0xffffff);
     this.time.delayedCall(60, () => {
       if (!target.scene || target !== this.sandboxSprite) return;
       target.clearTint();
     });
+    const fxScale = this.sandboxEffectScale(target, 1.2);
     const spark = this.add.sprite(this.sandboxSprite.x, this.sandboxSprite.y, 'fx_hit_0')
-      .setScale(1.2)
+      .setScale(fxScale)
       .setDepth(30);
+    this.sandbox.add(spark);
     spark.play('fx-hit');
     spark.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => spark.destroy());
-    if (this.sandboxHp === 0) this.killSandboxUnit(false);
+    this.time.delayedCall(250, () => {
+      if (spark.scene) spark.destroy();
+    });
     this.updateSandboxStatLabels();
   }
 
@@ -867,14 +871,24 @@ export class DebugGalleryScene extends Phaser.Scene {
     if (!this.sandboxSprite) return;
     if (setHp) this.sandboxHp = 0;
     const target = this.sandboxSprite;
+    const fxScale = this.sandboxEffectScale(target, this.selected?.kind === 'boss' ? 2 : 1.4);
     const pop = this.add.sprite(this.sandboxSprite.x, this.sandboxSprite.y, 'fx_death_0')
-      .setScale(this.selected?.kind === 'boss' ? 2 : 1)
+      .setScale(fxScale)
       .setDepth(30);
+    this.sandbox.add(pop);
     pop.play('fx-death');
     pop.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => pop.destroy());
+    this.time.delayedCall(400, () => {
+      if (pop.scene) pop.destroy();
+    });
     target.destroy();
     this.sandboxSprite = null;
     this.updateSandboxStatLabels();
+  }
+
+  private sandboxEffectScale(sprite: Phaser.GameObjects.Sprite, baseScale: number) {
+    const size = Math.max(sprite.displayWidth, sprite.displayHeight);
+    return Phaser.Math.Clamp(baseScale * (size / 64), baseScale * 0.7, baseScale * 3);
   }
 
   private updateSandboxStatLabels() {
