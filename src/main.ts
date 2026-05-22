@@ -5,6 +5,7 @@ import { LevelSelectScene } from './scenes/LevelSelectScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
 import { TutorialScene } from './scenes/TutorialScene';
+import { DebugGalleryScene, isDebugGalleryRequested } from './scenes/DebugGalleryScene';
 import { SFX } from './audio/sfx';
 import { installViewportResizeListener } from './viewport';
 import { getRegistry } from './core/registry';
@@ -115,7 +116,7 @@ function start() {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.NO_CENTER
     },
-    scene: [BootScene, LevelSelectScene, GameScene, UIScene, TutorialScene]
+    scene: [BootScene, LevelSelectScene, GameScene, UIScene, TutorialScene, DebugGalleryScene]
   });
 
   // Hide overlay once GameScene is ready (after "Generating world..." from level select)
@@ -141,3 +142,7 @@ function start() {
 }
 
 startBtn.addEventListener('click', start);
+
+if (isDebugGalleryRequested()) {
+  start();
+}

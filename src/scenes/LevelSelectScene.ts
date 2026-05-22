@@ -10,8 +10,8 @@ import {
 } from '../levels';
 import { isTutorialNeeded, markTutorialDone } from './TutorialScene';
 
-/** Testing toggle — when on, every level whose `implemented` flag is true
- *  is treated as unlocked, regardless of medals. Persisted in localStorage
+/** Testing toggle — when on, every map level is treated as unlocked,
+ *  regardless of medals or implementation status. Persisted in localStorage
  *  so it survives reloads. Not exposed in the production build path; the
  *  checkbox is just a small label on the map. */
 const TEST_UNLOCK_KEY = 'td_test_unlock_all';
@@ -39,12 +39,9 @@ export class LevelSelectScene extends Phaser.Scene {
   testUnlockAll = false;
 
   /** Unlocked-for-the-UI: wraps the medal-based isLevelUnlocked check
-   *  with the testing override that opens every implemented level. */
+   *  with the testing override that opens every level. */
   private unlockedFor(levelId: number): boolean {
-    if (this.testUnlockAll) {
-      const def = LEVELS.find(l => l.id === levelId);
-      if (def?.implemented) return true;
-    }
+    if (this.testUnlockAll) return true;
     return isLevelUnlocked(this.medalStore, levelId);
   }
 
@@ -468,7 +465,7 @@ export class LevelSelectScene extends Phaser.Scene {
           this.showTooltip(cx, cy - R - this.p(14), `Complete ${prevName} first`);
           return;
         }
-        if (!level.implemented) {
+        if (!level.implemented && !this.testUnlockAll) {
           this.showTooltip(cx, cy - R - this.p(14), 'Coming Soon');
           return;
         }
