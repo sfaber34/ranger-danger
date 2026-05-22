@@ -1,6 +1,20 @@
 import Phaser from 'phaser';
 import { CFG } from '../config';
 import { generateAllArt } from '../assets/generateArt';
+import towerBaseImg from '../assets/sprites/tower_base.png';
+import arrowBase1Img from '../assets/sprites/arrow_base_1.png';
+import arrowBase2Img from '../assets/sprites/arrow_base_2.png';
+import cannonBaseImg from '../assets/sprites/cannon_base.png';
+import cannonBase1Img from '../assets/sprites/cannon_base_1.png';
+import cannonBase2Img from '../assets/sprites/cannon_base_2.png';
+import {
+  loadTreeOverrides,
+  TREE_CLUSTER_CONFIG,
+} from '../assets/treeOverrides';
+import {
+  loadInfectedPlantOverrides,
+  INFECTED_PLANT_CLUSTER_CONFIG,
+} from '../assets/infectedPlantOverrides';
 import {
   applySpriteOverrides,
   getEntityVisualScale,
@@ -19,11 +33,27 @@ const ACCENT = '#4ad96a';
 const WARN = '#ffd36a';
 
 const ENTITY_PROC_SCALES: Record<string, number> = {
+  basic: 0.5,
+  heavy: 0.5,
+  snake: 0.5,
   rat: 0.45,
   deer: 0.55,
   wolf: 0.45,
   bear: 0.55,
   spider: 0.45,
+  infected_basic: 0.5,
+  infected_heavy: 0.5,
+  toad: 0.55,
+  crow: 0.5,
+  bat: 0.5,
+  dragonfly: 0.45,
+  mosquito: 0.45,
+  skeleton: 0.5,
+  warlock: 0.5,
+  golem: 0.55,
+  shadow_imp: 0.45,
+  castle_bat: 0.45,
+  castle_rat: 0.45,
 };
 
 export function isDebugGalleryRequested(): boolean {
@@ -127,7 +157,8 @@ export class DebugGalleryScene extends Phaser.Scene {
   private sandboxDamageValue: Phaser.GameObjects.Text | null = null;
   private sandboxLineupSprite: Phaser.GameObjects.Sprite | null = null;
   private sandboxLineupScaleValue: Phaser.GameObjects.Text | null = null;
-  private sandboxHpBar: Phaser.GameObjects.Graphics | null = null;
+  private sandboxLineupBaseY = 0;
+  private sandboxLineupTopY = 0;
   private sandboxBgIndex = 0;
   private readonly sandboxBgs = [0x070a0f, 0x151515, 0x263044, 0x304226, 0x56302c];
   private sandboxMaxHp = 20;
@@ -148,6 +179,14 @@ export class DebugGalleryScene extends Phaser.Scene {
   constructor() { super('DebugGallery'); }
 
   preload() {
+    if (!this.textures.exists('t_base_png')) this.load.image('t_base_png', towerBaseImg);
+    if (!this.textures.exists('t_base_1_png')) this.load.image('t_base_1_png', arrowBase1Img);
+    if (!this.textures.exists('t_base_2_png')) this.load.image('t_base_2_png', arrowBase2Img);
+    if (!this.textures.exists('c_base_png')) this.load.image('c_base_png', cannonBaseImg);
+    if (!this.textures.exists('c_base_1_png')) this.load.image('c_base_1_png', cannonBase1Img);
+    if (!this.textures.exists('c_base_2_png')) this.load.image('c_base_2_png', cannonBase2Img);
+    loadTreeOverrides(this);
+    loadInfectedPlantOverrides(this);
     loadSpriteOverrides(this, null);
   }
 
@@ -206,11 +245,6 @@ export class DebugGalleryScene extends Phaser.Scene {
     this.game.canvas.style.width = `${this.layoutW}px`;
     this.game.canvas.style.height = `${this.layoutH}px`;
     this.game.canvas.style.imageRendering = 'auto';
-  }
-
-  update(_time: number, delta: number) {
-    if (this.mode !== 'sandbox' || !this.sandboxSprite) return;
-    this.drawSandboxHpBar();
   }
 
   private makeTabButton(x: number, y: number, label: string, mode: 'gallery' | 'sandbox') {
@@ -427,7 +461,8 @@ export class DebugGalleryScene extends Phaser.Scene {
     this.sandboxDamageValue = null;
     this.sandboxLineupSprite = null;
     this.sandboxLineupScaleValue = null;
-    this.sandboxHpBar = null;
+    this.sandboxLineupBaseY = 0;
+    this.sandboxLineupTopY = 0;
 
     const W = this.layoutW;
     const H = this.layoutH - this.headerH;
@@ -462,24 +497,28 @@ export class DebugGalleryScene extends Phaser.Scene {
 
     const compact = W < 720;
     const stageW = compact ? Math.min(W - 72, 430) : Math.min(460, Math.max(360, W * 0.38));
-    const stageH = compact ? 260 : Math.min(330, Math.max(280, H * 0.52));
+    const stageH = compact ? 220 : Math.min(330, Math.max(280, H * 0.52));
     const stageX = compact ? W / 2 : 44 + stageW / 2;
-    const stageY = compact ? 218 : H * 0.5;
+    const lineupH = 180;
+    const lineupTop = compact ? 84 : Math.max(86, H * 0.14);
+    const stageY = lineupTop + lineupH + 8 + stageH / 2;
     this.sandboxStage = { x: stageX, y: stageY, w: stageW, h: stageH };
+    this.addSandboxScaleLineup(entry, anim.animKey, {
+      x: stageX,
+      y: lineupTop + lineupH / 2,
+      w: stageW,
+      h: lineupH,
+    });
     this.sandbox.add(this.add.rectangle(stageX, stageY, stageW, stageH, 0x000000, 0.22)
       .setStrokeStyle(1, 0x33435f, 0.9));
     this.sandboxUnitX = stageX;
     this.sandboxSprite = this.add.sprite(stageX, stageY, this.firstTextureFor(anim.animKey)).play(anim.animKey);
     this.sandboxSprite.x = this.sandboxUnitX;
     this.sandbox.add(this.sandboxSprite);
-    this.sandboxHpBar = this.add.graphics();
-    this.sandbox.add(this.sandboxHpBar);
     this.applySandboxPlayback();
-    this.drawSandboxHpBar();
-    this.addSandboxScaleLineup(entry, anim.animKey);
 
     const controlsX = compact ? W / 2 : Math.min(W - 210, Math.max(stageX + stageW / 2 + 236, W * 0.72));
-    const controlsTop = compact ? 392 : 96;
+    const controlsTop = compact ? stageY + stageH / 2 + 4 : 96;
     this.sandbox.add(this.add.text(controlsX, controlsTop, 'Sandbox Controls', {
       fontFamily: 'monospace', fontSize: '22px', color: ACCENT,
     }).setOrigin(0.5));
@@ -540,7 +579,7 @@ export class DebugGalleryScene extends Phaser.Scene {
     this.addSlider(controlsX - 160, sliderTop + sliderGap * 2 + 30, 320, 1, 1000, this.sandboxMaxHp, (v) => {
       this.sandboxMaxHp = Math.round(v);
       this.sandboxHp = Math.min(this.sandboxHp, this.sandboxMaxHp);
-      this.drawSandboxHpBar();
+      this.updateSandboxStatLabels();
     });
 
     this.sandbox.add(this.add.text(controlsX - 160, sliderTop + sliderGap * 3, 'Move Speed', {
@@ -642,24 +681,42 @@ export class DebugGalleryScene extends Phaser.Scene {
     this.sandbox.add([track, fill, handle]);
   }
 
-  private addSandboxScaleLineup(entry: SpriteDebugEntry, animKey: string) {
-    const { x, y, w, h } = this.sandboxStage;
-    const baseY = y + h / 2 - 26;
+  private addSandboxScaleLineup(
+    entry: SpriteDebugEntry,
+    animKey: string,
+    bounds: { x: number; y: number; w: number; h: number },
+  ) {
+    const { x, y, w, h } = bounds;
+    const baseY = y + h / 2 - 32;
+    this.sandboxLineupBaseY = baseY;
+    this.sandboxLineupTopY = y - h / 2 + 28;
     const labelY = baseY + 10;
+    const treeKey = TREE_CLUSTER_CONFIG.pngKey(0) ?? 'tree_cluster_0';
+    const plantKey = INFECTED_PLANT_CLUSTER_CONFIG.pngKey(0) ?? 'infected_plant_0';
     const items = [
       { label: 'player', key: 'p_idle_0', anim: 'player-idle', scale: 0.5 },
       { label: entry.folder, key: this.firstTextureFor(animKey), anim: animKey, selected: true },
       { label: 'arrow tower', key: 't_base', scale: 0.5 },
       { label: 'cannon', key: 'c_base', scale: 0.5 },
-      { label: 'trees', key: 'tree_cluster_0', scale: 1 },
-      { label: 'plant', key: 'infected_plant_0', scale: 1 },
+      { label: 'tree', key: treeKey, scale: this.worldHeightScale(treeKey, TREE_CLUSTER_CONFIG.targetWorldHeight) },
+      {
+        label: 'plant',
+        key: plantKey,
+        scale: this.worldHeightScale(
+          plantKey,
+          INFECTED_PLANT_CLUSTER_CONFIG.targetWorldHeight
+            * (INFECTED_PLANT_CLUSTER_CONFIG.variantScales?.[0] ?? 1),
+        ),
+      },
       { label: 'wall', key: 'wall_15', scale: 0.5 },
     ];
     const step = w / items.length;
     const startX = x - w / 2 + step / 2;
 
+    this.sandbox.add(this.add.rectangle(x, y, w, h, 0x000000, 0.22)
+      .setStrokeStyle(1, 0x33435f, 0.9));
     this.sandbox.add(this.add.rectangle(x, baseY + 6, w - 24, 3, 0x5c6f50, 0.9));
-    this.sandbox.add(this.add.text(x - w / 2 + 14, y + h / 2 - 88, 'World Scale Lineup', {
+    this.sandbox.add(this.add.text(x - w / 2 + 14, y - h / 2 + 10, 'World Scale Lineup', {
       fontFamily: 'monospace', fontSize: '13px', color: ACCENT,
     }));
 
@@ -674,7 +731,6 @@ export class DebugGalleryScene extends Phaser.Scene {
         this.updateSandboxLineupScale();
       } else {
         sprite.setScale(item.scale ?? 1);
-        this.capLineupSprite(sprite, step - 8, 76);
       }
       this.sandbox.add(sprite);
       if (item.label === 'arrow tower') this.addLineupTowerTop(itemX, baseY, sprite.displayHeight);
@@ -684,7 +740,7 @@ export class DebugGalleryScene extends Phaser.Scene {
       }).setOrigin(0.5, 0));
     }
 
-    this.sandboxLineupScaleValue = this.add.text(x + w / 2 - 14, y + h / 2 - 88, '', {
+    this.sandboxLineupScaleValue = this.add.text(x + w / 2 - 14, y - h / 2 + 10, '', {
       fontFamily: 'monospace', fontSize: '12px', color: MUTED,
     }).setOrigin(1, 0);
     this.sandbox.add(this.sandboxLineupScaleValue);
@@ -697,12 +753,20 @@ export class DebugGalleryScene extends Phaser.Scene {
       ? 0.5
       : getEntityVisualScale(this, this.selected.folder, 'move', ENTITY_PROC_SCALES[this.selected.folder] ?? 0.5);
     this.sandboxLineupSprite.setScale(baseScale * this.previewScale);
+    this.sandboxLineupSprite.y = Math.max(
+      this.sandboxLineupBaseY,
+      this.sandboxLineupTopY + this.sandboxLineupSprite.displayHeight,
+    );
     this.sandboxLineupSprite.anims.timeScale = this.playbackSpeed;
     if (this.paused) this.sandboxLineupSprite.anims.pause();
     else this.sandboxLineupSprite.anims.resume();
-    const maxItemW = Math.max(36, this.sandboxStage.w / 7 - 8);
-    this.capLineupSprite(this.sandboxLineupSprite, maxItemW, 86);
     this.sandboxLineupScaleValue?.setText(`selected ${this.previewScale.toFixed(2)}x`);
+  }
+
+  private worldHeightScale(textureKey: string, targetWorldHeight: number) {
+    if (!this.textures.exists(textureKey)) return 1;
+    const image = this.textures.get(textureKey).getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+    return targetWorldHeight / Math.max(1, image.height);
   }
 
   private addLineupTowerTop(x: number, baseY: number, baseH: number) {
@@ -719,11 +783,6 @@ export class DebugGalleryScene extends Phaser.Scene {
       if (!this.textures.exists(key)) continue;
       this.sandbox.add(this.add.sprite(x, centerY + offY, key).setScale(0.5));
     }
-  }
-
-  private capLineupSprite(sprite: Phaser.GameObjects.Sprite, maxW: number, maxH: number) {
-    const cap = Math.min(1, maxW / Math.max(1, sprite.displayWidth), maxH / Math.max(1, sprite.displayHeight));
-    if (cap < 1) sprite.setScale(sprite.scaleX * cap, sprite.scaleY * cap);
   }
 
   private cycleAnim(dir: number) {
@@ -759,7 +818,6 @@ export class DebugGalleryScene extends Phaser.Scene {
     this.sandboxScaleValue?.setText(`${this.previewScale.toFixed(2)}x`);
     this.sandboxSpeedValue?.setText(`${this.playbackSpeed.toFixed(2)}x`);
     this.updateSandboxLineupScale();
-    this.drawSandboxHpBar();
     this.updateSandboxStatLabels();
   }
 
@@ -802,7 +860,7 @@ export class DebugGalleryScene extends Phaser.Scene {
     spark.play('fx-hit');
     spark.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => spark.destroy());
     if (this.sandboxHp === 0) this.killSandboxUnit(false);
-    this.drawSandboxHpBar();
+    this.updateSandboxStatLabels();
   }
 
   private killSandboxUnit(setHp = true) {
@@ -816,25 +874,6 @@ export class DebugGalleryScene extends Phaser.Scene {
     pop.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => pop.destroy());
     target.destroy();
     this.sandboxSprite = null;
-    this.sandboxHpBar?.clear();
-    this.drawSandboxHpBar();
-    this.updateSandboxStatLabels();
-  }
-
-  private drawSandboxHpBar() {
-    if (!this.sandboxHpBar || !this.sandboxSprite) return;
-    const w = Math.max(54, Math.min(180, this.sandboxSprite.displayWidth * 0.8));
-    const h = 8;
-    const x = this.sandboxSprite.x - w / 2;
-    const y = this.sandboxSprite.y + this.sandboxSprite.displayHeight / 2 + 18;
-    const pct = this.sandboxMaxHp > 0 ? Phaser.Math.Clamp(this.sandboxHp / this.sandboxMaxHp, 0, 1) : 0;
-    this.sandboxHpBar.clear();
-    this.sandboxHpBar.fillStyle(0x05070c, 0.95);
-    this.sandboxHpBar.fillRoundedRect(x, y, w, h, 3);
-    this.sandboxHpBar.lineStyle(1, 0x33435f, 1);
-    this.sandboxHpBar.strokeRoundedRect(x, y, w, h, 3);
-    this.sandboxHpBar.fillStyle(pct > 0.5 ? 0x4ad96a : pct > 0.25 ? 0xffd36a : 0xff5050, 1);
-    this.sandboxHpBar.fillRoundedRect(x + 1, y + 1, Math.max(0, (w - 2) * pct), h - 2, 2);
     this.updateSandboxStatLabels();
   }
 
