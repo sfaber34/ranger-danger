@@ -614,10 +614,17 @@ export class EnemyBossSystem {
             else if (hOk && !vOk) axis = 'x';
             else axis = Math.abs(curCy - e.y) > Math.abs(curCx - e.x) ? 'y' : 'x';
           }
+          // Per-frame max movement at current speed × time scale. Used to
+          // damp the alignment velocity so it never overshoots the center
+          // when the game is sped up (mult ≥ ~4 makes maxMove > 1.5 px and
+          // a constant ±1 sign causes oscillation around the centerline).
+          const maxMove = e.speed * (delta / 1000) * (scene.timeMult ?? 1);
           if (axis === 'y') {
             const dxAlign = curCx - e.x;
-            if (Math.abs(dxAlign) > 1.5) {
-              moveX = Math.sign(dxAlign);
+            const absDx = Math.abs(dxAlign);
+            if (absDx > 1.5) {
+              const stepFactor = absDx < maxMove ? absDx / maxMove : 1;
+              moveX = Math.sign(dxAlign) * stepFactor;
               moveY = 0;
             } else {
               moveX = 0;
@@ -625,8 +632,10 @@ export class EnemyBossSystem {
             }
           } else if (axis === 'x') {
             const dyAlign = curCy - e.y;
-            if (Math.abs(dyAlign) > 1.5) {
-              moveY = Math.sign(dyAlign);
+            const absDy = Math.abs(dyAlign);
+            if (absDy > 1.5) {
+              const stepFactor = absDy < maxMove ? absDy / maxMove : 1;
+              moveY = Math.sign(dyAlign) * stepFactor;
               moveX = 0;
             } else {
               moveY = 0;
