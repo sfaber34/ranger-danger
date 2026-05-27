@@ -109,6 +109,7 @@ const OVERRIDES: Record<string, CharacterOverrides> = {
   toad:  { pngScaleMultiplier: 1.2 },
   infected_basic:  { pngScaleMultiplier: 1.2,  anims: { atk: { fps: 22 } } },
   infected_heavy:  { anims: { atk: { fps: 18 } } },
+  heavy:  { pngScaleMultiplier: 1.3 },
   // Boss slam: the wind-up state is 600 ms (EnemyBossSystem.slam_wind), and
   // every boss's atk.png is 12 frames. 12 / 0.6 = 20 fps makes the swing
   // animation finish right as bossSlamImpact lands.

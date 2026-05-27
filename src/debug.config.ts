@@ -24,7 +24,7 @@ export const DEBUG = {
    */
   disableStuckRecovery: true,
   initialSpawns: [
-    { kind: 'bear', distance: 400 },
+    { kind: 'castle_rat', distance: 300 },
   ] as InitialSpawn[],
   path: {
     enabled: true,
@@ -52,6 +52,6 @@ export const DEBUG = {
   #.....#.#
   .#####..#
   .......#.
-  ......#..
+  #######..
 `,
 };
