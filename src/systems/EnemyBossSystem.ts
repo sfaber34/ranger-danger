@@ -499,7 +499,15 @@ export class EnemyBossSystem {
         return true;
       }
 
-      const clear = e.flying || !scene.pathing.lineBlocked(e.x, e.y, tx, ty);
+      // Body-aware LOS for the direct-pursuit shortcut. Point-sized LOS lets
+      // a wide enemy "see" through a corridor it can't physically traverse,
+      // causing it to aim diagonally at the player and wedge its body
+      // against a wall while sliding sideways for a second. Falling through
+      // to path-finding routes it through tile centers via the snap-to-axis
+      // logic below.
+      const losHalfW = ((e.body as Phaser.Physics.Arcade.Body | null)?.width ?? 24) / 2 + 1;
+      const losHalfH = ((e.body as Phaser.Physics.Arcade.Body | null)?.height ?? 24) / 2 + 1;
+      const clear = e.flying || !scene.pathing.bodyLineBlocked(e.x, e.y, tx, ty, losHalfW, losHalfH);
       if (clear) {
         const dx = tx - e.x, dy = ty - e.y;
         const d = Math.hypot(dx, dy) || 1;
@@ -680,16 +688,20 @@ export class EnemyBossSystem {
         moveX /= ml; moveY /= ml;
       }
       e.setVelocity(moveX * e.speed, moveY * e.speed);
+      // Facing — when moveX is 0 (pure vertical motion, e.g. threading a
+      // corridor), face the player so the enemy looks like it's still
+      // targeting them rather than staring at the wall.
+      const facingX = moveX !== 0 ? moveX : (tx - e.x);
       if (e.rotates) {
         e.rotateToward(moveX, moveY);
       } else if (e.kind === 'bear') {
-        if (moveX !== 0) {
-          const dirChanged = e.updateFacing(moveX);
+        if (facingX !== 0) {
+          const dirChanged = e.updateFacing(facingX);
           const moveAnim = `${e.dirPrefix()}-move`;
           if (dirChanged || e.anims.currentAnim?.key !== moveAnim) e.play(moveAnim);
         }
       } else {
-        e.setFlipX(moveX < 0);
+        e.setFlipX(facingX < 0);
       }
       if (e.anims.currentAnim?.key !== `${prefix}-move`) e.play(`${prefix}-move`);
       return true;
