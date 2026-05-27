@@ -468,7 +468,11 @@ export function applyEntityVisual(
       const scale = Math.max(0.001, Math.abs(sprite.scaleX));
       const rawSourceW = bounds.right - bounds.left + 1;
       const rawSourceH = bounds.bottom - bounds.top + 1;
-      const corridorMargin = 2; // 1 px clearance per side in a 32-px tile
+      // Cap leaves slack on each side so the alignment tolerance is wide
+      // enough that fast-moving enemies don't have to damp their velocity
+      // at every corner to land precisely on the centerline. Higher margin
+      // = more tolerance = more fluid cornering at high game speed.
+      const corridorMargin = 8; // 4 px clearance per side in a 32-px tile
       const maxDisplayDim = CFG.tile - corridorMargin;
       const maxSourceDim = maxDisplayDim / scale;
       const srcW = Math.max(1, Math.min(rawSourceW, maxSourceDim));

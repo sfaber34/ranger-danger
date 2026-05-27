@@ -49,14 +49,18 @@ export function findPath(
 
   let foundTarget = false;
   const cardinals: [number, number][] = [[1,0],[-1,0],[0,1],[0,-1]];
-  const diagonals: [number, number][] = [[1,1],[-1,1],[1,-1],[-1,-1]];
 
+  // Cardinal-only BFS. Diagonal steps are disabled because the inferred
+  // diagonal motion lets a wide-bodied enemy brush wall corners that aren't
+  // along the immediate 2x2 around the step (e.g., diagonal from (A) to (B)
+  // can route the body's path past wall (C) two tiles away). Cardinal-only
+  // produces paths whose tile-to-tile motion is axis-aligned, keeping the
+  // body entirely inside one row or column at any moment.
   while (qHead < queue.length) {
     const cur = queue[qHead++];
     const cx = (cur % width) + minX;
     const cy = Math.floor(cur / width) + minY;
     if (cx === tx && cy === ty) { foundTarget = true; break; }
-    // Cardinals
     for (const [dx, dy] of cardinals) {
       const nx = cx + dx, ny = cy + dy;
       if (!inRange(nx, ny)) continue;
@@ -64,24 +68,6 @@ export function findPath(
       if (visited[ni]) continue;
       const nv = gridGet(g, nx, ny);
       if (nv >= 1 && nv !== 5) continue; // 5 = bridge, walkable
-      visited[ni] = 1;
-      prev[ni] = cur;
-      queue.push(ni);
-    }
-    // Diagonals — walls (1), trees (3), water (4) block; towers (2) and bridges (5) allow squeeze-through
-    for (const [dx, dy] of diagonals) {
-      const nx = cx + dx, ny = cy + dy;
-      if (!inRange(nx, ny)) continue;
-      const ni = idx(nx, ny);
-      if (visited[ni]) continue;
-      const dv = gridGet(g, nx, ny);
-      if (dv >= 1 && dv !== 5) continue;
-      const c1 = gridGet(g, cx + dx, cy);
-      const c2 = gridGet(g, cx, cy + dy);
-      // Both blocked = no gap; wall (1), tree (3), water (4) = full-tile, no squeeze
-      const solid1 = c1 === 1 || c1 === 3 || c1 === 4;
-      const solid2 = c2 === 1 || c2 === 3 || c2 === 4;
-      if (solid1 || solid2 || (c1 >= 1 && c2 >= 1)) continue;
       visited[ni] = 1;
       prev[ni] = cur;
       queue.push(ni);

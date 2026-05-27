@@ -570,6 +570,15 @@ export class EnemyBossSystem {
           }
         }
 
+        // Prepend the start tile so the enemy first centers in its current
+        // tile before turning toward the next waypoint. Without this, an
+        // enemy that just entered a tile from a perpendicular direction is
+        // sent diagonally toward the next tile and its body brushes the
+        // inner corner of an adjacent wall.
+        if (e.path.length > 0) {
+          e.path.unshift({ x: start.x, y: start.y });
+        }
+
         e.pathIdx = 0;
         }
       }
@@ -579,12 +588,10 @@ export class EnemyBossSystem {
       const bodyHalfH = ((e.body as Phaser.Physics.Arcade.Body | null)?.height ?? 24) / 2 + 1;
       const etx = Math.floor(e.x / CFG.tile), ety = Math.floor(e.y / CFG.tile);
 
-      // Detect tight territory — any full-tile blocker in the 3x3 around the
-      // enemy's current tile. In tight areas, point-sized BFS paths plus
-      // smooth diagonal motion let wide-bodied enemies (deer, snake) clip
-      // wall corners because their AABB sticks out past the path centerline.
-      // Force strict tile-to-tile cardinal traversal: snap perpendicular to
-      // the current tile center first, then advance along the path axis.
+      // Detect tight territory — any full-tile blocker in the enemy's 3x3
+      // neighborhood. Used below to suppress wall-avoidance steering when
+      // the pathfinder is already routing through a tight corridor (steering
+      // forces would just oscillate the body into the walls).
       let nearWall = false;
       for (let oy = -1; oy <= 1 && !nearWall; oy++) {
         for (let ox = -1; ox <= 1 && !nearWall; ox++) {
@@ -594,103 +601,37 @@ export class EnemyBossSystem {
         }
       }
 
+      // Path following — smooth motion toward the farthest waypoint whose
+      // swept-body line-of-sight is clear of walls. Body-aware lookahead
+      // guarantees the chosen target is physically reachable without
+      // clipping. Advance pathIdx only when the enemy is at the target
+      // center, not on tile-floor entry — otherwise the enemy turns into a
+      // new direction while still off-center perpendicular to it, and its
+      // body clips the inner wall of the corner (physics then zeros the
+      // velocity, producing the visible slow-down).
       if (e.path && e.path.length > 0) {
         if (e.pathIdx >= e.path.length) e.pathIdx = e.path.length - 1;
-
-        if (nearWall) {
-          // Auto-advance pathIdx past any waypoints we're already inside.
-          // Without this, the moment the deer enters path[pathIdx]'s tile,
-          // stepDx/stepDy go to (0,0) and the axis decomposition produces a
-          // zero-velocity frame — visible as a per-tile stutter. Auto-advance
-          // makes the velocity hand off seamlessly to the next waypoint.
-          while (e.pathIdx < e.path.length - 1
-                 && etx === e.path[e.pathIdx].x
-                 && ety === e.path[e.pathIdx].y) {
-            e.pathIdx++;
-          }
-          const node = e.path[e.pathIdx];
-          // Align the BODY center to the tile center, not the sprite center.
-          // Bears (and any enemy with a non-zero body offset) have body.center
-          // shifted from sprite.x by `sprite.x - displayOriginX + offset +
-          // bodyWidth/2 - sprite.x`. The sprite offset (e.x - body.center.x)
-          // is constant per enemy, so corrected alignment target =
-          // tileCenter + that offset, equivalent to aligning body to tile
-          // center directly. We use body.center if available.
-          const bodyForAlign = e.body as Phaser.Physics.Arcade.Body | null;
-          const refX = bodyForAlign?.center?.x ?? e.x;
-          const refY = bodyForAlign?.center?.y ?? e.y;
-          const spriteOffX = e.x - refX;
-          const spriteOffY = e.y - refY;
-          const curCx = etx * CFG.tile + CFG.tile / 2 + spriteOffX;
-          const curCy = ety * CFG.tile + CFG.tile / 2 + spriteOffY;
-          const stepDx = node.x - etx;
-          const stepDy = node.y - ety;
-          // Diagonal BFS step → decompose into two cardinal legs. Pick the
-          // walkable intermediate; if both are walkable, prefer aligning the
-          // axis we're already off-center on.
-          let axis: 'x' | 'y' | null = null;
-          if (stepDx !== 0 && stepDy === 0) axis = 'x';
-          else if (stepDy !== 0 && stepDx === 0) axis = 'y';
-          else if (stepDx !== 0 && stepDy !== 0) {
-            const hViaV = gridGet(scene.grid, node.x, ety);
-            const vViaV = gridGet(scene.grid, etx, node.y);
-            const hOk = hViaV < 1 || hViaV === 5;
-            const vOk = vViaV < 1 || vViaV === 5;
-            if (vOk && !hOk) axis = 'y';
-            else if (hOk && !vOk) axis = 'x';
-            else axis = Math.abs(curCy - e.y) > Math.abs(curCx - e.x) ? 'y' : 'x';
-          }
-          // Per-frame max movement at current speed × time scale. Used to
-          // damp the alignment velocity so it never overshoots the center
-          // when the game is sped up (mult ≥ ~4 makes maxMove > 1.5 px and
-          // a constant ±1 sign causes oscillation around the centerline).
-          const maxMove = e.speed * (delta / 1000) * (scene.timeMult ?? 1);
-          if (axis === 'y') {
-            const dxAlign = curCx - e.x;
-            const absDx = Math.abs(dxAlign);
-            if (absDx > 0.4) {
-              const stepFactor = absDx < maxMove ? absDx / maxMove : 1;
-              moveX = Math.sign(dxAlign) * stepFactor;
-              moveY = 0;
-            } else {
-              moveX = 0;
-              moveY = Math.sign(stepDy || (node.y * CFG.tile + CFG.tile / 2 - e.y));
-            }
-          } else if (axis === 'x') {
-            const dyAlign = curCy - e.y;
-            const absDy = Math.abs(dyAlign);
-            if (absDy > 0.4) {
-              const stepFactor = absDy < maxMove ? absDy / maxMove : 1;
-              moveY = Math.sign(dyAlign) * stepFactor;
-              moveX = 0;
-            } else {
-              moveY = 0;
-              moveX = Math.sign(stepDx || (node.x * CFG.tile + CFG.tile / 2 - e.x));
-            }
-          }
+        let lookahead = e.pathIdx;
+        for (let i = e.path.length - 1; i > e.pathIdx; i--) {
+          const node = e.path[i];
           const nx = node.x * CFG.tile + CFG.tile / 2;
           const ny = node.y * CFG.tile + CFG.tile / 2;
-          const d = Math.hypot(nx - e.x, ny - e.y);
-          if (d < 4 && e.pathIdx < e.path.length - 1) e.pathIdx++;
-        } else {
-          let lookahead = e.pathIdx;
-          for (let i = e.path.length - 1; i > e.pathIdx; i--) {
-            const node = e.path[i];
-            const nx = node.x * CFG.tile + CFG.tile / 2;
-            const ny = node.y * CFG.tile + CFG.tile / 2;
-            if (scene.pathing.bodyLineBlocked(e.x, e.y, nx, ny, bodyHalfW, bodyHalfH)) continue;
-            lookahead = i;
-            break;
-          }
-          e.pathIdx = lookahead;
-          const node = e.path[e.pathIdx];
-          const nx = node.x * CFG.tile + CFG.tile / 2;
-          const ny = node.y * CFG.tile + CFG.tile / 2;
-          const dx = nx - e.x, dy = ny - e.y;
-          const d = Math.hypot(dx, dy);
-          if (d < 4 && e.pathIdx < e.path.length - 1) e.pathIdx++;
-          if (d > 0.01) { moveX = dx / d; moveY = dy / d; }
+          if (scene.pathing.bodyLineBlocked(e.x, e.y, nx, ny, bodyHalfW, bodyHalfH)) continue;
+          lookahead = i;
+          break;
         }
+        e.pathIdx = lookahead;
+        const node = e.path[e.pathIdx];
+        const nx = node.x * CFG.tile + CFG.tile / 2;
+        const ny = node.y * CFG.tile + CFG.tile / 2;
+        const dx = nx - e.x, dy = ny - e.y;
+        const d = Math.hypot(dx, dy);
+        // Advance threshold scaled to per-frame movement so high game speed
+        // doesn't oscillate (overshoot the 4-px band) at corner waypoints.
+        const maxMove = e.speed * (delta / 1000) * (scene.timeMult ?? 1);
+        const advThreshold = Math.max(4, maxMove);
+        if (d < advThreshold && e.pathIdx < e.path.length - 1) e.pathIdx++;
+        if (d > 0.01) { moveX = dx / d; moveY = dy / d; }
       }
 
       let avoidX = 0, avoidY = 0;
@@ -730,10 +671,10 @@ export class EnemyBossSystem {
         avoidY,
         nearWall,
       };
-      // Facing — when moveX is 0 (pure vertical motion, e.g. threading a
-      // corridor), face the player so the enemy looks like it's still
-      // targeting them rather than staring at the wall.
-      const facingX = moveX !== 0 ? moveX : (tx - e.x);
+      // Facing — when X motion is negligible (essentially vertical, e.g.
+      // threading a corridor), face the player so the enemy looks like
+      // it's still targeting them rather than staring at the wall.
+      const facingX = Math.abs(moveX) > 0.3 ? moveX : (tx - e.x);
       if (e.rotates) {
         e.rotateToward(moveX, moveY);
       } else if (e.kind === 'bear') {
