@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { CFG } from '../config';
+import { DEBUG } from '../debug.config';
 
 export type TowerKind = 'arrow' | 'cannon';
 
@@ -153,6 +154,7 @@ export class Tower extends Phaser.Physics.Arcade.Sprite {
   }
 
   hurt(amount: number) {
+    if (DEBUG.noDamage) return;
     this.hp -= amount;
     this.setTintFill(0xffffff);
     this.top.setTintFill(0xffffff);

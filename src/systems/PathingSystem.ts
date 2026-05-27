@@ -116,6 +116,37 @@ export class PathingSystem {
     return reachable;
   }
 
+  /**
+   * Body-aware sweep test: returns true if a body of the given half-size,
+   * swept along the line from (x0,y0) to (x1,y1), would intersect any
+   * full-tile blocker (wall, tree, water). Used in pathfinding lookahead so
+   * wide enemies (deer, snake) can't pick shortcut waypoints whose
+   * point-sized LOS clears a wall corner that their AABB body would clip.
+   */
+  bodyLineBlocked(x0: number, y0: number, x1: number, y1: number, halfW: number, halfH: number): boolean {
+    const grid = this.scene.grid;
+    const dx = x1 - x0, dy = y1 - y0;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.001) return false;
+    const steps = Math.max(2, Math.ceil(len / 8));
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps;
+      const cx = x0 + dx * u;
+      const cy = y0 + dy * u;
+      const minTX = Math.floor((cx - halfW) / CFG.tile);
+      const maxTX = Math.floor((cx + halfW) / CFG.tile);
+      const minTY = Math.floor((cy - halfH) / CFG.tile);
+      const maxTY = Math.floor((cy + halfH) / CFG.tile);
+      for (let ty = minTY; ty <= maxTY; ty++) {
+        for (let tx = minTX; tx <= maxTX; tx++) {
+          const v = gridGet(grid, tx, ty);
+          if (v === 1 || v === 3 || v === 4) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   lineBlocked(x0: number, y0: number, x1: number, y1: number): boolean {
     const grid = this.scene.grid;
     const tx0 = Math.floor(x0 / CFG.tile), ty0 = Math.floor(y0 / CFG.tile);

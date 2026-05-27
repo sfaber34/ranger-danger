@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { CFG } from '../config';
 import { SFX } from '../audio/sfx';
+import { DEBUG } from '../debug.config';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   hp = CFG.player.hp;
@@ -30,6 +31,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   hurt(amount: number, scene: Phaser.Scene) {
+    if (DEBUG.noDamage) return;
     const now = (scene as any).vTime ?? scene.time.now;
     if (this.invuln > now) return;
     this.hp -= amount;

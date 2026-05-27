@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { CFG } from '../config';
+import { DEBUG } from '../debug.config';
 
 export class Wall extends Phaser.Physics.Arcade.Sprite {
   hp = CFG.wall.hp;
@@ -26,6 +27,7 @@ export class Wall extends Phaser.Physics.Arcade.Sprite {
   }
 
   hurt(amount: number) {
+    if (DEBUG.noDamage) return;
     this.hp -= amount;
     this.setTintFill(0xffffff);
     this.scene.time.delayedCall(60, () => this.clearTint());

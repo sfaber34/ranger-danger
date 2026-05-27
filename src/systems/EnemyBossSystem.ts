@@ -6,6 +6,7 @@ import { Wall } from '../entities/Wall';
 import { Tower } from '../entities/Tower';
 import { findPath, gridGet, gridSet } from './Pathfinding';
 import type { GameScene } from '../scenes/GameScene';
+import { DEBUG } from '../debug.config';
 
 /**
  * Combined enemy + boss AI / abilities / projectile lifecycle. EnemySystem
@@ -173,6 +174,52 @@ export class EnemyBossSystem {
       const prefix = e.dirPrefix();
       const dist2 = (tx - e.x) ** 2 + (ty - e.y) ** 2;
 
+      // Path debug emit — runs before any early returns so we capture every
+      // enemy regardless of which movement branch fires (direct LOS pursuit,
+      // attack range, stuck recovery, kind-specific AI, etc.). Reads
+      // body.velocity to see what last frame commanded.
+      {
+        const tagged = (e as any)._dbgTagged === true;
+        if (tagged || DEBUG.path.enabled) {
+          const passKind = tagged || DEBUG.path.kinds.length === 0 || DEBUG.path.kinds.includes(e.kind);
+          const passDist = tagged || DEBUG.path.maxDistFromPlayer === 0
+            || Math.hypot(e.x - scene.player.x, e.y - scene.player.y) <= DEBUG.path.maxDistFromPlayer;
+          if (passKind && passDist) {
+            const lastAt = (e as any)._dbgLastAt as number || 0;
+            if (time - lastAt >= DEBUG.path.intervalMs) {
+              (e as any)._dbgLastAt = time;
+              const vx = (e.body as any)?.velocity?.x ?? 0;
+              const vy = (e.body as any)?.velocity?.y ?? 0;
+              const hist = ((e as any)._dbgHist as Array<[number, number]>) || [];
+              hist.push([vx, vy]);
+              if (hist.length > 16) hist.shift();
+              (e as any)._dbgHist = hist;
+              const etxD = Math.floor(e.x / CFG.tile), etyD = Math.floor(e.y / CFG.tile);
+              const pathSlice = e.path && e.path.length > 0
+                ? e.path.slice(e.pathIdx, Math.min(e.path.length, e.pathIdx + 6)).map(p => `(${p.x},${p.y})`).join('->')
+                : 'NONE';
+              const wide: string[] = [];
+              for (let oy = -2; oy <= 2; oy++) {
+                const row: string[] = [];
+                for (let ox = -2; ox <= 2; ox++) {
+                  const v = gridGet(scene.grid, etxD + ox, etyD + oy);
+                  row.push(ox === 0 && oy === 0 ? '@' : (v === 0 ? '.' : String(v)));
+                }
+                wide.push(row.join(' '));
+              }
+              const histStr = hist.map(([hx, hy]) => `(${hx.toFixed(1)},${hy.toFixed(1)})`).join(' ');
+              const movedDistDbg = Math.hypot(e.x - e.prevX, e.y - e.prevY);
+              const body = `[PATH ${e.kind}] t=${time.toFixed(0)} pos=(${e.x.toFixed(1)},${e.y.toFixed(1)}) tile=(${etxD},${etyD})\n` +
+                `  pathIdx=${e.pathIdx}/${e.path?.length ?? 0} next=${pathSlice}\n` +
+                `  bodyVel=(${vx.toFixed(1)},${vy.toFixed(1)}) movedLastFrame=${movedDistDbg.toFixed(2)} stuckMs=${e.stuckMsec.toFixed(0)}\n` +
+                `  5x5 grid (rows top->bottom; @ = enemy tile, . walkable, 1 wall, 2 tower, 3 tree, 4 water):\n    ${wide.join('\n    ')}\n` +
+                `  velHist=${histStr}`;
+              try { fetch('/debug-log', { method: 'POST', body }); } catch { /* ignore */ }
+            }
+          }
+        }
+      }
+
       // Initialize / refresh "last actually moving" timestamp. Done before
       // any early-return so newly-spawned enemies don't read as "stuck for
       // the entire vTime so far" on their first iteration.
@@ -200,7 +247,7 @@ export class EnemyBossSystem {
 
       // Stage 3 (last resort): teleport to the spawn ring. Same effect as the
       // stragglers teleport below, but fires mid-wave too.
-      if (!skipsStuckCheck && e.stuckMsec >= STAGE_TELEPORT_MS_WEDGED) {
+      if (!skipsStuckCheck && !DEBUG.disableStuckRecovery && e.stuckMsec >= STAGE_TELEPORT_MS_WEDGED) {
         this.teleportEnemyToSpawnRing(e, time, 'frame');
         return true;
       }
@@ -231,7 +278,7 @@ export class EnemyBossSystem {
         e.windowStartX = e.x;
         e.windowStartY = e.y;
       }
-      if (!skipsStuckCheck && time - e.windowStartedAt > WINDOW_MSEC) {
+      if (!skipsStuckCheck && !DEBUG.disableStuckRecovery && time - e.windowStartedAt > WINDOW_MSEC) {
         const wdx = e.x - e.windowStartX, wdy = e.y - e.windowStartY;
         if (wdx * wdx + wdy * wdy < WINDOW_MIN_PROGRESS_SQ) {
           this.teleportEnemyToSpawnRing(e, time, 'window');
@@ -243,7 +290,7 @@ export class EnemyBossSystem {
         e.windowStartY = e.y;
       }
 
-      if (dist2 > TELEPORT_DIST_SQ) {
+      if (dist2 > TELEPORT_DIST_SQ && !DEBUG.disableStuckRecovery) {
         const dx = e.x - tx, dy = e.y - ty;
         const inv = 1 / Math.sqrt(dx * dx + dy * dy);
         e.setPosition(tx + dx * inv * respawnR, ty + dy * inv * respawnR);
@@ -506,48 +553,129 @@ export class EnemyBossSystem {
       }
 
       let moveX = 0, moveY = 0;
-      if (e.path && e.path.length > 0) {
-        if (e.pathIdx >= e.path.length) e.pathIdx = e.path.length - 1;
-        let lookahead = e.pathIdx;
-        for (let i = e.path.length - 1; i > e.pathIdx; i--) {
-          const node = e.path[i];
-          const nx = node.x * CFG.tile + CFG.tile / 2;
-          const ny = node.y * CFG.tile + CFG.tile / 2;
-          if (!scene.pathing.lineBlocked(e.x, e.y, nx, ny)) { lookahead = i; break; }
+      const bodyHalfW = ((e.body as Phaser.Physics.Arcade.Body | null)?.width ?? 24) / 2 + 1;
+      const bodyHalfH = ((e.body as Phaser.Physics.Arcade.Body | null)?.height ?? 24) / 2 + 1;
+      const etx = Math.floor(e.x / CFG.tile), ety = Math.floor(e.y / CFG.tile);
+
+      // Detect tight territory — any full-tile blocker in the 3x3 around the
+      // enemy's current tile. In tight areas, point-sized BFS paths plus
+      // smooth diagonal motion let wide-bodied enemies (deer, snake) clip
+      // wall corners because their AABB sticks out past the path centerline.
+      // Force strict tile-to-tile cardinal traversal: snap perpendicular to
+      // the current tile center first, then advance along the path axis.
+      let nearWall = false;
+      for (let oy = -1; oy <= 1 && !nearWall; oy++) {
+        for (let ox = -1; ox <= 1 && !nearWall; ox++) {
+          if (ox === 0 && oy === 0) continue;
+          const v = gridGet(scene.grid, etx + ox, ety + oy);
+          if (v === 1 || v === 3 || v === 4) nearWall = true;
         }
-        e.pathIdx = lookahead;
-        const node = e.path[e.pathIdx];
-        const nx = node.x * CFG.tile + CFG.tile / 2;
-        const ny = node.y * CFG.tile + CFG.tile / 2;
-        const dx = nx - e.x, dy = ny - e.y;
-        const d = Math.hypot(dx, dy);
-        if (d < 4 && e.pathIdx < e.path.length - 1) e.pathIdx++;
-        if (d > 0.01) { moveX = dx / d; moveY = dy / d; }
-      } else {
-        moveX = 0; moveY = 0;
       }
 
-      const etx = Math.floor(e.x / CFG.tile), ety = Math.floor(e.y / CFG.tile);
-      let avoidX = 0, avoidY = 0;
-      for (let oy = -1; oy <= 1; oy++) {
-        for (let ox = -1; ox <= 1; ox++) {
-          if (ox === 0 && oy === 0) continue;
-          const gx = etx + ox, gy = ety + oy;
-          if (gridGet(scene.grid, gx, gy) < 1) continue;
-          const wallCX = gx * CFG.tile + CFG.tile / 2;
-          const wallCY = gy * CFG.tile + CFG.tile / 2;
-          const rdx = e.x - wallCX, rdy = e.y - wallCY;
-          const rd = Math.hypot(rdx, rdy) || 1;
-          const strength = Math.max(0, 1 - rd / (CFG.tile * 1.2));
-          avoidX += (rdx / rd) * strength;
-          avoidY += (rdy / rd) * strength;
+      if (e.path && e.path.length > 0) {
+        if (e.pathIdx >= e.path.length) e.pathIdx = e.path.length - 1;
+
+        if (nearWall) {
+          // Auto-advance pathIdx past any waypoints we're already inside.
+          // Without this, the moment the deer enters path[pathIdx]'s tile,
+          // stepDx/stepDy go to (0,0) and the axis decomposition produces a
+          // zero-velocity frame — visible as a per-tile stutter. Auto-advance
+          // makes the velocity hand off seamlessly to the next waypoint.
+          while (e.pathIdx < e.path.length - 1
+                 && etx === e.path[e.pathIdx].x
+                 && ety === e.path[e.pathIdx].y) {
+            e.pathIdx++;
+          }
+          const node = e.path[e.pathIdx];
+          const curCx = etx * CFG.tile + CFG.tile / 2;
+          const curCy = ety * CFG.tile + CFG.tile / 2;
+          const stepDx = node.x - etx;
+          const stepDy = node.y - ety;
+          // Diagonal BFS step → decompose into two cardinal legs. Pick the
+          // walkable intermediate; if both are walkable, prefer aligning the
+          // axis we're already off-center on.
+          let axis: 'x' | 'y' | null = null;
+          if (stepDx !== 0 && stepDy === 0) axis = 'x';
+          else if (stepDy !== 0 && stepDx === 0) axis = 'y';
+          else if (stepDx !== 0 && stepDy !== 0) {
+            const hViaV = gridGet(scene.grid, node.x, ety);
+            const vViaV = gridGet(scene.grid, etx, node.y);
+            const hOk = hViaV < 1 || hViaV === 5;
+            const vOk = vViaV < 1 || vViaV === 5;
+            if (vOk && !hOk) axis = 'y';
+            else if (hOk && !vOk) axis = 'x';
+            else axis = Math.abs(curCy - e.y) > Math.abs(curCx - e.x) ? 'y' : 'x';
+          }
+          if (axis === 'y') {
+            const dxAlign = curCx - e.x;
+            if (Math.abs(dxAlign) > 1.5) {
+              moveX = Math.sign(dxAlign);
+              moveY = 0;
+            } else {
+              moveX = 0;
+              moveY = Math.sign(stepDy || (node.y * CFG.tile + CFG.tile / 2 - e.y));
+            }
+          } else if (axis === 'x') {
+            const dyAlign = curCy - e.y;
+            if (Math.abs(dyAlign) > 1.5) {
+              moveY = Math.sign(dyAlign);
+              moveX = 0;
+            } else {
+              moveY = 0;
+              moveX = Math.sign(stepDx || (node.x * CFG.tile + CFG.tile / 2 - e.x));
+            }
+          }
+          const nx = node.x * CFG.tile + CFG.tile / 2;
+          const ny = node.y * CFG.tile + CFG.tile / 2;
+          const d = Math.hypot(nx - e.x, ny - e.y);
+          if (d < 4 && e.pathIdx < e.path.length - 1) e.pathIdx++;
+        } else {
+          let lookahead = e.pathIdx;
+          for (let i = e.path.length - 1; i > e.pathIdx; i--) {
+            const node = e.path[i];
+            const nx = node.x * CFG.tile + CFG.tile / 2;
+            const ny = node.y * CFG.tile + CFG.tile / 2;
+            if (scene.pathing.bodyLineBlocked(e.x, e.y, nx, ny, bodyHalfW, bodyHalfH)) continue;
+            lookahead = i;
+            break;
+          }
+          e.pathIdx = lookahead;
+          const node = e.path[e.pathIdx];
+          const nx = node.x * CFG.tile + CFG.tile / 2;
+          const ny = node.y * CFG.tile + CFG.tile / 2;
+          const dx = nx - e.x, dy = ny - e.y;
+          const d = Math.hypot(dx, dy);
+          if (d < 4 && e.pathIdx < e.path.length - 1) e.pathIdx++;
+          if (d > 0.01) { moveX = dx / d; moveY = dy / d; }
         }
       }
-      const avoidMag = Math.hypot(avoidX, avoidY);
-      if (avoidMag > 0) {
-        const avoidWeight = 0.4;
-        moveX = moveX * (1 - avoidWeight) + (avoidX / avoidMag) * avoidWeight;
-        moveY = moveY * (1 - avoidWeight) + (avoidY / avoidMag) * avoidWeight;
+
+      let avoidX = 0, avoidY = 0;
+      if (!nearWall) {
+        for (let oy = -1; oy <= 1; oy++) {
+          for (let ox = -1; ox <= 1; ox++) {
+            if (ox === 0 && oy === 0) continue;
+            const gx = etx + ox, gy = ety + oy;
+            if (gridGet(scene.grid, gx, gy) < 1) continue;
+            const wallCX = gx * CFG.tile + CFG.tile / 2;
+            const wallCY = gy * CFG.tile + CFG.tile / 2;
+            const rdx = e.x - wallCX, rdy = e.y - wallCY;
+            const rd = Math.hypot(rdx, rdy) || 1;
+            const strength = Math.max(0, 1 - rd / (CFG.tile * 1.2));
+            avoidX += (rdx / rd) * strength;
+            avoidY += (rdy / rd) * strength;
+          }
+        }
+      }
+      // Apply avoidance as a proportional nudge — never normalize the avoid
+      // vector before blending. The original normalize+fixed-weight made any
+      // tiny lateral imbalance between two flanking walls (even a 0.01
+      // magnitude residue) into a full 40% sideways kick, which oscillates
+      // wide-bodied enemies left/right at narrow entrances. Raw magnitude
+      // gives smooth proportional steering: symmetric ≈ 0, asymmetric ≈ scaled.
+      if (avoidX !== 0 || avoidY !== 0) {
+        moveX += avoidX * 0.6;
+        moveY += avoidY * 0.6;
         const ml = Math.hypot(moveX, moveY) || 1;
         moveX /= ml; moveY /= ml;
       }

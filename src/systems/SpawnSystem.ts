@@ -8,6 +8,7 @@ import { Projectile } from '../entities/Projectile';
 import { SFX } from '../audio/sfx';
 import { Biome } from '../levels';
 import { computeViewport, viewportWorldSize } from '../viewport';
+import { DEBUG } from '../debug.config';
 import { gridGet } from './Pathfinding';
 import type { GameScene } from '../scenes/GameScene';
 
@@ -428,6 +429,7 @@ export class SpawnSystem {
 
   updateSpawning(time: number, delta: number) {
     const scene = this.scene;
+    if (DEBUG.pauseWaveSpawns) return;
     // initial build phase — show countdown, don't spawn anything yet
     if (time < scene.waveState.waveStartAt) {
       if (scene.waveState.waveStartAt === Infinity) {
