@@ -209,9 +209,23 @@ export class EnemyBossSystem {
               }
               const histStr = hist.map(([hx, hy]) => `(${hx.toFixed(1)},${hy.toFixed(1)})`).join(' ');
               const movedDistDbg = Math.hypot(e.x - e.prevX, e.y - e.prevY);
+              const cmd = (e as any)._dbgLastCmd as { moveX: number; moveY: number; avoidX: number; avoidY: number; nearWall: boolean } | undefined;
+              const bodyObj = e.body as Phaser.Physics.Arcade.Body | null;
+              const bcx = bodyObj?.center?.x;
+              const bcy = bodyObj?.center?.y;
+              const bw = bodyObj?.width;
+              const bh = bodyObj?.height;
+              const cmdStr = cmd
+                ? `move=(${cmd.moveX.toFixed(3)},${cmd.moveY.toFixed(3)}) avoid=(${cmd.avoidX.toFixed(3)},${cmd.avoidY.toFixed(3)}) nearWall=${cmd.nearWall}`
+                : 'move=NONE';
+              const bodyStr = (bcx !== undefined && bcy !== undefined)
+                ? `bodyCenter=(${bcx.toFixed(1)},${bcy.toFixed(1)}) bodySize=(${bw?.toFixed(1)},${bh?.toFixed(1)}) spriteOff=(${(e.x - bcx).toFixed(2)},${(e.y - bcy).toFixed(2)})`
+                : 'body=NONE';
               const body = `[PATH ${e.kind}] t=${time.toFixed(0)} pos=(${e.x.toFixed(1)},${e.y.toFixed(1)}) tile=(${etxD},${etyD})\n` +
                 `  pathIdx=${e.pathIdx}/${e.path?.length ?? 0} next=${pathSlice}\n` +
                 `  bodyVel=(${vx.toFixed(1)},${vy.toFixed(1)}) movedLastFrame=${movedDistDbg.toFixed(2)} stuckMs=${e.stuckMsec.toFixed(0)}\n` +
+                `  ${cmdStr}\n` +
+                `  ${bodyStr}\n` +
                 `  5x5 grid (rows top->bottom; @ = enemy tile, . walkable, 1 wall, 2 tower, 3 tree, 4 water):\n    ${wide.join('\n    ')}\n` +
                 `  velHist=${histStr}`;
               try { fetch('/debug-log', { method: 'POST', body }); } catch { /* ignore */ }
@@ -313,7 +327,7 @@ export class EnemyBossSystem {
       // along their current bearing so the wave can resolve. The mid-wave
       // wedged-on-tree case is handled by the displacement check above; this
       // covers the complementary "AI couldn't even pick a velocity" case.
-      if (stragglersPhase && !skipsStuckCheck && time - e.lastMovingAt > STUCK_TELEPORT_MS) {
+      if (stragglersPhase && !skipsStuckCheck && !DEBUG.disableStuckRecovery && time - e.lastMovingAt > STUCK_TELEPORT_MS) {
         const dx = e.x - tx, dy = e.y - ty;
         const d = Math.sqrt(dx * dx + dy * dy) || 1;
         e.setPosition(tx + (dx / d) * respawnR, ty + (dy / d) * respawnR);
@@ -595,8 +609,20 @@ export class EnemyBossSystem {
             e.pathIdx++;
           }
           const node = e.path[e.pathIdx];
-          const curCx = etx * CFG.tile + CFG.tile / 2;
-          const curCy = ety * CFG.tile + CFG.tile / 2;
+          // Align the BODY center to the tile center, not the sprite center.
+          // Bears (and any enemy with a non-zero body offset) have body.center
+          // shifted from sprite.x by `sprite.x - displayOriginX + offset +
+          // bodyWidth/2 - sprite.x`. The sprite offset (e.x - body.center.x)
+          // is constant per enemy, so corrected alignment target =
+          // tileCenter + that offset, equivalent to aligning body to tile
+          // center directly. We use body.center if available.
+          const bodyForAlign = e.body as Phaser.Physics.Arcade.Body | null;
+          const refX = bodyForAlign?.center?.x ?? e.x;
+          const refY = bodyForAlign?.center?.y ?? e.y;
+          const spriteOffX = e.x - refX;
+          const spriteOffY = e.y - refY;
+          const curCx = etx * CFG.tile + CFG.tile / 2 + spriteOffX;
+          const curCy = ety * CFG.tile + CFG.tile / 2 + spriteOffY;
           const stepDx = node.x - etx;
           const stepDy = node.y - ety;
           // Diagonal BFS step → decompose into two cardinal legs. Pick the
@@ -622,7 +648,7 @@ export class EnemyBossSystem {
           if (axis === 'y') {
             const dxAlign = curCx - e.x;
             const absDx = Math.abs(dxAlign);
-            if (absDx > 1.5) {
+            if (absDx > 0.4) {
               const stepFactor = absDx < maxMove ? absDx / maxMove : 1;
               moveX = Math.sign(dxAlign) * stepFactor;
               moveY = 0;
@@ -633,7 +659,7 @@ export class EnemyBossSystem {
           } else if (axis === 'x') {
             const dyAlign = curCy - e.y;
             const absDy = Math.abs(dyAlign);
-            if (absDy > 1.5) {
+            if (absDy > 0.4) {
               const stepFactor = absDy < maxMove ? absDy / maxMove : 1;
               moveY = Math.sign(dyAlign) * stepFactor;
               moveX = 0;
@@ -697,6 +723,13 @@ export class EnemyBossSystem {
         moveX /= ml; moveY /= ml;
       }
       e.setVelocity(moveX * e.speed, moveY * e.speed);
+      (e as any)._dbgLastCmd = {
+        moveX,
+        moveY,
+        avoidX,
+        avoidY,
+        nearWall,
+      };
       // Facing — when moveX is 0 (pure vertical motion, e.g. threading a
       // corridor), face the player so the enemy looks like it's still
       // targeting them rather than staring at the wall.

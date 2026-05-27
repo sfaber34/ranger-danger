@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { Biome, Difficulty } from '../levels';
+import { measureOpaqueBounds } from '../entities/spriteBounds';
+import { CFG } from '../config';
 
 /** Folders whose sheets are needed in every level — Player is always rendered;
  *  endless mode loads everything else on top. */
@@ -96,7 +98,7 @@ const OVERRIDES: Record<string, CharacterOverrides> = {
   castle_rat:  { pngScaleMultiplier: 1.0, anims: { move: { skipLast: 1 } } },
   spider:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 18 } } },
   wolf:  { anims: { move: { fps: 24 } } },
-  bear:  { pngScaleMultiplier: 3.0,  anims: { move: { fps: 18 }, atk: { fps: 24 } } },
+  bear:  { pngScaleMultiplier: 2.4,  anims: { move: { fps: 18 }, atk: { fps: 24 } } },
   golem:  { pngScaleMultiplier: 1.3, anims: { atk: { fps: 20 } } },
   crow:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 14 }, atk: { fps: 14 } }  },
   dragonfly:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 24 }, atk: { fps: 24 } }  },
@@ -447,8 +449,38 @@ export function applyEntityVisual(
     const ratio = img.height / proc;
     const mult = c.pngScaleMultiplier ?? 1;
     sprite.setScale((procScale / ratio) * mult);
-    sprite.setSize(procBodyW * ratio, procBodyH * ratio);
-    sprite.setOffset(procOffsetX * ratio, procOffsetY * ratio);
+    // Auto-size the physics body to the sprite's non-transparent silhouette.
+    // Reads opaque bounds from frame 0 of the primary anim (sliced into its
+    // own texture by applySpriteOverrides). Falls back to the manual proc*
+    // values if the scan fails (e.g. tainted cross-origin canvas) or the
+    // frame texture doesn't exist yet.
+    const anim = findAnim(c, primarySuffix);
+    const frame0Key = anim ? canonicalKey(anim, c.texPrefix, 0) : '';
+    const bounds = frame0Key && sprite.scene.textures.exists(frame0Key)
+      ? measureOpaqueBounds(sprite.scene, frame0Key)
+      : null;
+    if (bounds) {
+      // Compute body size from the visible silhouette, then cap each
+      // dimension at one tile minus a clearance margin so the body always
+      // fits inside a single tile corridor with room to spare. The visual
+      // sprite is unaffected — only the invisible collision rectangle is
+      // resized. Body stays centered on the silhouette regardless of cap.
+      const scale = Math.max(0.001, Math.abs(sprite.scaleX));
+      const rawSourceW = bounds.right - bounds.left + 1;
+      const rawSourceH = bounds.bottom - bounds.top + 1;
+      const corridorMargin = 2; // 1 px clearance per side in a 32-px tile
+      const maxDisplayDim = CFG.tile - corridorMargin;
+      const maxSourceDim = maxDisplayDim / scale;
+      const srcW = Math.max(1, Math.min(rawSourceW, maxSourceDim));
+      const srcH = Math.max(1, Math.min(rawSourceH, maxSourceDim));
+      const cxSrc = (bounds.left + bounds.right + 1) / 2;
+      const cySrc = (bounds.top + bounds.bottom + 1) / 2;
+      sprite.setSize(srcW, srcH);
+      sprite.setOffset(cxSrc - srcW / 2, cySrc - srcH / 2);
+    } else {
+      sprite.setSize(procBodyW * ratio, procBodyH * ratio);
+      sprite.setOffset(procOffsetX * ratio, procOffsetY * ratio);
+    }
   } else {
     sprite.setScale(procScale);
     sprite.setSize(procBodyW, procBodyH);

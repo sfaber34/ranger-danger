@@ -334,7 +334,10 @@ export class GameScene extends Phaser.Scene {
     // Biome-aware sprite loading: campaign runs only load PNG sheets for
     // characters that can spawn in the chosen biome. Endless mode rotates
     // through all biomes, so it falls back to loading everything.
-    const folderFilter = biomeFolderFilter(this.biome, this.difficulty);
+    // Debug: if initialSpawns is configured or path-debug is on, force-load
+    // every sprite sheet so debugSpawn(...) for any kind renders correctly.
+    const debugForceAll = DEBUG.initialSpawns.length > 0 || DEBUG.path.enabled;
+    const folderFilter = debugForceAll ? null : biomeFolderFilter(this.biome, this.difficulty);
     loadSpriteOverrides(this, folderFilter);
     // Trees and infected plants are biome-specific terrain props. Endless
     // can rotate into either, so load them when the filter is null
