@@ -111,23 +111,6 @@ export class EnemyBossSystem {
   updateEnemies(time: number, delta: number) {
     const scene = this.scene;
     const respawnR = scene.spawnDist * CFG.tile;
-    // Cull/teleport thresholds must stay outside the spawn ring — spawnDist
-    // grows with viewport diagonal, so a hardcoded radius can fall inside
-    // the spawn ring on large screens and leave freshly-spawned enemies
-    // permanently frozen until the player walks toward them.
-    // AI cull range — always larger than the on-screen play area plus a
-    // generous buffer, so any enemy the player can see still runs full AI.
-    // The previous 200-px buffer past the spawn ring put the cull boundary
-    // inside the visible area at typical zoom, causing packs of visible
-    // enemies to freeze. Hysteresis keeps enemies at the boundary stable.
-    const cam = scene.cameras.main;
-    const viewW = cam.width / cam.zoom;
-    const viewH = cam.height / cam.zoom;
-    const viewHalfDiag = Math.sqrt(viewW * viewW + viewH * viewH) / 2;
-    const cullEnter = Math.max(respawnR + 200, viewHalfDiag + 400);
-    const cullExit = cullEnter - 200;
-    const FAR_AI_CULL_ENTER_SQ = cullEnter ** 2;
-    const FAR_AI_CULL_EXIT_SQ = cullExit ** 2;
     const TELEPORT_DIST_SQ = (respawnR + 600) ** 2;
 
     // Count alive enemies once so we can detect "stragglers phase" and
@@ -173,7 +156,7 @@ export class EnemyBossSystem {
         return true;
       });
       // eslint-disable-next-line no-console
-      console.log(`[STUCK snapshot t=${time.toFixed(0)} live=${liveCount} stragglers=${stragglersPhase} respawnR=${respawnR.toFixed(0)} cullR=${Math.sqrt(FAR_AI_CULL_ENTER_SQ).toFixed(0)}]\n  ${rows.join('\n  ')}`);
+      console.log(`[STUCK snapshot t=${time.toFixed(0)} live=${liveCount} stragglers=${stragglersPhase} respawnR=${respawnR.toFixed(0)}]\n  ${rows.join('\n  ')}`);
     }
 
     scene.enemies.children.iterate((c: any) => {
@@ -332,17 +315,6 @@ export class EnemyBossSystem {
         e.lastMovingAt = time;
         return true;
       }
-
-      // Skip the perf cull during stragglers phase so the last few
-      // enemies always run AI and head for the player.
-      const wasCulled = (e as any)._aiCulled === true;
-      const cullThreshold = wasCulled ? FAR_AI_CULL_EXIT_SQ : FAR_AI_CULL_ENTER_SQ;
-      if (dist2 > cullThreshold && !stragglersPhase) {
-        (e as any)._aiCulled = true;
-        if (e.body && (e.body as any).enable) e.setVelocity(0, 0);
-        return true;
-      }
-      (e as any)._aiCulled = false;
 
       // Stragglers wedged with NO commanded velocity (path keeps returning
       // empty, or pinned by the cull edge case): teleport to the spawn ring
