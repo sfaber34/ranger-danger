@@ -115,7 +115,19 @@ export class EnemyBossSystem {
     // grows with viewport diagonal, so a hardcoded radius can fall inside
     // the spawn ring on large screens and leave freshly-spawned enemies
     // permanently frozen until the player walks toward them.
-    const FAR_AI_CULL_SQ = (respawnR + 200) ** 2;
+    // AI cull range — always larger than the on-screen play area plus a
+    // generous buffer, so any enemy the player can see still runs full AI.
+    // The previous 200-px buffer past the spawn ring put the cull boundary
+    // inside the visible area at typical zoom, causing packs of visible
+    // enemies to freeze. Hysteresis keeps enemies at the boundary stable.
+    const cam = scene.cameras.main;
+    const viewW = cam.width / cam.zoom;
+    const viewH = cam.height / cam.zoom;
+    const viewHalfDiag = Math.sqrt(viewW * viewW + viewH * viewH) / 2;
+    const cullEnter = Math.max(respawnR + 200, viewHalfDiag + 400);
+    const cullExit = cullEnter - 200;
+    const FAR_AI_CULL_ENTER_SQ = cullEnter ** 2;
+    const FAR_AI_CULL_EXIT_SQ = cullExit ** 2;
     const TELEPORT_DIST_SQ = (respawnR + 600) ** 2;
 
     // Count alive enemies once so we can detect "stragglers phase" and
@@ -161,7 +173,7 @@ export class EnemyBossSystem {
         return true;
       });
       // eslint-disable-next-line no-console
-      console.log(`[STUCK snapshot t=${time.toFixed(0)} live=${liveCount} stragglers=${stragglersPhase} respawnR=${respawnR.toFixed(0)} cullR=${Math.sqrt(FAR_AI_CULL_SQ).toFixed(0)}]\n  ${rows.join('\n  ')}`);
+      console.log(`[STUCK snapshot t=${time.toFixed(0)} live=${liveCount} stragglers=${stragglersPhase} respawnR=${respawnR.toFixed(0)} cullR=${Math.sqrt(FAR_AI_CULL_ENTER_SQ).toFixed(0)}]\n  ${rows.join('\n  ')}`);
     }
 
     scene.enemies.children.iterate((c: any) => {
@@ -249,7 +261,13 @@ export class EnemyBossSystem {
       // counter survives the cull-kick-in moment when a wedged enemy drifts
       // past the cull boundary. Skip kinds that intentionally stand still.
       const movedDist = Math.hypot(e.x - e.prevX, e.y - e.prevY);
-      const skipsStuckCheck = e.kind === 'toad' || e.kind === 'warlock' || e.flying;
+      // Skip stuck checks for enemies intentionally standing still: toads /
+      // warlocks fire from a stationary stance, flying enemies move via
+      // setPosition not velocity, and attacking enemies are deliberately
+      // clamped to vel=0 — treating that as "stuck" would fire Stage 2
+      // perpendicular nudges every 600ms, producing the visible "wolves
+      // jiggling in place where the player just was" oscillation.
+      const skipsStuckCheck = e.kind === 'toad' || e.kind === 'warlock' || e.flying || (e as any)._attacking === true;
       const wasStuckMsec = e.stuckMsec;
       if (!skipsStuckCheck && movedDist < STUCK_MOVE_THRESH) {
         e.stuckMsec += delta;
@@ -317,10 +335,14 @@ export class EnemyBossSystem {
 
       // Skip the perf cull during stragglers phase so the last few
       // enemies always run AI and head for the player.
-      if (dist2 > FAR_AI_CULL_SQ && !stragglersPhase) {
+      const wasCulled = (e as any)._aiCulled === true;
+      const cullThreshold = wasCulled ? FAR_AI_CULL_EXIT_SQ : FAR_AI_CULL_ENTER_SQ;
+      if (dist2 > cullThreshold && !stragglersPhase) {
+        (e as any)._aiCulled = true;
         if (e.body && (e.body as any).enable) e.setVelocity(0, 0);
         return true;
       }
+      (e as any)._aiCulled = false;
 
       // Stragglers wedged with NO commanded velocity (path keeps returning
       // empty, or pinned by the cull edge case): teleport to the spawn ring
@@ -422,8 +444,7 @@ export class EnemyBossSystem {
           let hopX = tx, hopY = ty;
           if (scene.pathing.lineBlocked(e.x, e.y, tx, ty)) {
             const stale = time > e.lastPath + 400 || (e as any)._pv !== scene.gridVersion || !e.path || e.path.length === 0;
-            if (stale && scene.pathsThisFrame < 3) {
-              scene.pathsThisFrame++;
+            if (stale) {
               e.lastPath = time;
               (e as any)._pv = scene.gridVersion;
               const start = scene.pathing.worldToTile(e.x, e.y);
@@ -492,7 +513,14 @@ export class EnemyBossSystem {
         return true;
       }
 
-      if (dist2 < 30 * 30) {
+      // Attack-range hysteresis: enter attack at <30 px, exit at >40 px.
+      // Without hysteresis, an enemy near the boundary toggles in/out of
+      // attack every frame, producing visible "spazzing" — sudden stops
+      // (setVelocity 0) alternating with chase-velocity motion.
+      const wasAttacking = (e as any)._attacking === true;
+      const attackThresh = wasAttacking ? 40 * 40 : 30 * 30;
+      if (dist2 < attackThresh) {
+        (e as any)._attacking = true;
         e.setVelocity(0, 0);
         if (e.rotates) {
           e.rotateToward(tx - e.x, ty - e.y);
@@ -512,17 +540,57 @@ export class EnemyBossSystem {
         }
         return true;
       }
+      (e as any)._attacking = false;
 
-      // Body-aware LOS for the direct-pursuit shortcut. Point-sized LOS lets
-      // a wide enemy "see" through a corridor it can't physically traverse,
-      // causing it to aim diagonally at the player and wedge its body
-      // against a wall while sliding sideways for a second. Falling through
-      // to path-finding routes it through tile centers via the snap-to-axis
-      // logic below.
+      // Path recompute runs FIRST — BEFORE direct pursuit — so the path is
+      // always cached and ready when LOS unexpectedly blocks (e.g. player
+      // walks behind a tree). Previously the direct-pursuit early-return
+      // meant enemies with persistent LOS clear NEVER got a path computed,
+      // so the moment LOS blocked they had no path and the empty-path
+      // fallback wedged them against the obstacle.
+      if (time > e.lastPath + 400 || (e as any)._pv !== scene.gridVersion || !e.path || e.path.length === 0) {
+        e.lastPath = time;
+        (e as any)._pv = scene.gridVersion;
+        const start = scene.pathing.worldToTile(e.x, e.y);
+        const goal = scene.pathing.worldToTile(tx, ty);
+        const saved = gridGet(scene.grid, goal.x, goal.y);
+        if (saved >= 1) gridSet(scene.grid, goal.x, goal.y, 0);
+        e.path = findPath(scene.grid, start.x, start.y, goal.x, goal.y);
+        if (saved >= 1) gridSet(scene.grid, goal.x, goal.y, saved);
+
+        // Prepend the start tile so the enemy first centers in its current
+        // tile before turning toward the next waypoint. Only do this when
+        // the enemy is still BEHIND the tile's center in the direction of
+        // the upcoming step — otherwise (when it's already past center,
+        // mid-traversal) the prepend forces backward motion every recompute
+        // and the enemy oscillates around the center forever.
+        if (e.path.length > 0) {
+          const firstStep = e.path[0];
+          const dirX = Math.sign(firstStep.x - start.x);
+          const dirY = Math.sign(firstStep.y - start.y);
+          const tileCx = start.x * CFG.tile + CFG.tile / 2;
+          const tileCy = start.y * CFG.tile + CFG.tile / 2;
+          const offsetX = e.x - tileCx;
+          const offsetY = e.y - tileCy;
+          const needsXAlign = dirX !== 0 && Math.sign(offsetX) === -dirX;
+          const needsYAlign = dirY !== 0 && Math.sign(offsetY) === -dirY;
+          if (needsXAlign || needsYAlign) {
+            e.path.unshift({ x: start.x, y: start.y });
+          }
+        }
+
+        e.pathIdx = 0;
+      }
+
+      // Direct pursuit — when the enemy's body can sweep all the way to the
+      // player without hitting a wall/tree/water, head straight. Skips
+      // path-based motion for the (very common) open-ground chase. The
+      // path is still kept cached above, ready for the moment LOS blocks.
+      // Flying enemies always direct-pursue since they ignore terrain.
       const losHalfW = ((e.body as Phaser.Physics.Arcade.Body | null)?.width ?? 24) / 2 + 1;
       const losHalfH = ((e.body as Phaser.Physics.Arcade.Body | null)?.height ?? 24) / 2 + 1;
-      const clear = e.flying || !scene.pathing.bodyLineBlocked(e.x, e.y, tx, ty, losHalfW, losHalfH);
-      if (clear) {
+      const losClear = e.flying || !scene.pathing.bodyLineBlocked(e.x, e.y, tx, ty, losHalfW, losHalfH);
+      if (losClear) {
         const dx = tx - e.x, dy = ty - e.y;
         const d = Math.hypot(dx, dy) || 1;
         e.setVelocity((dx / d) * e.speed, (dy / d) * e.speed);
@@ -536,57 +604,34 @@ export class EnemyBossSystem {
           e.setFlipX(dx < 0);
         }
         if (e.anims.currentAnim?.key !== `${prefix}-move`) e.play(`${prefix}-move`);
-        e.path = [];
+        // NOTE: do NOT clear e.path here. Keeping the cached path lets the
+        // enemy fall straight into path-following the moment LOS blocks
+        // (e.g. player walks behind a tree). Clearing it meant the enemy
+        // had no path AND no budget to immediately compute one, so it
+        // stuck in place until budget allowed a recompute.
         return true;
       }
 
-      if (time > e.lastPath + 400 || (e as any)._pv !== scene.gridVersion || !e.path || e.path.length === 0) {
-        if (scene.pathsThisFrame < 3) {
-        scene.pathsThisFrame++;
-        e.lastPath = time;
-        (e as any)._pv = scene.gridVersion;
-        const start = scene.pathing.worldToTile(e.x, e.y);
-        const goal = scene.pathing.worldToTile(tx, ty);
-        const saved = gridGet(scene.grid, goal.x, goal.y);
-        if (saved >= 1) gridSet(scene.grid, goal.x, goal.y, 0);
-        e.path = findPath(scene.grid, start.x, start.y, goal.x, goal.y);
-        if (saved >= 1) gridSet(scene.grid, goal.x, goal.y, saved);
-
-        if (e.path.length === 0) {
-          for (let r = 1; r <= 6; r++) {
-            let bestPath: { x: number; y: number }[] = [];
-            for (let dy = -r; dy <= r; dy++) {
-              for (let dx = -r; dx <= r; dx++) {
-                if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-                const nx = goal.x + dx, ny = goal.y + dy;
-                if (gridGet(scene.grid, nx, ny) >= 1) continue;
-                const p = findPath(scene.grid, start.x, start.y, nx, ny);
-                if (p.length > 0 && (bestPath.length === 0 || p.length < bestPath.length)) {
-                  bestPath = p;
-                }
-              }
-            }
-            if (bestPath.length > 0) { e.path = bestPath; break; }
-          }
-        }
-
-        // Prepend the start tile so the enemy first centers in its current
-        // tile before turning toward the next waypoint. Without this, an
-        // enemy that just entered a tile from a perpendicular direction is
-        // sent diagonally toward the next tile and its body brushes the
-        // inner corner of an adjacent wall.
-        if (e.path.length > 0) {
-          e.path.unshift({ x: start.x, y: start.y });
-        }
-
-        e.pathIdx = 0;
-        }
-      }
-
+      // LOS blocked — use path-following with body-aware lookahead and the
+      // corner cap (path was already recomputed above the direct-pursuit
+      // check, so it's ready to use).
       let moveX = 0, moveY = 0;
       const bodyHalfW = ((e.body as Phaser.Physics.Arcade.Body | null)?.width ?? 24) / 2 + 1;
       const bodyHalfH = ((e.body as Phaser.Physics.Arcade.Body | null)?.height ?? 24) / 2 + 1;
       const etx = Math.floor(e.x / CFG.tile), ety = Math.floor(e.y / CFG.tile);
+
+      // Empty-path fallback. If BFS couldn't reach the player (walled off,
+      // beyond search range, etc.) the enemy still tries to approach. Head
+      // straight toward the player — physics will resolve any wall/tree
+      // collisions naturally, leaving the enemy pressed against the obstacle
+      // until it can find a route. Better than freezing or oscillating
+      // between unstable alt-goal targets.
+      if (!e.path || e.path.length === 0) {
+        const dx = tx - e.x, dy = ty - e.y;
+        const d = Math.hypot(dx, dy) || 1;
+        moveX = dx / d;
+        moveY = dy / d;
+      }
 
       // Detect tight territory — any full-tile blocker in the enemy's 3x3
       // neighborhood. Used below to suppress wall-avoidance steering when
@@ -601,18 +646,32 @@ export class EnemyBossSystem {
         }
       }
 
-      // Path following — smooth motion toward the farthest waypoint whose
-      // swept-body line-of-sight is clear of walls. Body-aware lookahead
-      // guarantees the chosen target is physically reachable without
-      // clipping. Advance pathIdx only when the enemy is at the target
-      // center, not on tile-floor entry — otherwise the enemy turns into a
-      // new direction while still off-center perpendicular to it, and its
-      // body clips the inner wall of the corner (physics then zeros the
-      // velocity, producing the visible slow-down).
+      // Path following — body-aware lookahead capped at the first corner in
+      // the path (the first index where the cardinal direction changes).
+      // This is the unified rule for both open ground and tight mazes:
+      //   • In open corridors (long same-direction runs), lookahead reaches
+      //     the far end and the enemy moves smoothly at full speed.
+      //   • At corners, lookahead caps at the corner tile, so the enemy
+      //     reaches the corner-tile center before turning — body stays
+      //     inside one row/column at any moment and doesn't brush the
+      //     inner wall of the corner.
       if (e.path && e.path.length > 0) {
         if (e.pathIdx >= e.path.length) e.pathIdx = e.path.length - 1;
+
+        let maxLookahead = e.path.length - 1;
+        for (let i = e.pathIdx + 1; i < e.path.length - 1; i++) {
+          const prevDx = e.path[i].x - e.path[i - 1].x;
+          const prevDy = e.path[i].y - e.path[i - 1].y;
+          const nextDx = e.path[i + 1].x - e.path[i].x;
+          const nextDy = e.path[i + 1].y - e.path[i].y;
+          if (prevDx !== nextDx || prevDy !== nextDy) {
+            maxLookahead = i;
+            break;
+          }
+        }
+
         let lookahead = e.pathIdx;
-        for (let i = e.path.length - 1; i > e.pathIdx; i--) {
+        for (let i = maxLookahead; i > e.pathIdx; i--) {
           const node = e.path[i];
           const nx = node.x * CFG.tile + CFG.tile / 2;
           const ny = node.y * CFG.tile + CFG.tile / 2;
@@ -621,13 +680,12 @@ export class EnemyBossSystem {
           break;
         }
         e.pathIdx = lookahead;
+
         const node = e.path[e.pathIdx];
         const nx = node.x * CFG.tile + CFG.tile / 2;
         const ny = node.y * CFG.tile + CFG.tile / 2;
         const dx = nx - e.x, dy = ny - e.y;
         const d = Math.hypot(dx, dy);
-        // Advance threshold scaled to per-frame movement so high game speed
-        // doesn't oscillate (overshoot the 4-px band) at corner waypoints.
         const maxMove = e.speed * (delta / 1000) * (scene.timeMult ?? 1);
         const advThreshold = Math.max(4, maxMove);
         if (d < advThreshold && e.pathIdx < e.path.length - 1) e.pathIdx++;

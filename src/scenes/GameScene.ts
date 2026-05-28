@@ -116,7 +116,6 @@ export class GameScene extends Phaser.Scene {
    *  bossCountdownUntil). Read fields directly; mutate via the named
    *  transition methods. Constructed once and reset() per level. */
   waveState = new WaveState();
-  pathsThisFrame = 0;     // BFS pathfinding budget per frame
   countdownMsg = '';
   countdownColor = '#7cc4ff';
 
@@ -871,7 +870,6 @@ export class GameScene extends Phaser.Scene {
     // While dying, keep the world alive for the death animation but skip player input
     if (this.endState.dying) return;
 
-    this.pathsThisFrame = 0;
     this.updatePlayer(time, vd);
     this.combat.updateTowers(time);
     this.enemyBoss.updateEnemies(time, vd);

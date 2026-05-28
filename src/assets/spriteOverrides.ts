@@ -461,23 +461,24 @@ export function applyEntityVisual(
       ? measureOpaqueBounds(sprite.scene, frame0Key)
       : null;
     if (bounds) {
-      // Compute body size from the visible silhouette, then cap each
-      // dimension at one tile minus a clearance margin so the body always
-      // fits inside a single tile corridor with room to spare. The visual
-      // sprite is unaffected — only the invisible collision rectangle is
-      // resized. Body stays centered on the silhouette regardless of cap.
+      // Compute body size from the visible silhouette, then cap so the body
+      // fits inside a single tile corridor with clearance on each side.
+      // Aspect ratio is PRESERVED — when either dimension overflows the cap
+      // both shrink proportionally so a wide animal (wolf) stays wide and a
+      // tall animal stays tall. Capping each axis independently to the same
+      // max squashed every large enemy to a square body, leaving wolves
+      // brushing tree edges in Y when they should have plenty of vertical
+      // clearance.
       const scale = Math.max(0.001, Math.abs(sprite.scaleX));
       const rawSourceW = bounds.right - bounds.left + 1;
       const rawSourceH = bounds.bottom - bounds.top + 1;
-      // Cap leaves slack on each side so the alignment tolerance is wide
-      // enough that fast-moving enemies don't have to damp their velocity
-      // at every corner to land precisely on the centerline. Higher margin
-      // = more tolerance = more fluid cornering at high game speed.
       const corridorMargin = 8; // 4 px clearance per side in a 32-px tile
       const maxDisplayDim = CFG.tile - corridorMargin;
-      const maxSourceDim = maxDisplayDim / scale;
-      const srcW = Math.max(1, Math.min(rawSourceW, maxSourceDim));
-      const srcH = Math.max(1, Math.min(rawSourceH, maxSourceDim));
+      const rawDisplayW = rawSourceW * scale;
+      const rawDisplayH = rawSourceH * scale;
+      const overshoot = Math.max(1, rawDisplayW / maxDisplayDim, rawDisplayH / maxDisplayDim);
+      const srcW = Math.max(1, rawSourceW / overshoot);
+      const srcH = Math.max(1, rawSourceH / overshoot);
       const cxSrc = (bounds.left + bounds.right + 1) / 2;
       const cySrc = (bounds.top + bounds.bottom + 1) / 2;
       sprite.setSize(srcW, srcH);

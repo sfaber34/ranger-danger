@@ -128,7 +128,13 @@ export class PathingSystem {
     const dx = x1 - x0, dy = y1 - y0;
     const len = Math.hypot(dx, dy);
     if (len < 0.001) return false;
-    const steps = Math.max(2, Math.ceil(len / 8));
+    // Sample step must be small enough that the body can't sweep through a
+    // wall between samples. At least half the smaller body dimension keeps
+    // every overlapped tile visited. With 8-px steps, a body could enter
+    // and exit a wall corner between samples — exactly what was making the
+    // lookahead pick targets that physics then blocks.
+    const stepSize = Math.max(1, Math.min(halfW, halfH));
+    const steps = Math.max(2, Math.ceil(len / stepSize));
     for (let i = 0; i <= steps; i++) {
       const u = i / steps;
       const cx = x0 + dx * u;

@@ -14,7 +14,7 @@ type InitialSpawn = {
  */
 export const DEBUG = {
   noDamage: true,
-  pauseWaveSpawns: true,
+  pauseWaveSpawns: false,
 
   /**
    * Disable the stuck-recovery teleport (Stage 3 at 2s + sliding-window at
@@ -24,7 +24,7 @@ export const DEBUG = {
    */
   disableStuckRecovery: true,
   initialSpawns: [
-    { kind: 'snake', distance: 300 },
+    { kind: 'wolf', distance: 300 },
   ] as InitialSpawn[],
   path: {
     enabled: true,
