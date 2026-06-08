@@ -128,6 +128,9 @@ export class GameScene extends Phaser.Scene {
   private _onUiBuild?: (k: BuildKind, tk?: TowerKind) => void;
   private _onUiSell?: () => void;
   private _onUiSpeed?: (mult: number) => void;
+  private _onUiPause?: () => void;
+  private _onUiResume?: () => void;
+  private menuPaused = false;
   nextRunnerPack = 0;
   playerStoppedAt = 0;
   ghost!: Phaser.GameObjects.Sprite;
@@ -261,6 +264,7 @@ export class GameScene extends Phaser.Scene {
     this.lastChunkCx = -9999;
     this.lastChunkCy = -9999;
     this.loadingDone = false;
+    this.menuPaused = false;
     this.buildState.reset();
     this.nextRunnerPack = 0;
     this.playerStoppedAt = 0;
@@ -613,9 +617,11 @@ export class GameScene extends Phaser.Scene {
     // the previous shutdown), which would leave us with two listeners both
     // toggling buildKind on the same singleton scene instance — they cancel
     // each other and the build menu never opens.
-    if (this._onUiBuild) getEvents(this.game.events).off('ui-build', this._onUiBuild);
-    if (this._onUiSell) getEvents(this.game.events).off('ui-sell', this._onUiSell);
-    if (this._onUiSpeed) getEvents(this.game.events).off('ui-speed', this._onUiSpeed);
+    getEvents(this.game.events).off('ui-build');
+    getEvents(this.game.events).off('ui-sell');
+    getEvents(this.game.events).off('ui-speed');
+    getEvents(this.game.events).off('ui-pause');
+    getEvents(this.game.events).off('ui-resume');
     this._onUiBuild = (k: BuildKind, tk?: TowerKind) => {
       const ts = getRegistry(this.game).get('tutorialStep');
       if (ts) {
@@ -632,9 +638,13 @@ export class GameScene extends Phaser.Scene {
     };
     this._onUiSell = () => this.build.setBuild('none');
     this._onUiSpeed = (mult: number) => this.setTimeScale(mult);
+    this._onUiPause = () => this.pauseForMenu();
+    this._onUiResume = () => this.resumeFromMenu();
     getEvents(this.game.events).on('ui-build', this._onUiBuild);
     getEvents(this.game.events).on('ui-sell', this._onUiSell);
     getEvents(this.game.events).on('ui-speed', this._onUiSpeed);
+    getEvents(this.game.events).on('ui-pause', this._onUiPause);
+    getEvents(this.game.events).on('ui-resume', this._onUiResume);
 
     // Apply default game speed (1.25x base)
     this.setTimeScale(this.timeMult);
@@ -751,11 +761,30 @@ export class GameScene extends Phaser.Scene {
     this.time.timeScale = mult;
   }
 
+  private pauseForMenu() {
+    if (this.endState.gameOver || this.menuPaused) return;
+    this.menuPaused = true;
+    this.physics.pause();
+    this.tweens.pauseAll();
+    this.anims.pauseAll();
+  }
+
+  private resumeFromMenu() {
+    if (!this.menuPaused) return;
+    this.menuPaused = false;
+    if (!this.buildState.paused && this.loadingDone && !this.endState.gameOver) {
+      this.physics.resume();
+      this.tweens.resumeAll();
+      this.anims.resumeAll();
+    }
+  }
+
 
 
 
   update(_realTime: number, delta: number) {
     if (this.endState.gameOver) return;
+    if (this.menuPaused) return;
 
     // Warm-up: let a few render frames pass (physics paused, loading overlay visible)
     // so the browser JIT-compiles and GPU uploads textures before gameplay starts.
@@ -998,9 +1027,14 @@ export class GameScene extends Phaser.Scene {
     if (this._onUiBuild) getEvents(this.game.events).off('ui-build', this._onUiBuild);
     if (this._onUiSell) getEvents(this.game.events).off('ui-sell', this._onUiSell);
     if (this._onUiSpeed) getEvents(this.game.events).off('ui-speed', this._onUiSpeed);
+    if (this._onUiPause) getEvents(this.game.events).off('ui-pause', this._onUiPause);
+    if (this._onUiResume) getEvents(this.game.events).off('ui-resume', this._onUiResume);
     this._onUiBuild = undefined;
     this._onUiSell = undefined;
     this._onUiSpeed = undefined;
+    this._onUiPause = undefined;
+    this._onUiResume = undefined;
+    this.menuPaused = false;
     this.events.off(Phaser.Scenes.Events.POST_UPDATE, this._syncBowToPlayer);
   }
 }

@@ -65,6 +65,8 @@ export interface EventMap {
   'ui-build': [kind: BuildKind, towerKind?: TowerKind];
   'ui-sell': [];
   'ui-speed': [number];
+  'ui-pause': [];
+  'ui-resume': [];
 
   // Tutorial
   'tutorial-level-clicked': [number];
