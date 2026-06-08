@@ -21,6 +21,8 @@ export class UIScene extends Phaser.Scene {
   speedLabel!: Phaser.GameObjects.Text;
   speedIdx = 0;
   endPanel?: Phaser.GameObjects.Container;
+  pauseMenu?: Phaser.GameObjects.Container;
+  menuButton?: Phaser.GameObjects.Container;
   bossBarGfx?: Phaser.GameObjects.Graphics;
   private bossBarX = 0; private bossBarY = 0; private bossBarW = 0; private bossBarH = 0;
   private bossBarMaxHp = 1;
@@ -121,6 +123,8 @@ export class UIScene extends Phaser.Scene {
     const levelDef = LEVELS.find(l => l.id === this.levelId);
     this.biome = levelDef?.biome ?? 'grasslands';
     this.endPanel = undefined;
+    this.pauseMenu = undefined;
+    this.menuButton = undefined;
     this.bossBarGfx = undefined;
     this.bossLabel = undefined;
     this.towerIndicators = new Map();
@@ -200,6 +204,9 @@ export class UIScene extends Phaser.Scene {
     if (this.upgradesLocked) {
       this.upgradesLockOverlay = this.buildUpgradesLockOverlay();
     }
+    const menuX = this.isMobile ? this.p(44) : this.p(12 + 82 / 2);
+    const menuY = this.isMobile ? T + this.p(58) : H - this.p(44);
+    this.menuButton = this.makeMenuButton(menuX, menuY);
 
     // Bottom-center minimal hotbar (#7 style — slots with labels below)
     const slotSize = this.p(48);
@@ -276,6 +283,10 @@ export class UIScene extends Phaser.Scene {
       if (!this.speedLocked) this.cycleSpeed();
     };
     this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE).on('down', tryCycleSpeed);
+    this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.M).on('down', () => {
+      if (this.pauseMenu) this.hidePauseMenu();
+      else this.showPauseMenu();
+    });
 
     // Level progress graphic (wave circles + boss skull)
     this.progressCircles = [];
@@ -623,6 +634,120 @@ export class UIScene extends Phaser.Scene {
     bg.on('pointerout', () => bg.setFillStyle(0x2a3760));
     c.add([bg, t]);
     return c;
+  }
+
+  private makeMenuButton(cx: number, cy: number) {
+    const text = this.isMobile ? 'MENU' : 'MENU (M)';
+    const w = this.p(this.isMobile ? 62 : 82);
+    const h = this.p(28);
+    const c = this.add.container(cx, cy).setDepth(960);
+    const g = this.add.graphics();
+    let hover = false;
+    const draw = () => {
+      g.clear();
+      g.fillStyle(hover ? 0x141c30 : 0x0a0e1a, 0.95);
+      g.fillRoundedRect(-w / 2, -h / 2, w, h, this.p(5));
+      g.lineStyle(this.p(1.5), hover ? 0xc4a030 : 0x8a6a20, 1);
+      g.strokeRoundedRect(-w / 2, -h / 2, w, h, this.p(5));
+    };
+    draw();
+
+    const label = this.add.text(0, 0, text, {
+      fontFamily: 'monospace', fontSize: this.fs(11), fontStyle: 'bold',
+      color: '#ffd84a', stroke: '#0b0f1a', strokeThickness: this.p(2),
+    }).setOrigin(0.5);
+    const hit = this.add.rectangle(0, 0, w, h, 0x000000, 0).setInteractive({ useHandCursor: true });
+    hit.on('pointerdown', () => {
+      SFX.play('click');
+      if (this.pauseMenu) this.hidePauseMenu();
+      else this.showPauseMenu();
+    });
+    hit.on('pointerover', () => { hover = true; draw(); });
+    hit.on('pointerout', () => { hover = false; draw(); });
+    c.add([g, label, hit]);
+    return c;
+  }
+
+  private makePauseMenuButton(
+    cx: number,
+    cy: number,
+    w: number,
+    h: number,
+    label: string,
+    accent: number,
+    color: string,
+    onClick: () => void,
+  ) {
+    const g = this.add.graphics();
+    let hover = false;
+    const x = cx - w / 2;
+    const y = cy - h / 2;
+    const draw = () => {
+      g.clear();
+      g.fillStyle(hover ? 0x1a2238 : 0x0b0f1a, 0.95);
+      g.fillRoundedRect(x, y, w, h, this.p(7));
+      g.lineStyle(this.p(1.5), accent, hover ? 1 : 0.85);
+      g.strokeRoundedRect(x, y, w, h, this.p(7));
+    };
+    draw();
+    const text = this.add.text(cx, cy, label, {
+      fontFamily: 'monospace', fontSize: this.fs(14), fontStyle: 'bold',
+      color, stroke: '#0b0f1a', strokeThickness: this.p(2),
+    }).setOrigin(0.5);
+    const hit = this.add.rectangle(cx, cy, w, h, 0x000000, 0).setInteractive({ useHandCursor: true });
+    hit.on('pointerdown', () => {
+      SFX.play('click');
+      onClick();
+    });
+    hit.on('pointerover', () => { hover = true; draw(); });
+    hit.on('pointerout', () => { hover = false; draw(); });
+    return [g, text, hit];
+  }
+
+  private showPauseMenu() {
+    if (this.pauseMenu || this.endPanel) return;
+    getEvents(this.game.events).emit('ui-pause');
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const accent = 0xc4a030;
+    const titleHex = '#ffd84a';
+    const bg = this.add.rectangle(0, 0, W, H, 0x000000, 0.62).setOrigin(0);
+
+    const boxW = Math.min(this.p(360), W - this.p(32));
+    const boxH = this.p(230);
+    const boxX = W / 2 - boxW / 2;
+    const boxY = H / 2 - boxH / 2;
+    const panel = this.add.graphics();
+    panel.fillStyle(0x11172a, 0.97);
+    panel.fillRoundedRect(boxX, boxY, boxW, boxH, this.p(10));
+    panel.lineStyle(this.p(1), 0x2a3760, 0.7);
+    panel.strokeRoundedRect(boxX + this.p(3), boxY + this.p(3), boxW - this.p(6), boxH - this.p(6), this.p(8));
+    panel.lineStyle(this.p(2), accent, 0.9);
+    panel.strokeRoundedRect(boxX, boxY, boxW, boxH, this.p(10));
+
+    const title = this.add.text(W / 2, boxY + this.p(42), 'PAUSED', {
+      fontFamily: 'monospace', fontSize: this.fs(30), fontStyle: 'bold',
+      color: titleHex, stroke: '#0b0f1a', strokeThickness: this.p(4),
+    }).setOrigin(0.5);
+
+    const btnW = Math.min(this.p(190), boxW - this.p(52));
+    const btnH = this.p(40);
+    const resumeItems = this.makePauseMenuButton(W / 2, boxY + this.p(105), btnW, btnH, 'RESUME', 0x4ad96a, '#7cf29a', () => this.hidePauseMenu());
+    const mapItems = this.makePauseMenuButton(W / 2, boxY + this.p(158), btnW, btnH, 'RETURN TO MAP', 0xc4a030, titleHex, () => {
+      this.scene.stop('Game');
+      this.scene.stop('UI');
+      this.scene.start('LevelSelect');
+    });
+
+    this.pauseMenu = this.add.container(0, 0, [bg, panel, title, ...resumeItems, ...mapItems]).setDepth(1200);
+  }
+
+  private hidePauseMenu() {
+    if (!this.pauseMenu) return;
+    this.pauseMenu.destroy();
+    this.pauseMenu = undefined;
+    getEvents(this.game.events).emit('ui-resume');
   }
 
   makeHotbarSlot(cx: number, topY: number, w: number, h: number, key: string, icon: string, name: string, cost: string, onClick: () => void) {
