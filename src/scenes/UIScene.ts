@@ -432,7 +432,7 @@ export class UIScene extends Phaser.Scene {
     this.buildHintText = this.add.text(W / 2, hotbarTop - this.p(38),
       this.isMobile
         ? 'Tap selected item again to leave build menu'
-        : 'Right-click or ESC to leave build menu',
+        : 'Right-click, B, or ESC to leave build menu',
       {
         fontFamily: 'monospace', fontSize: this.fs(12), color: '#c8d8e8',
         stroke: '#0b0f1a', strokeThickness: this.p(3),
@@ -727,7 +727,10 @@ export class UIScene extends Phaser.Scene {
   private showPauseMenu() {
     if (this.pauseMenu || this.endPanel) return;
     getEvents(this.game.events).emit('ui-pause');
+    this.renderPauseMenuMain();
+  }
 
+  private renderPauseMenuMain() {
     const W = this.scale.width;
     const H = this.scale.height;
     const accent = 0xc4a030;
@@ -735,7 +738,7 @@ export class UIScene extends Phaser.Scene {
     const bg = this.add.rectangle(0, 0, W, H, 0x000000, 0.62).setOrigin(0);
 
     const boxW = Math.min(this.p(360), W - this.p(32));
-    const boxH = this.p(230);
+    const boxH = this.p(282);
     const boxX = W / 2 - boxW / 2;
     const boxY = H / 2 - boxH / 2;
     const panel = this.add.graphics();
@@ -754,13 +757,83 @@ export class UIScene extends Phaser.Scene {
     const btnW = Math.min(this.p(190), boxW - this.p(52));
     const btnH = this.p(40);
     const resumeItems = this.makePauseMenuButton(W / 2, boxY + this.p(105), btnW, btnH, 'RESUME', 0x4ad96a, '#7cf29a', () => this.hidePauseMenu());
-    const mapItems = this.makePauseMenuButton(W / 2, boxY + this.p(158), btnW, btnH, 'RETURN TO MAP', 0xc4a030, titleHex, () => {
+    const controlsItems = this.makePauseMenuButton(W / 2, boxY + this.p(158), btnW, btnH, 'CONTROLS', 0x7cc4ff, '#a8d1ff', () => this.showControlsMenu());
+    const mapItems = this.makePauseMenuButton(W / 2, boxY + this.p(211), btnW, btnH, 'RETURN TO MAP', 0xc4a030, titleHex, () => {
       this.scene.stop('Game');
       this.scene.stop('UI');
       this.scene.start('LevelSelect');
     });
 
-    this.pauseMenu = this.add.container(0, 0, [bg, panel, title, ...resumeItems, ...mapItems]).setDepth(1200);
+    this.pauseMenu = this.add.container(0, 0, [bg, panel, title, ...resumeItems, ...controlsItems, ...mapItems]).setDepth(1200);
+  }
+
+  private showControlsMenu() {
+    if (!this.pauseMenu) return;
+    this.pauseMenu.destroy();
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const accent = 0x7cc4ff;
+    const titleHex = '#a8d1ff';
+    const bg = this.add.rectangle(0, 0, W, H, 0x000000, 0.62).setOrigin(0);
+    const boxW = Math.min(this.p(this.isMobile ? 500 : 560), W - this.p(32));
+    const boxH = Math.min(this.p(this.isMobile ? 340 : 370), H - this.p(36));
+    const boxX = W / 2 - boxW / 2;
+    const boxY = H / 2 - boxH / 2;
+    const panel = this.add.graphics();
+    panel.fillStyle(0x11172a, 0.97);
+    panel.fillRoundedRect(boxX, boxY, boxW, boxH, this.p(10));
+    panel.lineStyle(this.p(1), 0x2a3760, 0.7);
+    panel.strokeRoundedRect(boxX + this.p(3), boxY + this.p(3), boxW - this.p(6), boxH - this.p(6), this.p(8));
+    panel.lineStyle(this.p(2), accent, 0.9);
+    panel.strokeRoundedRect(boxX, boxY, boxW, boxH, this.p(10));
+
+    const title = this.add.text(W / 2, boxY + this.p(38), 'CONTROLS', {
+      fontFamily: 'monospace', fontSize: this.fs(26), fontStyle: 'bold',
+      color: titleHex, stroke: '#0b0f1a', strokeThickness: this.p(4),
+    }).setOrigin(0.5);
+    const controls = this.isMobile
+      ? [
+          ['Move ranger', 'On-screen joystick'],
+          ['Choose build item', 'Tap Arrow, Cannon, Wall, or Speed slot'],
+          ['Place build item', 'Tap a valid tile'],
+          ['Place/select tower', 'Tap the map or an existing tower'],
+          ['Leave build menu', 'Tap the selected hotbar item again'],
+          ['Pause/menu', 'Tap MENU'],
+        ]
+      : [
+          ['Move ranger', 'WASD or Arrow Keys'],
+          ['Choose build item', '1 Arrow Tower, 2 Cannon, 4 Wall'],
+          ['Place/select tower', 'Left-click'],
+          ['Leave build menu', 'Right-click, B, or ESC'],
+          ['Cycle speed', 'Space or hotbar speed slot'],
+          ['Pause/menu', 'M or MENU button'],
+        ];
+    const lineTop = boxY + this.p(80);
+    const lineGap = this.p(this.isMobile ? 38 : 34);
+    const labelX = boxX + this.p(34);
+    const valueX = boxX + this.p(this.isMobile ? 176 : 188);
+    const items: Phaser.GameObjects.GameObject[] = [bg, panel, title];
+    controls.forEach(([label, value], i) => {
+      const y = lineTop + i * lineGap;
+      items.push(this.add.text(labelX, y, label, {
+        fontFamily: 'monospace', fontSize: this.fs(12), fontStyle: 'bold',
+        color: '#ffd84a', stroke: '#0b0f1a', strokeThickness: this.p(2),
+      }).setOrigin(0, 0.5));
+      items.push(this.add.text(valueX, y, value, {
+        fontFamily: 'monospace', fontSize: this.fs(this.isMobile ? 11 : 12),
+        color: '#e8edf8', stroke: '#0b0f1a', strokeThickness: this.p(2),
+        wordWrap: { width: boxX + boxW - valueX - this.p(28), useAdvancedWrap: true },
+      }).setOrigin(0, 0.5));
+    });
+    const btnW = Math.min(this.p(170), boxW - this.p(52));
+    const btnH = this.p(40);
+    const backItems = this.makePauseMenuButton(W / 2, boxY + boxH - this.p(44), btnW, btnH, 'BACK', 0xc4a030, '#ffd84a', () => {
+      this.pauseMenu?.destroy();
+      this.renderPauseMenuMain();
+    });
+    items.push(...backItems);
+    this.pauseMenu = this.add.container(0, 0, items).setDepth(1200);
   }
 
   private hidePauseMenu() {

@@ -461,12 +461,13 @@ export class LevelSelectScene extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(4);
 
       // Medal dots
+      const medalDifficulties = DIFFICULTY_ORDER.filter(diff => diff !== 'endless');
       const dotY = cy + R + this.p(8);
       const dotSpacing = this.p(11);
-      const startX = cx - (dotSpacing * 1.5);
+      const startX = cx - (dotSpacing * (medalDifficulties.length - 1)) / 2;
       const dotG = this.add.graphics().setDepth(4);
-      for (let i = 0; i < DIFFICULTY_ORDER.length; i++) {
-        const diff = DIFFICULTY_ORDER[i];
+      for (let i = 0; i < medalDifficulties.length; i++) {
+        const diff = medalDifficulties[i];
         const earned = medals?.[diff] ?? false;
         const mc = MEDAL_COLORS[diff];
         const dx = startX + i * dotSpacing;
@@ -479,9 +480,13 @@ export class LevelSelectScene extends Phaser.Scene {
           dotG.fillCircle(dx - this.p(1), dotY - this.p(1), this.p(1.5));
         } else {
           dotG.fillStyle(0x000000, 0.3);
-          dotG.fillCircle(dx, dotY, this.p(3));
-          dotG.lineStyle(this.p(1), unlocked ? 0x7a6a52 : 0x444444, 0.4);
-          dotG.strokeCircle(dx, dotY, this.p(2.5));
+          dotG.fillCircle(dx + this.p(0.5), dotY + this.p(0.75), this.p(5));
+          dotG.fillStyle(0x2a3140, 0.78);
+          dotG.fillCircle(dx, dotY, this.p(4));
+          dotG.lineStyle(this.p(1.25), unlocked ? 0xbfae84 : 0x787268, unlocked ? 0.82 : 0.62);
+          dotG.strokeCircle(dx, dotY, this.p(4));
+          dotG.fillStyle(0xe8dcc8, unlocked ? 0.14 : 0.08);
+          dotG.fillCircle(dx - this.p(1), dotY - this.p(1), this.p(1.25));
         }
       }
 
