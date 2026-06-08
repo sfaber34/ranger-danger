@@ -371,6 +371,40 @@ export class LevelSelectScene extends Phaser.Scene {
       // unlock predicate. Cheap — LevelSelect has no game state to lose.
       this.scene.restart();
     });
+
+    this.drawDebugGalleryButton(label.x + label.width + this.p(14), y);
+  }
+
+  private drawDebugGalleryButton(x: number, y: number) {
+    const buttonH = this.p(18);
+    const padX = this.p(8);
+    const text = this.add.text(x + padX, y, 'Debug gallery', {
+      fontFamily: 'monospace', fontSize: this.fs(10),
+      color: '#7cc4ff',
+      stroke: '#000', strokeThickness: this.p(2),
+    }).setOrigin(0, 0.5).setDepth(3);
+    const buttonW = text.width + padX * 2;
+    const bg = this.add.graphics().setDepth(2);
+    const drawButton = (hovered: boolean) => {
+      bg.clear();
+      bg.fillStyle(hovered ? 0x1b2a48 : 0x11172a, 0.9);
+      bg.fillRoundedRect(x, y - buttonH / 2, buttonW, buttonH, this.p(4));
+      bg.lineStyle(this.p(1), hovered ? 0x7cc4ff : 0x2a3760, hovered ? 1 : 0.85);
+      bg.strokeRoundedRect(x, y - buttonH / 2, buttonW, buttonH, this.p(4));
+    };
+    drawButton(false);
+
+    const hit = this.add.rectangle(x, y - buttonH / 2, buttonW, buttonH, 0x000000, 0)
+      .setOrigin(0)
+      .setInteractive({ useHandCursor: true })
+      .setDepth(4);
+    hit.on('pointerover', () => drawButton(true));
+    hit.on('pointerout', () => drawButton(false));
+    hit.on('pointerdown', () => {
+      SFX.play('click');
+      if (this.scene.isActive('Tutorial')) this.scene.stop('Tutorial');
+      this.scene.start('DebugGallery');
+    });
   }
 
   drawNodes() {
