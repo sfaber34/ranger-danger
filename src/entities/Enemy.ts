@@ -193,6 +193,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.play('ecrat-move');
         break;
     }
+    this.randomizeCurrentAnimationProgress();
 
     // Shadow size and ground offset come from the visible pixel bounds of
     // the active texture, so transparent padding in the sheet doesn't shift
@@ -255,6 +256,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   /** Returns true if this enemy kind should rotate to face movement direction. */
   get rotates(): boolean {
     return this.kind === 'snake' || this.kind === 'rat' || this.kind === 'castle_rat';
+  }
+
+  private randomizeCurrentAnimationProgress(): void {
+    if (!this.anims.currentAnim) return;
+    this.anims.setProgress(Math.random());
   }
 
   /** Set rotation from a movement vector. Sprites face right at rotation 0.
