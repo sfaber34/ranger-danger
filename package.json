@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "dev:lan": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -15,6 +16,6 @@
   "devDependencies": {
     "canvas": "^3.2.3",
     "typescript": "^5.4.5",
-    "vite": "^5.2.10"
+    "vite": "^8.0.14"
   }
 }

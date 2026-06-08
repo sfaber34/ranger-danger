@@ -1,4 +1,5 @@
 import type { TutorialScene } from '../scenes/TutorialScene';
+import type { GameScene } from '../scenes/GameScene';
 
 /**
  * Every named position the tutorial can be in. Drives the registry lookup
@@ -95,10 +96,8 @@ export interface StepContext {
    *  if the player ground out 6 kills while the 2s lead-in was running. */
   setPendingStep(step: TutorialStepName | null): void;
 
-  /** GameScene reference (untyped for now to avoid circular imports — the
-   *  tutorial pokes at GameScene fields like buildState / selectedTower
-   *  / player.money / loadingDone). */
-  readonly gameScene: any;
+  /** GameScene reference for steps that inspect or steer tutorial gameplay. */
+  readonly gameScene: GameScene;
 }
 
 /**

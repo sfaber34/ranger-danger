@@ -149,6 +149,18 @@ type CharacterSpec = {
   mirrorTexPrefix?: string;
 };
 
+export type SpriteDebugAnim = {
+  suffix: string;
+  animKey: string;
+};
+
+export type SpriteDebugEntry = {
+  folder: string;
+  texPrefix: string;
+  kind: 'player' | 'boss' | 'enemy';
+  anims: SpriteDebugAnim[];
+};
+
 const stdEnemyAnims = (texPrefix: string): AnimSpec[] => [
   { suffix: 'move', indexed: true, indexSep: '', animKey: `${texPrefix}-move` },
   { suffix: 'atk',  indexed: true, indexSep: '', animKey: `${texPrefix}-atk`  },
@@ -429,6 +441,15 @@ export function hasPngOverride(scene: Phaser.Scene, texPrefix: string, suffix: s
   return scene.textures.exists(sheetKey(texPrefix, suffix));
 }
 
+export function getSpriteDebugCatalog(): SpriteDebugEntry[] {
+  return CHARACTERS.map(c => ({
+    folder: c.folder,
+    texPrefix: c.texPrefix,
+    kind: c.folder === 'player' ? 'player' : c.folder.startsWith('boss_') ? 'boss' : 'enemy',
+    anims: c.anims.map(a => ({ suffix: a.suffix, animKey: a.animKey })),
+  }));
+}
+
 export function applyEntityVisual(
   sprite: Phaser.Physics.Arcade.Sprite,
   characterFolder: string,
@@ -454,4 +475,21 @@ export function applyEntityVisual(
     sprite.setSize(procBodyW, procBodyH);
     sprite.setOffset(procOffsetX, procOffsetY);
   }
+}
+
+export function getEntityVisualScale(
+  scene: Phaser.Scene,
+  characterFolder: string,
+  primarySuffix: string,
+  procScale: number,
+): number {
+  const c = CHARACTERS.find(cs => cs.folder === characterFolder);
+  const sheetK = c ? sheetKey(c.texPrefix, primarySuffix) : '';
+  if (!c || !scene.textures.exists(sheetK)) return procScale;
+
+  const img = scene.textures.get(sheetK).getSourceImage() as HTMLImageElement;
+  const proc = c.proceduralCanvasSize ?? 64;
+  const ratio = img.height / proc;
+  const mult = c.pngScaleMultiplier ?? 1;
+  return (procScale / ratio) * mult;
 }

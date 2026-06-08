@@ -19,6 +19,7 @@ export type HudState = {
   waveKills: number;
   waveSize: number;
   waveBreakUntil: number;
+  bossCountdownUntil: number;
   vTime: number;
   countdownMsg: string;
   countdownColor: string;

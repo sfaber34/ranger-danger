@@ -149,13 +149,13 @@ class SfxManager {
     // iOS mute-switch bypass: a looping <audio> element forces Safari to use
     // the "playback" audio session category, which ignores the silent switch.
     if (!this.silentEl) {
-      const el = document.createElement('audio');
+      const el = document.createElement('audio') as HTMLAudioElement & { playsInline: boolean };
       el.src = '/audio/silent.mp3';
       el.loop = true;
       el.preload = 'auto';
       el.setAttribute('playsinline', '');
       el.setAttribute('webkit-playsinline', '');
-      (el as any).playsInline = true;
+      el.playsInline = true;
       el.style.display = 'none';
       document.body.appendChild(el);
       // The silent loop is the iOS silent-switch bypass — if it fails to
