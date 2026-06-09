@@ -11,6 +11,8 @@ export type BossState =
   | 'charging'
   | 'dying';
 
+export type BossKind = '' | 'queen' | 'dragon' | 'fissure_burrower' | 'desert_scorpion' | 'sandstorm_beast' | 'dune_wraith' | 'temple_construct' | 'sun_priest';
+
 export class Boss extends Phaser.Physics.Arcade.Sprite {
   hp = 1500;
   maxHp = 1500;
@@ -43,17 +45,29 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
   // Animation prefix — 'boss' for meadow, 'fboss' for forest
   animPrefix: string;
 
-  bossKind: string = ''; // e.g. 'queen', 'dragon' for castle bosses
+  bossKind: BossKind = '';
 
-  constructor(scene: Phaser.Scene, x: number, y: number, biome: Biome = 'grasslands', bossKind = '') {
+  constructor(scene: Phaser.Scene, x: number, y: number, biome: Biome = 'grasslands', bossKind: BossKind = '') {
     const prefix = bossKind === 'queen' ? 'cqboss'
                  : bossKind === 'dragon' ? 'cdboss'
+                 : bossKind === 'fissure_burrower' ? 'dfboss'
+                 : bossKind === 'desert_scorpion' ? 'dsboss'
+                 : bossKind === 'sandstorm_beast' ? 'sbboss'
+                 : bossKind === 'dune_wraith' ? 'dwboss'
+                 : bossKind === 'temple_construct' ? 'dtboss'
+                 : bossKind === 'sun_priest' ? 'spboss'
                  : biome === 'forest' ? 'fboss'
                  : biome === 'infected' ? 'iboss'
                  : biome === 'river' ? 'rboss'
                  : 'ram';
     const folder = bossKind === 'queen' ? 'boss_castle_q'
                  : bossKind === 'dragon' ? 'boss_castle_d'
+                 : bossKind === 'fissure_burrower' ? 'boss_desert_burrower'
+                 : bossKind === 'desert_scorpion' ? 'boss_desert_scorpion'
+                 : bossKind === 'sandstorm_beast' ? 'boss_desert_sandstorm'
+                 : bossKind === 'dune_wraith' ? 'boss_desert_wraith'
+                 : bossKind === 'temple_construct' ? 'boss_desert_construct'
+                 : bossKind === 'sun_priest' ? 'boss_desert_sun_priest'
                  : biome === 'forest' ? 'boss_forest'
                  : biome === 'infected' ? 'boss_infected'
                  : biome === 'river' ? 'boss_river'
@@ -61,7 +75,7 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     super(scene, x, y, `${prefix}_idle0`);
     this.bossKind = bossKind;
     this.animPrefix = prefix;
-    this.flying = prefix === 'cqboss' || prefix === 'rboss';
+    this.flying = prefix === 'cqboss' || prefix === 'rboss' || prefix === 'dwboss' || prefix === 'spboss';
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(9);

@@ -5,6 +5,9 @@ import {
   TREE_PATTERNS,
   SPIKE_PATTERNS,
   SPIKE_VARIANT_COUNT,
+  CACTUS_VARIANT_COUNT,
+  QUICKSAND_VARIANT_COUNT,
+  TEMPLE_BLOCK_VARIANT_COUNT,
   getRiverTileGrid,
   riverCenterPx,
   RIVER_HALF_W,
@@ -48,7 +51,8 @@ export class ChunkSystem {
         // Already have a display image? skip
         if (scene.chunkImages.has(ck)) continue;
         // Texture already cached from a previous visit? Just create image, no re-render
-        const texKey = `gnd_chunk_${scene.biome}_${cx + dx}_${cy + dy}`;
+        const terrainKey = scene.biome === 'desert' ? `${scene.biome}_${scene.levelId}` : scene.biome;
+        const texKey = `gnd_chunk_${terrainKey}_${cx + dx}_${cy + dy}`;
         if (scene.generatedChunks.has(ck) && scene.textures.exists(texKey)) {
           const img = scene.add.image((cx + dx) * chunkPx + chunkPx / 2, (cy + dy) * chunkPx + chunkPx / 2, texKey).setDepth(-1000);
           scene.chunkImages.set(ck, img);
@@ -100,6 +104,11 @@ export class ChunkSystem {
       // Generate trees for this chunk if forest biome
       if (scene.biome === 'forest' || scene.biome === 'infected') this.placeTreesInChunk(ccx, ccy);
       if (scene.biome === 'castle') this.placeSpikesInChunk(ccx, ccy);
+      if (scene.biome === 'desert') {
+        this.placeCactusInChunk(ccx, ccy);
+        if (scene.levelId === 7) this.placeQuicksandInChunk(ccx, ccy);
+        if (scene.levelId === 8) this.placeTempleBlocksInChunk(ccx, ccy);
+      }
       // Generate river terrain blockers
       if (scene.biome === 'river') this.placeRiverInChunk(ccx, ccy);
       processed++;
@@ -451,6 +460,203 @@ export class ChunkSystem {
         const spr = scene.add.image(wx, wy, `castle_spikes_${variant}`).setDepth(100 + wy * 0.1);
         scene.spikeSprites.push(spr);
       }
+      placed++;
+    }
+  }
+
+  destroyDesertObstacleTile(gx: number, gy: number) {
+    const scene = this.scene;
+    const v = gridGet(scene.grid, gx, gy);
+    if (v !== 7 && v !== 9) return;
+    const t = CFG.tile;
+    gridSet(scene.grid, gx, gy, 0);
+    scene.pathing.syncWallTile(gx, gy, false);
+    const wx = gx * t + t / 2;
+    const wy = gy * t + t / 2;
+    for (const child of scene.wallGroup.getChildren()) {
+      if (Math.abs((child as any).x - wx) < 2 && Math.abs((child as any).y - wy) < 2) {
+        child.destroy();
+        break;
+      }
+    }
+    const sprites = v === 7 ? scene.cactusSprites : scene.templeBlockSprites;
+    for (let i = sprites.length - 1; i >= 0; i--) {
+      const spr = sprites[i] as Phaser.GameObjects.Image & { _gx?: number; _gy?: number };
+      if (spr._gx === gx && spr._gy === gy) {
+        spr.destroy();
+        sprites.splice(i, 1);
+      }
+    }
+    scene.gridVersion++;
+    scene._wallCheckCache.clear();
+    scene.pathing.rebuildGapBlockers();
+  }
+
+  placeCactusInChunk(cx: number, cy: number) {
+    const scene = this.scene;
+    const chunkKey = `${cx},${cy}`;
+    if (scene.cactusChunksGenerated.has(chunkKey)) return;
+    scene.cactusChunksGenerated.add(chunkKey);
+
+    const t = CFG.tile;
+    const cs = CFG.chunkSize;
+    const chunkTileX = cx * cs;
+    const chunkTileY = cy * cs;
+    const clustersPerChunk = scene.levelId === 6 ? 8 : scene.levelId === 8 ? 1 : 2;
+    const maxAttempts = clustersPerChunk * 8;
+    let seed = ((scene.treeSeed * 2246822519 + cx * 73856093 + cy * 19349669 + 7001) >>> 0) || 1;
+    const rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const ptx = Math.floor(scene.player.x / t);
+    const pty = Math.floor(scene.player.y / t);
+    const nearSpawn = Math.abs(cx * cs) < scene.spawnDist + cs && Math.abs(cy * cs) < scene.spawnDist + cs;
+    let placed = 0;
+    let attempts = 0;
+    while (placed < clustersPerChunk && attempts < maxAttempts) {
+      attempts++;
+      const pattern = TREE_PATTERNS[Math.floor(rng() * Math.min(8, TREE_PATTERNS.length))];
+      const ox = chunkTileX + Math.floor(rng() * (cs - pattern.w));
+      const oy = chunkTileY + Math.floor(rng() * (cs - pattern.h));
+      if (Math.abs(ox) < 4 && Math.abs(oy) < 4) continue;
+      let blocked = false;
+      for (const tile of pattern.tiles) {
+        const gx = ox + tile.dx, gy = oy + tile.dy;
+        if (gridGet(scene.grid, gx, gy) !== 0) { blocked = true; break; }
+        if (Math.abs(gx - ptx) <= 1 && Math.abs(gy - pty) <= 1) { blocked = true; break; }
+      }
+      if (blocked) continue;
+      for (const tile of pattern.tiles) gridSet(scene.grid, ox + tile.dx, oy + tile.dy, 7);
+      if (nearSpawn && !canReachFromSpawnDirections(scene.grid, ptx, pty, scene.spawnDist, 3)) {
+        for (const tile of pattern.tiles) gridSet(scene.grid, ox + tile.dx, oy + tile.dy, 0);
+        continue;
+      }
+      for (const tile of pattern.tiles) {
+        const gx = ox + tile.dx, gy = oy + tile.dy;
+        const wx = gx * t + t / 2;
+        const wy = gy * t + t / 2;
+        const blocker = scene.add.zone(wx, wy, t, t);
+        scene.physics.add.existing(blocker, true);
+        (blocker.body as Phaser.Physics.Arcade.StaticBody).setSize(t, t);
+        (blocker.body as Phaser.Physics.Arcade.StaticBody).position.set(wx - t / 2, wy - t / 2);
+        scene.wallGroup.add(blocker);
+        scene.pathing.syncWallTile(gx, gy, true);
+        const variant = Math.floor(rng() * CACTUS_VARIANT_COUNT);
+        const spr = scene.add.image(wx, wy + t * 0.1, `desert_cactus_${variant}`)
+          .setDepth(100 + wy * 0.1);
+        (spr as any)._gx = gx;
+        (spr as any)._gy = gy;
+        scene.cactusSprites.push(spr);
+      }
+      placed++;
+    }
+  }
+
+  placeQuicksandInChunk(cx: number, cy: number) {
+    const scene = this.scene;
+    const chunkKey = `${cx},${cy}`;
+    if (scene.quicksandChunksGenerated.has(chunkKey)) return;
+    scene.quicksandChunksGenerated.add(chunkKey);
+
+    const t = CFG.tile;
+    const cs = CFG.chunkSize;
+    const chunkTileX = cx * cs;
+    const chunkTileY = cy * cs;
+    const poolsPerChunk = 2;
+    let seed = ((scene.treeSeed * 1103515245 + cx * 73856093 + cy * 19349669 + 8803) >>> 0) || 1;
+    const rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const ptx = Math.floor(scene.player.x / t);
+    const pty = Math.floor(scene.player.y / t);
+    const patterns = SPIKE_PATTERNS.slice(3);
+    const nearSpawn = Math.abs(cx * cs) < scene.spawnDist + cs && Math.abs(cy * cs) < scene.spawnDist + cs;
+    let placed = 0;
+    let attempts = 0;
+    while (placed < poolsPerChunk && attempts < poolsPerChunk * 8) {
+      attempts++;
+      const pattern = patterns[Math.floor(rng() * patterns.length)];
+      const ox = chunkTileX + Math.floor(rng() * (cs - pattern.w));
+      const oy = chunkTileY + Math.floor(rng() * (cs - pattern.h));
+      if (Math.abs(ox) < 4 && Math.abs(oy) < 4) continue;
+      let blocked = false;
+      for (const tile of pattern.tiles) {
+        const gx = ox + tile.dx, gy = oy + tile.dy;
+        if (gridGet(scene.grid, gx, gy) !== 0) { blocked = true; break; }
+        if (Math.abs(gx - ptx) <= 1 && Math.abs(gy - pty) <= 1) { blocked = true; break; }
+      }
+      if (blocked) continue;
+      for (const tile of pattern.tiles) gridSet(scene.grid, ox + tile.dx, oy + tile.dy, 8);
+      if (nearSpawn && !canReachFromSpawnDirections(scene.grid, ptx, pty, scene.spawnDist, 3)) {
+        for (const tile of pattern.tiles) gridSet(scene.grid, ox + tile.dx, oy + tile.dy, 0);
+        continue;
+      }
+      for (const tile of pattern.tiles) {
+        const gx = ox + tile.dx, gy = oy + tile.dy;
+        const wx = gx * t + t / 2;
+        const wy = gy * t + t / 2;
+        const variant = Math.floor(rng() * QUICKSAND_VARIANT_COUNT);
+        const spr = scene.add.image(wx, wy, `desert_quicksand_${variant}`).setDepth(1);
+        scene.tweens.add({
+          targets: spr,
+          angle: { from: -1.5, to: 1.5 },
+          scaleX: { from: 0.95, to: 1.05 },
+          scaleY: { from: 1.05, to: 0.95 },
+          duration: 1200 + variant * 180,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.InOut',
+        });
+        scene.quicksandSprites.push(spr);
+      }
+      placed++;
+    }
+  }
+
+  placeTempleBlocksInChunk(cx: number, cy: number) {
+    const scene = this.scene;
+    const chunkKey = `${cx},${cy}`;
+    if (scene.templeChunksGenerated.has(chunkKey)) return;
+    scene.templeChunksGenerated.add(chunkKey);
+
+    const t = CFG.tile;
+    const cs = CFG.chunkSize;
+    const chunkTileX = cx * cs;
+    const chunkTileY = cy * cs;
+    let seed = ((scene.treeSeed * 747796405 + cx * 73856093 + cy * 19349669 + 9919) >>> 0) || 1;
+    const rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const ptx = Math.floor(scene.player.x / t);
+    const pty = Math.floor(scene.player.y / t);
+    const nearSpawn = Math.abs(cx * cs) < scene.spawnDist + cs && Math.abs(cy * cs) < scene.spawnDist + cs;
+    const candidates: { gx: number; gy: number }[] = [];
+    for (let ty = 1; ty < cs - 1; ty++) {
+      for (let tx = 1; tx < cs - 1; tx++) {
+        const gx = chunkTileX + tx;
+        const gy = chunkTileY + ty;
+        if (Math.abs(gx) < 4 && Math.abs(gy) < 4) continue;
+        const corridor = ((gx + Math.floor(gy / 2)) % 6 === 0) || ((gy + Math.floor(gx / 3)) % 7 === 0);
+        if (corridor && rng() < 0.72) candidates.push({ gx, gy });
+      }
+    }
+    let placed = 0;
+    for (const { gx, gy } of candidates) {
+      if (placed >= 34) break;
+      if (gridGet(scene.grid, gx, gy) !== 0) continue;
+      if (Math.abs(gx - ptx) <= 1 && Math.abs(gy - pty) <= 1) continue;
+      gridSet(scene.grid, gx, gy, 9);
+      if (nearSpawn && !canReachFromSpawnDirections(scene.grid, ptx, pty, scene.spawnDist, 3)) {
+        gridSet(scene.grid, gx, gy, 0);
+        continue;
+      }
+      const wx = gx * t + t / 2;
+      const wy = gy * t + t / 2;
+      const blocker = scene.add.zone(wx, wy, t, t);
+      scene.physics.add.existing(blocker, true);
+      (blocker.body as Phaser.Physics.Arcade.StaticBody).setSize(t, t);
+      (blocker.body as Phaser.Physics.Arcade.StaticBody).position.set(wx - t / 2, wy - t / 2);
+      scene.wallGroup.add(blocker);
+      scene.pathing.syncWallTile(gx, gy, true);
+      const spr = scene.add.image(wx, wy, `temple_block_${Math.floor(rng() * TEMPLE_BLOCK_VARIANT_COUNT)}`)
+        .setDepth(100 + wy * 0.1);
+      (spr as any)._gx = gx;
+      (spr as any)._gy = gy;
+      scene.templeBlockSprites.push(spr);
       placed++;
     }
   }

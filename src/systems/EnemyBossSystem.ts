@@ -6,6 +6,8 @@ import { Wall } from '../entities/Wall';
 import { Tower } from '../entities/Tower';
 import { findPath, gridGet, gridSet } from './Pathfinding';
 import type { GameScene } from '../scenes/GameScene';
+import { getEvents } from '../core/events';
+import { getRegistry } from '../core/registry';
 
 /**
  * Combined enemy + boss AI / abilities / projectile lifecycle. EnemySystem
@@ -431,6 +433,36 @@ export class EnemyBossSystem {
         return true;
       }
 
+      if (e.kind === 'sun_mote') {
+        const range = CFG.desert.sunMoteRange;
+        const dist = Math.sqrt(dist2);
+        e.setFlipX(tx - e.x < 0);
+
+        if (dist < range) {
+          const perpX = -(ty - e.y), perpY = tx - e.x;
+          const pLen = Math.hypot(perpX, perpY) || 1;
+          const backOff = dist < range * 0.55 ? -0.45 : 0.2;
+          const towardX = (tx - e.x) / (dist || 1);
+          const towardY = (ty - e.y) / (dist || 1);
+          e.setVelocity(
+            ((perpX / pLen) * 0.55 + towardX * backOff) * e.speed,
+            ((perpY / pLen) * 0.55 + towardY * backOff) * e.speed
+          );
+          if (e.anims.currentAnim?.key !== `${prefix}-atk`) e.play(`${prefix}-atk`);
+          if (time > e.attackCd && this.enemyOnScreen(e)) {
+            e.attackCd = time + CFG.desert.sunMoteFireRate;
+            this.spawnSunBolt(e.x, e.y, tx, ty);
+          }
+          return true;
+        }
+
+        const dx = tx - e.x, dy = ty - e.y;
+        const d = dist || 1;
+        e.setVelocity((dx / d) * e.speed, (dy / d) * e.speed);
+        if (e.anims.currentAnim?.key !== `${prefix}-move`) e.play(`${prefix}-move`);
+        return true;
+      }
+
       if (dist2 < 30 * 30) {
         e.setVelocity(0, 0);
         if (e.rotates) {
@@ -571,7 +603,15 @@ export class EnemyBossSystem {
   // ---------- BOSS ----------
   updateBoss(time: number) {
     const scene = this.scene;
-    if (scene.bossState.boss) this._updateOneBoss(scene.bossState.boss, time);
+    if (scene.bossState.boss && scene.bossState.boss.active && !scene.bossState.boss.dying) {
+      this._updateOneBoss(scene.bossState.boss, time);
+    }
+    const mirageGroup = (scene.bossState.boss as any)?._mirageGroup as Boss[] | undefined;
+    if (mirageGroup) {
+      for (const b of mirageGroup) {
+        if (b !== scene.bossState.boss && b.active && !b.dying) this._updateOneBoss(b, time);
+      }
+    }
     if (scene.difficulty === 'endless'
       && scene.bossState.midBoss
       && scene.bossState.midBoss !== scene.bossState.boss
@@ -649,6 +689,8 @@ export class EnemyBossSystem {
         for (let dx = -1; dx <= 1; dx++) {
           if (gridGet(scene.grid, bgx + dx, bgy + dy) === 3) {
             scene.chunkSystem.destroyTreeTile(bgx + dx, bgy + dy);
+          } else if (gridGet(scene.grid, bgx + dx, bgy + dy) === 7 || gridGet(scene.grid, bgx + dx, bgy + dy) === 9) {
+            scene.chunkSystem.destroyDesertObstacleTile(bgx + dx, bgy + dy);
           }
         }
       }
@@ -728,6 +770,43 @@ export class EnemyBossSystem {
         }
         b.nextBirth = time + 8000;
       }
+    }
+
+    if (b.bossKind === 'fissure_burrower' && time >= b.nextBoulder && onScreen) {
+      this.fissureStrike(b, px, py);
+      b.play(`${b.animPrefix}-atk`);
+      b.nextBoulder = time + 3300;
+    }
+
+    if (b.bossKind === 'sandstorm_beast' && time >= b.nextBoulder && onScreen) {
+      this.sandstormBurst(b);
+      b.play(`${b.animPrefix}-atk`);
+      b.nextBoulder = time + 3600;
+    }
+
+    if (b.bossKind === 'sun_priest'
+        && !(b as any)._mirageUsed
+        && !(b as any)._mirageActive
+        && b.hp <= b.maxHp * 0.62
+        && onScreen) {
+      this.startMirageSplit(b);
+      return;
+    }
+
+    if (b.bossKind === 'sun_priest' && time >= b.nextBoulder && onScreen) {
+      const burstCount = 5;
+      const baseAngle = Math.atan2(py - b.y, px - b.x);
+      for (let i = 0; i < burstCount; i++) {
+        const a = baseAngle + (i - (burstCount - 1) / 2) * 0.22;
+        this.spawnSunBolt(b.x, b.y - 10, b.x + Math.cos(a) * 300, b.y - 10 + Math.sin(a) * 300);
+      }
+      b.play(`${b.animPrefix}-atk`);
+      b.nextBoulder = time + 2600;
+    }
+
+    if (b.bossKind === 'dune_wraith' && time >= b.nextBoulder && onScreen) {
+      this.spawnGasCloud(b.x, b.y);
+      b.nextBoulder = time + 3200;
     }
 
     if (!isCastleBoss && time >= b.nextCharge && distToPlayer > 40 && onScreen) {
@@ -873,6 +952,141 @@ export class EnemyBossSystem {
     }
   }
 
+  fissureStrike(b: Boss, tx: number, ty: number) {
+    const scene = this.scene;
+    const angle = Math.atan2(ty - b.y, tx - b.x);
+    const points: { x: number; y: number }[] = [];
+    for (let i = 1; i <= 7; i++) {
+      points.push({
+        x: b.x + Math.cos(angle) * i * 38,
+        y: b.y + Math.sin(angle) * i * 38,
+      });
+    }
+    for (const p of points) {
+      const mark = scene.add.rectangle(p.x, p.y, 30, 8, 0x2a160c, 0.65)
+        .setRotation(angle)
+        .setDepth(6);
+      scene.tweens.add({ targets: mark, alpha: 0.95, scaleX: 1.25, duration: 320, yoyo: true });
+      scene.time.delayedCall(520, () => {
+        if (!scene.scene.isActive()) return;
+        const spike = scene.add.rectangle(p.x, p.y, 34, 12, 0xc88a4a, 0.9)
+          .setRotation(angle)
+          .setDepth(13);
+        if (Phaser.Math.Distance.Between(scene.player.x, scene.player.y, p.x, p.y) < 34) {
+          scene.player.hurt(10, scene);
+          scene.hud.pushHud();
+          if (scene.player.hp <= 0) scene.end.lose();
+        }
+        scene.tweens.add({
+          targets: [mark, spike],
+          alpha: 0,
+          scaleY: 0.25,
+          duration: 360,
+          onComplete: () => { mark.destroy(); spike.destroy(); },
+        });
+      });
+    }
+    scene.cameras.main.shake(180, 0.006);
+  }
+
+  sandstormBurst(b: Boss) {
+    const scene = this.scene;
+    this.spawnGasCloud(b.x, b.y);
+    const base = Math.atan2(scene.player.y - b.y, scene.player.x - b.x);
+    for (let i = 0; i < 7; i++) {
+      const a = base + (i - 3) * 0.28;
+      this.spawnSunBolt(b.x, b.y - 4, b.x + Math.cos(a) * 320, b.y - 4 + Math.sin(a) * 320);
+    }
+    scene.cameras.main.shake(160, 0.004);
+  }
+
+  startMirageSplit(real: Boss) {
+    const scene = this.scene;
+    const storedHp = Math.max(1, real.hp);
+    const storedMaxHp = real.maxHp;
+    const radius = 150;
+    const baseAngle = Math.atan2(scene.player.y - real.y, scene.player.x - real.x) + Math.PI * 0.5;
+    const group: Boss[] = [real];
+    (real as any)._mirageUsed = true;
+    (real as any)._mirageActive = true;
+    (real as any)._mirageStoredHp = storedHp;
+    (real as any)._mirageStoredMaxHp = storedMaxHp;
+    real.hp = Math.max(1, Math.round(storedHp * 0.45));
+    real.maxHp = real.hp;
+    real.setAlpha(0.35);
+
+    for (let i = -1; i <= 1; i += 2) {
+      const x = real.x + Math.cos(baseAngle + i * 0.7) * radius;
+      const y = real.y + Math.sin(baseAngle + i * 0.7) * radius;
+      const clone = new Boss(scene, x, y, 'desert', 'sun_priest');
+      clone.hp = real.hp;
+      clone.maxHp = real.maxHp;
+      clone.dmg = real.dmg;
+      clone.speed = real.speed;
+      (clone as any)._mirageUsed = true;
+      (clone as any)._mirageActive = true;
+      (clone as any)._mirageClone = true;
+      (clone as any)._mirageStoredHp = storedHp;
+      (clone as any)._mirageStoredMaxHp = storedMaxHp;
+      this.attachBossPhysics(clone);
+      clone.setAlpha(0.35);
+      scene.tweens.add({ targets: clone, alpha: 1, duration: 450, ease: 'Cubic.Out' });
+      group.push(clone);
+    }
+    for (const b of group) {
+      (b as any)._mirageGroup = group;
+      scene.tweens.add({ targets: b, alpha: 1, duration: 450, ease: 'Cubic.Out' });
+    }
+    scene.countdownMsg = 'THE MIRAGE SPLITS';
+    scene.countdownColor = '#ffd84a';
+    scene.hud.pushHud();
+    scene.time.delayedCall(1800, () => { scene.countdownMsg = ''; scene.hud.pushHud(); });
+  }
+
+  resolveMirageDeath(dead: Boss) {
+    const scene = this.scene;
+    const group = ((dead as any)._mirageGroup as Boss[] | undefined) ?? [];
+    const survivors = group.filter((b) => b.active && !b.dying);
+    if (survivors.length > 1) {
+      if (dead === scene.bossState.boss) scene.bossState.boss = survivors[0];
+      return;
+    }
+    const survivor = survivors[0];
+    if (!survivor) return;
+    const storedHp = (dead as any)._mirageStoredHp ?? (survivor as any)._mirageStoredHp ?? survivor.hp;
+    const storedMaxHp = (dead as any)._mirageStoredMaxHp ?? (survivor as any)._mirageStoredMaxHp ?? survivor.maxHp;
+    for (const b of group) {
+      (b as any)._mirageActive = false;
+      (b as any)._mirageGroup = undefined;
+    }
+    survivor.hp = storedHp;
+    survivor.maxHp = storedMaxHp;
+    (survivor as any)._mirageClone = false;
+    scene.bossState.boss = survivor;
+    scene.bossState.midBoss = null;
+    getEvents(scene.game.events).emit('boss-hp', { hp: survivor.hp, maxHp: survivor.maxHp });
+    getRegistry(scene.game).set('bossHp', survivor.hp);
+    getRegistry(scene.game).set('bossMaxHp', survivor.maxHp);
+    scene.countdownMsg = 'THE TRUE PRIEST REMAINS';
+    scene.countdownColor = '#ffd84a';
+    scene.hud.pushHud();
+    scene.time.delayedCall(1800, () => { scene.countdownMsg = ''; scene.hud.pushHud(); });
+  }
+
+  attachBossPhysics(b: Boss) {
+    const scene = this.scene;
+    scene.physics.add.overlap(scene.projectiles, b, (a: any, bb: any) => {
+      const bs = (a instanceof Boss ? a : bb) as Boss;
+      const pr = a === bs ? bb : a;
+      scene.combat.projectileHitsBoss(pr, bs);
+    });
+    const onStructureHit = () => {
+      if (b.state === 'charging') b.stateEnd = 0;
+    };
+    scene.physics.add.collider(b, scene.wallGroup, onStructureHit);
+    scene.physics.add.collider(b, scene.towerGroup, onStructureHit);
+  }
+
   queenAuraStrike(cx: number, cy: number) {
     const scene = this.scene;
     const r = CFG.castle.queenAuraRadius;
@@ -932,6 +1146,17 @@ export class EnemyBossSystem {
       if (Phaser.Math.Distance.Between(b.x, b.y, w.x, w.y) < r + 8) {
         w.hurt(40);
         if (w.hp <= 0) scene.sell.destroyWall(w);
+      }
+    }
+    const bt = CFG.tile;
+    const bgx = Math.floor(b.x / bt);
+    const bgy = Math.floor(b.y / bt);
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const gx = bgx + dx, gy = bgy + dy;
+        if (Phaser.Math.Distance.Between(b.x, b.y, gx * bt + bt / 2, gy * bt + bt / 2) > r) continue;
+        const v = gridGet(scene.grid, gx, gy);
+        if (v === 7 || v === 9) scene.chunkSystem.destroyDesertObstacleTile(gx, gy);
       }
     }
 
@@ -1222,6 +1447,18 @@ export class EnemyBossSystem {
         ? (Math.random() < 0.4 ? 'infected_heavy' : 'infected_basic')
         : b.animPrefix === 'rboss'
         ? (Math.random() < 0.4 ? 'bat' : 'crow')
+        : b.animPrefix === 'dfboss'
+        ? 'sand_mite'
+        : b.animPrefix === 'dsboss'
+        ? 'boss_scorpion'
+        : b.animPrefix === 'sbboss'
+        ? (Math.random() < 0.55 ? 'dune_strider' : 'sand_mite')
+        : b.animPrefix === 'dwboss'
+        ? (Math.random() < 0.5 ? 'dune_strider' : 'sand_wraith')
+        : b.animPrefix === 'dtboss'
+        ? (Math.random() < 0.5 ? 'temple_guardian' : 'scarab')
+        : b.animPrefix === 'spboss'
+        ? (Math.random() < 0.5 ? 'sun_mote' : 'temple_guardian')
         : (Math.random() < 0.4 ? 'deer' : 'snake');
       const safe = scene.spawn.safeSpawnPos(ex, ey);
       const e = new Enemy(scene, safe.x, safe.y, kind);
@@ -1367,7 +1604,7 @@ export class EnemyBossSystem {
     const scene = this.scene;
     scene.enemyDarts.children.iterate((c: any) => {
       if (!c || !c.active) return true;
-      if (scene.vTime - c._born > CFG.river.mosquitoDartLifetime) { c.destroy(); return true; }
+      if (scene.vTime - c._born > (c._lifetime ?? CFG.river.mosquitoDartLifetime)) { c.destroy(); return true; }
       return true;
     });
   }
@@ -1470,6 +1707,22 @@ export class EnemyBossSystem {
     bolt.setVelocity((dx / d) * spd, (dy / d) * spd);
     (bolt as any)._born = scene.vTime;
     (bolt as any)._dmg = CFG.castle.warlockBoltDmg;
+  }
+
+  spawnSunBolt(sx: number, sy: number, tx: number, ty: number) {
+    const scene = this.scene;
+    const bolt = scene.physics.add.sprite(sx, sy, 'sunbolt_0');
+    bolt.setScale(0.7).setDepth(10);
+    bolt.play('sunbolt-spin');
+    scene.enemyDarts.add(bolt);
+    const dx = tx - sx, dy = ty - sy;
+    const d = Math.hypot(dx, dy) || 1;
+    const spd = CFG.desert.sunBoltSpeed;
+    bolt.setVelocity((dx / d) * spd, (dy / d) * spd);
+    bolt.setRotation(Math.atan2(dy, dx));
+    (bolt as any)._born = scene.vTime;
+    (bolt as any)._dmg = CFG.desert.sunBoltDmg;
+    (bolt as any)._lifetime = CFG.desert.sunBoltLifetime;
   }
 
   spawnQueenOrb(sx: number, sy: number, tx: number, ty: number) {

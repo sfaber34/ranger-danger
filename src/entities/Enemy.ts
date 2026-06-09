@@ -3,7 +3,7 @@ import { CFG } from '../config';
 import { applyEntityVisual } from '../assets/spriteOverrides';
 import { Shadow } from './Shadow';
 
-export type EnemyKind = 'basic' | 'heavy' | 'runner' | 'snake' | 'rat' | 'deer' | 'wolf' | 'bear' | 'spider' | 'infected_basic' | 'infected_heavy' | 'infected_runner' | 'toad' | 'crow' | 'bat' | 'dragonfly' | 'mosquito' | 'skeleton' | 'warlock' | 'golem' | 'shadow_imp' | 'castle_bat' | 'castle_rat';
+export type EnemyKind = 'basic' | 'heavy' | 'runner' | 'snake' | 'rat' | 'deer' | 'wolf' | 'bear' | 'spider' | 'infected_basic' | 'infected_heavy' | 'infected_runner' | 'toad' | 'crow' | 'bat' | 'dragonfly' | 'mosquito' | 'skeleton' | 'warlock' | 'golem' | 'shadow_imp' | 'castle_bat' | 'castle_rat' | 'scorpion' | 'boss_scorpion' | 'scarab' | 'sand_mite' | 'cactus_hopper' | 'dune_strider' | 'sand_wraith' | 'temple_guardian' | 'sun_mote';
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   kind: EnemyKind;
@@ -55,6 +55,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       crow: CFG.enemy.crow, bat: CFG.enemy.bat, dragonfly: CFG.enemy.dragonfly, mosquito: CFG.enemy.mosquito,
       skeleton: CFG.enemy.skeleton, warlock: CFG.enemy.warlock, golem: CFG.enemy.golem,
       shadow_imp: CFG.enemy.shadow_imp, castle_bat: CFG.enemy.castle_bat, castle_rat: CFG.enemy.castle_rat,
+      scorpion: CFG.enemy.scorpion, boss_scorpion: CFG.enemy.boss_scorpion, scarab: CFG.enemy.scarab, sand_mite: CFG.enemy.sand_mite,
+      cactus_hopper: CFG.enemy.cactus_hopper, dune_strider: CFG.enemy.dune_strider,
+      sand_wraith: CFG.enemy.sand_wraith, temple_guardian: CFG.enemy.temple_guardian,
+      sun_mote: CFG.enemy.sun_mote,
     };
     const data = dataMap[kind];
     const texPrefix = Enemy.texPrefix(kind);
@@ -192,6 +196,43 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         applyEntityVisual(this, 'castle_rat', 'move', 0.45, 22, 20, 20, 24);
         this.play('ecrat-move');
         break;
+      case 'scorpion':
+        applyEntityVisual(this, 'scorpion', 'move', 0.5, 26, 22, 19, 23);
+        this.play('escp-move');
+        break;
+      case 'boss_scorpion':
+        applyEntityVisual(this, 'boss_scorpion', 'move', 0.42, 22, 18, 21, 25);
+        this.play('ebsc-move');
+        break;
+      case 'scarab':
+        applyEntityVisual(this, 'scarab', 'move', 0.45, 22, 20, 20, 24);
+        this.play('esrb-move');
+        break;
+      case 'sand_mite':
+        applyEntityVisual(this, 'sand_mite', 'move', 0.4, 20, 18, 22, 25);
+        this.play('esmt-move');
+        break;
+      case 'cactus_hopper':
+        applyEntityVisual(this, 'cactus_hopper', 'move', 0.5, 24, 28, 20, 18);
+        this.play('echp-move');
+        break;
+      case 'dune_strider':
+        applyEntityVisual(this, 'dune_strider', 'move', 0.45, 24, 20, 20, 24);
+        this.play('edst-move');
+        break;
+      case 'sand_wraith':
+        applyEntityVisual(this, 'sand_wraith', 'move', 0.5, 26, 28, 19, 18);
+        this.play('eswr-move');
+        break;
+      case 'temple_guardian':
+        applyEntityVisual(this, 'temple_guardian', 'move', 0.55, 28, 32, 18, 16);
+        this.play('etgd-move');
+        break;
+      case 'sun_mote':
+        applyEntityVisual(this, 'sun_mote', 'move', 0.45, 20, 20, 22, 22);
+        this.play('esun-move');
+        this.flying = true;
+        break;
     }
     this.randomizeCurrentAnimationProgress();
 
@@ -232,6 +273,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       case 'shadow_imp': return 'esi';
       case 'castle_bat': return 'ecb';
       case 'castle_rat': return 'ecrat';
+      case 'scorpion': return 'escp';
+      case 'boss_scorpion': return 'ebsc';
+      case 'scarab': return 'esrb';
+      case 'sand_mite': return 'esmt';
+      case 'cactus_hopper': return 'echp';
+      case 'dune_strider': return 'edst';
+      case 'sand_wraith': return 'eswr';
+      case 'temple_guardian': return 'etgd';
+      case 'sun_mote': return 'esun';
       default: return 'eb';
     }
   }
@@ -255,7 +305,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   /** Returns true if this enemy kind should rotate to face movement direction. */
   get rotates(): boolean {
-    return this.kind === 'snake' || this.kind === 'rat' || this.kind === 'castle_rat';
+    return this.kind === 'snake' || this.kind === 'rat' || this.kind === 'castle_rat' || this.kind === 'scorpion' || this.kind === 'boss_scorpion' || this.kind === 'scarab' || this.kind === 'sand_mite';
   }
 
   private randomizeCurrentAnimationProgress(): void {

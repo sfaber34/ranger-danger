@@ -15,6 +15,7 @@ export interface LevelDef {
   minInterval?: number;  // spawn interval floor in ms
   waveSize?: number;     // enemies per wave
   clusterMax?: number;   // cap on group spawn sizes (prevents swarms on early levels)
+  waveCount?: number;    // campaign waves including boss waves
 }
 
 export const LEVELS: LevelDef[] = [
@@ -30,9 +31,12 @@ export const LEVELS: LevelDef[] = [
   { id: 5,  name: 'The Castle',    biome: 'castle',     x: 125, y: 95, connectsTo: [6],    unlockCost: 5,  implemented: true,
     rampFactor: 0.90, minInterval: 300, waveSize: 90, clusterMax: 3 },
   // Desert — top-center/right (ruins & dunes)
-  { id: 6,  name: 'Oasis',         biome: 'desert',     x: 430, y: 170, connectsTo: [7],    unlockCost: 7,  implemented: false },
-  { id: 7,  name: 'Sand Dunes',    biome: 'desert',     x: 540, y: 110, connectsTo: [8],    unlockCost: 9,  implemented: false },
-  { id: 8,  name: 'Buried Temple', biome: 'desert',     x: 620, y: 200, connectsTo: [9],    unlockCost: 12, implemented: false },
+  { id: 6,  name: 'Fissures',      biome: 'desert',     x: 430, y: 170, connectsTo: [7],    unlockCost: 7,  implemented: true,
+    rampFactor: 0.89, minInterval: 280, waveSize: 95, clusterMax: 4, waveCount: 6 },
+  { id: 7,  name: 'Sand Dunes',    biome: 'desert',     x: 540, y: 110, connectsTo: [8],    unlockCost: 9,  implemented: true,
+    rampFactor: 0.87, minInterval: 240, waveSize: 105, clusterMax: 4, waveCount: 6 },
+  { id: 8,  name: 'Desert Temple', biome: 'desert',     x: 620, y: 200, connectsTo: [9],    unlockCost: 12, implemented: true,
+    rampFactor: 0.85, minInterval: 220, waveSize: 110, clusterMax: 3, waveCount: 6 },
   // Tundra — bottom-center (frozen lakes & caves)
   { id: 9,  name: 'Frozen Lake',   biome: 'tundra',     x: 380, y: 460, connectsTo: [10],   unlockCost: 15, implemented: false },
   { id: 10, name: 'Ice Cavern',    biome: 'tundra',     x: 490, y: 530, connectsTo: [11],   unlockCost: 18, implemented: false },

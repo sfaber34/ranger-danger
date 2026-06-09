@@ -205,6 +205,7 @@ export class GameScene extends Phaser.Scene {
   levelMinInterval = CFG.spawn.minInterval;
   levelWaveSize = CFG.spawn.waveSize;
   levelClusterMax = 4;
+  levelWaveCount = CFG.spawn.waveCount;
   boulders: { sprite: Phaser.GameObjects.Sprite; shadow: Phaser.GameObjects.Sprite; sx: number; sy: number; tx: number; ty: number; totalDist: number; speed: number; dmg: number; splashRadius: number; born: number }[] = [];
   webs: { x: number; y: number; sprite: Phaser.GameObjects.Sprite; expireAt: number }[] = [];
   gasClouds: { x: number; y: number; sprites: Phaser.GameObjects.Arc[]; expireAt: number; dmgCd: number }[] = [];
@@ -219,6 +220,15 @@ export class GameScene extends Phaser.Scene {
   /** Real-time timestamp the player can next take spike damage. Throttled
    *  so a brief stumble onto a spike doesn't melt the HP bar. */
   private nextSpikeDmgAt = 0;
+  cactusSprites: Phaser.GameObjects.GameObject[] = [];
+  cactusChunksGenerated = new Set<string>();
+  quicksandSprites: Phaser.GameObjects.GameObject[] = [];
+  quicksandChunksGenerated = new Set<string>();
+  templeBlockSprites: Phaser.GameObjects.GameObject[] = [];
+  templeChunksGenerated = new Set<string>();
+  nextCactusDmgAt = 0;
+  quicksandEnteredAt = 0;
+  nextQuicksandDmgAt = 0;
   riverChunksGenerated = new Set<string>();
   riverSquiggles: { sprite: Phaser.GameObjects.Image; age: number; life: number; dx: number; dy: number }[] = [];
   squiggleTimer = 0;
@@ -299,6 +309,15 @@ export class GameScene extends Phaser.Scene {
     this.spikeSprites = [];
     this.spikeChunksGenerated = new Set();
     this.nextSpikeDmgAt = 0;
+    this.cactusSprites = [];
+    this.cactusChunksGenerated = new Set();
+    this.quicksandSprites = [];
+    this.quicksandChunksGenerated = new Set();
+    this.templeBlockSprites = [];
+    this.templeChunksGenerated = new Set();
+    this.nextCactusDmgAt = 0;
+    this.quicksandEnteredAt = 0;
+    this.nextQuicksandDmgAt = 0;
     this.riverChunksGenerated = new Set();
     this.riverSquiggles = [];
     this.squiggleTimer = 0;
@@ -306,6 +325,7 @@ export class GameScene extends Phaser.Scene {
     // (EndSystem owns dying/winDelayUntil/winCollectedAt — fresh instance
     // each create() means no carry-over across level transitions.)
     this.bossState.castlePhase = 0;
+    this.bossState.desertPhase = 0;
     this.bossState.midBoss = null;
     this.bossState.midBossDefeated = false;
     this.bossState.endlessBossesCleared = 0;
@@ -322,6 +342,7 @@ export class GameScene extends Phaser.Scene {
     this.levelMinInterval = levelDef?.minInterval ?? CFG.spawn.minInterval;
     this.levelWaveSize = levelDef?.waveSize ?? CFG.spawn.waveSize;
     this.levelClusterMax = levelDef?.clusterMax ?? 4;
+    this.levelWaveCount = levelDef?.waveCount ?? CFG.spawn.waveCount;
 
     // Difficulty multipliers (don't mutate CFG). Harder modes get tougher
     // enemies, more of them, and faster spawn pacing — but the same
@@ -524,6 +545,14 @@ export class GameScene extends Phaser.Scene {
       this.generatedChunks.forEach(key => {
         const [cx, cy] = key.split(',').map(Number);
         this.chunkSystem.placeSpikesInChunk(cx, cy);
+      });
+    }
+    if (this.biome === 'desert') {
+      this.generatedChunks.forEach(key => {
+        const [cx, cy] = key.split(',').map(Number);
+        this.chunkSystem.placeCactusInChunk(cx, cy);
+        if (this.levelId === 7) this.chunkSystem.placeQuicksandInChunk(cx, cy);
+        if (this.levelId === 8) this.chunkSystem.placeTempleBlocksInChunk(cx, cy);
       });
     }
 
@@ -732,6 +761,7 @@ export class GameScene extends Phaser.Scene {
       countdownMsg: this.countdownMsg,
       countdownColor: this.countdownColor,
       castlePhase: this.bossState.castlePhase,
+      desertPhase: this.bossState.desertPhase,
       midBossDefeated: this.bossState.midBossDefeated,
     };
   }
@@ -835,6 +865,7 @@ export class GameScene extends Phaser.Scene {
     this.updatePlayer(time, vd);
     this.combat.updateTowers(time);
     this.enemyBoss.updateEnemies(time, vd);
+    if (this.biome === 'desert') this.updateDesertEnemyHazards(time);
     this.enemyBoss.updateBoss(time);
     this.enemyBoss.updateGasClouds(time);
     this.enemyBoss.updateBirdPoops(time);
@@ -851,6 +882,60 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------- PLAYER ----------
+  private recordEnvironmentEnemyKill(e: Enemy) {
+    if (e.active && !e.dying) return;
+    if (e.noCoinDrop) return;
+    const ee = e as any;
+    if (ee._environmentKillRecorded) return;
+    ee._environmentKillRecorded = true;
+    this.player.kills++;
+    this.runStats.enemiesKilled++;
+    this.waveState.recordKill();
+    this.hud.pushHud();
+  }
+
+  private updateDesertEnemyHazards(time: number) {
+    for (const e of this.enemies.getChildren() as Enemy[]) {
+      if (!e.active || e.dying || e.flying) continue;
+      const tx = Math.floor(e.x / CFG.tile);
+      const ty = Math.floor(e.y / CFG.tile);
+      const tile = gridGet(this.grid, tx, ty);
+      if (tile === 8 && e.body) {
+        const body = e.body as Phaser.Physics.Arcade.Body;
+        body.velocity.x *= CFG.desert.quicksandSlowFactor;
+        body.velocity.y *= CFG.desert.quicksandSlowFactor;
+        const ee = e as any;
+        if (ee._quicksandEnteredAt === undefined) ee._quicksandEnteredAt = time;
+        if (time - ee._quicksandEnteredAt >= CFG.desert.quicksandDelay && time >= (ee._quicksandDmgAt ?? 0)) {
+          ee._quicksandDmgAt = time + CFG.desert.quicksandDmgRate;
+          e.hurt(CFG.desert.quicksandDmg);
+          this.recordEnvironmentEnemyKill(e);
+        }
+      } else {
+        const ee = e as any;
+        ee._quicksandEnteredAt = undefined;
+        ee._quicksandDmgAt = 0;
+      }
+      let touchingCactus = false;
+      for (let dy = -1; dy <= 1 && !touchingCactus; dy++) {
+        for (let dx = -1; dx <= 1 && !touchingCactus; dx++) {
+          if (gridGet(this.grid, tx + dx, ty + dy) !== 7) continue;
+          const cx = (tx + dx) * CFG.tile + CFG.tile / 2;
+          const cy = (ty + dy) * CFG.tile + CFG.tile / 2;
+          touchingCactus = Phaser.Math.Distance.Between(e.x, e.y, cx, cy) < CFG.tile * 0.65;
+        }
+      }
+      if (touchingCactus) {
+        const ee = e as any;
+        if (time >= (ee._cactusDmgAt ?? 0)) {
+          ee._cactusDmgAt = time + CFG.desert.cactusDmgRate;
+          e.hurt(CFG.desert.cactusDmg);
+          this.recordEnvironmentEnemyKill(e);
+        }
+      }
+    }
+  }
+
   updatePlayer(time: number, _delta: number) {
     // Physics-paused covers tutorial step prompts and the upgrade panel.
     // Returning here freezes facing, animation, and the auto-fire loop so
@@ -881,7 +966,8 @@ export class GameScene extends Phaser.Scene {
     // 6), halve their move speed and tick contact damage every 500ms.
     const playerTx = Math.floor(this.player.x / CFG.tile);
     const playerTy = Math.floor(this.player.y / CFG.tile);
-    const onSpike = gridGet(this.grid, playerTx, playerTy) === 6;
+    const playerTile = gridGet(this.grid, playerTx, playerTy);
+    const onSpike = playerTile === 6;
     if (onSpike) {
       if (time >= this.nextSpikeDmgAt) {
         this.nextSpikeDmgAt = time + 500;
@@ -894,7 +980,43 @@ export class GameScene extends Phaser.Scene {
       // immediately, not wait for a stale timer.
       this.nextSpikeDmgAt = 0;
     }
-    const speedMult = onSpike ? 0.5 : 1;
+
+    let touchingCactus = false;
+    if (this.biome === 'desert') {
+      for (let dy = -1; dy <= 1 && !touchingCactus; dy++) {
+        for (let dx = -1; dx <= 1 && !touchingCactus; dx++) {
+          if (gridGet(this.grid, playerTx + dx, playerTy + dy) !== 7) continue;
+          const cx = (playerTx + dx) * CFG.tile + CFG.tile / 2;
+          const cy = (playerTy + dy) * CFG.tile + CFG.tile / 2;
+          touchingCactus = Phaser.Math.Distance.Between(this.player.x, this.player.y, cx, cy) < CFG.tile * 0.72;
+        }
+      }
+      if (touchingCactus) {
+        if (time >= this.nextCactusDmgAt) {
+          this.nextCactusDmgAt = time + CFG.desert.cactusDmgRate;
+          this.player.hurt(CFG.desert.cactusDmg, this);
+          this.hud.pushHud();
+          if (this.player.hp <= 0) this.end.lose();
+        }
+      } else {
+        this.nextCactusDmgAt = 0;
+      }
+    }
+
+    const onQuicksand = playerTile === 8;
+    if (onQuicksand) {
+      if (this.quicksandEnteredAt === 0) this.quicksandEnteredAt = time;
+      if (time - this.quicksandEnteredAt >= CFG.desert.quicksandDelay && time >= this.nextQuicksandDmgAt) {
+        this.nextQuicksandDmgAt = time + CFG.desert.quicksandDmgRate;
+        this.player.hurt(CFG.desert.quicksandDmg, this);
+        this.hud.pushHud();
+        if (this.player.hp <= 0) this.end.lose();
+      }
+    } else {
+      this.quicksandEnteredAt = 0;
+      this.nextQuicksandDmgAt = 0;
+    }
+    const speedMult = (onSpike ? 0.5 : 1) * (onQuicksand ? CFG.desert.quicksandSlowFactor : 1);
 
     const moving = vx !== 0 || vy !== 0;
     if (moving) {

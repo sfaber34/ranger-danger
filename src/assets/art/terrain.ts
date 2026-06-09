@@ -604,6 +604,87 @@ function drawGroundCastle(tileX: number, tileY: number) {
   };
 }
 
+function drawGroundDesert(tileX: number, tileY: number, levelId = 6) {
+  return (put: Put) => {
+    let s = ((tileX * 73856093 + tileY * 19349669 + levelId * 83492791) >>> 0) % 2147483647;
+    const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    const sampleN = precomputeNoise(tileX, tileY, 7000 + levelId * 300, 4000, levelId === 8 ? 180 : 360);
+    const sampleBands = precomputeNoise(tileX, tileY, 2000, 9000 + levelId * 500, levelId === 7 ? 220 : 520);
+    const pxHash = (x: number, y: number) => {
+      let h = ((x * 374761393 + y * 668265263 + levelId * 1442695041) >>> 0);
+      h = ((h ^ (h >> 13)) * 1103515245 + 12345) >>> 0;
+      return (h & 0xffff) / 0xffff;
+    };
+
+    const fissureSand = ['#9f7b46', '#aa854f', '#b28e59', '#92703f'];
+    const duneSand = ['#b89356', '#c19d61', '#d0ad70', '#a9844c'];
+    const templeStone = ['#8f6e42', '#9a7849', '#a88654', '#7d603a'];
+    const palette = levelId === 8 ? templeStone : levelId === 7 ? duneSand : fissureSand;
+
+    for (let py = 0; py < 32; py++) {
+      for (let px = 0; px < 32; px++) {
+        const wx = tileX * 32 + px;
+        const wy = tileY * 32 + py;
+        const n = sampleN(px, py);
+        const b = sampleBands(px, py);
+        let idx = Math.min(3, Math.floor(n * 4));
+        if (levelId === 7) {
+          const wave = Math.sin((wx + wy * 0.35) * 0.045) * 0.5 + 0.5;
+          idx = Math.min(3, Math.floor((wave * 0.55 + b * 0.45) * 4));
+        }
+        put(px, py, palette[idx]);
+
+        if (levelId === 8) {
+          const slabX = ((wx % 32) + 32) % 32;
+          const slabY = ((wy % 32) + 32) % 32;
+          if (slabX === 0 || slabY === 0) put(px, py, '#5e462a');
+          else if (slabX === 1 || slabY === 1) put(px, py, '#b99662');
+          if ((slabX === 14 || slabX === 15) && pxHash(wx, wy) < 0.18) put(px, py, '#6c5030');
+        }
+      }
+    }
+
+    if (levelId === 6 && rnd() < 0.55) {
+      const x0 = 3 + Math.floor(rnd() * 24);
+      const y0 = 4 + Math.floor(rnd() * 22);
+      const len = 8 + Math.floor(rnd() * 13);
+      let x = x0, y = y0;
+      for (let i = 0; i < len; i++) {
+        put(x, y, '#3b2818');
+        if (rnd() < 0.45) put(x + 1, y, '#6c4525');
+        if (rnd() < 0.35) put(x, y + 1, '#2a1a10');
+        x += rnd() < 0.55 ? 1 : -1;
+        y += 1;
+        if (x < 1 || x > 30 || y > 30) break;
+      }
+    }
+
+    if (levelId === 7 && rnd() < 0.45) {
+      const y = 4 + Math.floor(rnd() * 24);
+      for (let x = 2; x < 30; x++) {
+        if (Math.sin((tileX * 32 + x) * 0.22 + y * 0.2) > 0.25) {
+          put(x, y + Math.floor(Math.sin(x * 0.3) * 2), '#d9bc7c');
+        }
+      }
+    }
+
+    if (levelId === 8 && rnd() < 0.22) {
+      const cx = 5 + Math.floor(rnd() * 22);
+      const cy = 5 + Math.floor(rnd() * 22);
+      for (let i = 0; i < 8; i++) {
+        put(cx + Math.floor(rnd() * 7 - 3), cy + Math.floor(rnd() * 7 - 3), rnd() < 0.5 ? '#594126' : '#c7a36a');
+      }
+    }
+
+    if (rnd() < 0.2) {
+      const rx = 2 + Math.floor(rnd() * 28);
+      const ry = 2 + Math.floor(rnd() * 28);
+      put(rx, ry, '#6d5942');
+      if (rnd() < 0.6) put(rx + 1, ry, '#4f3f30');
+    }
+  };
+}
+
 // Forest ground — darker greens with brown dirt patches, leaf litter, mushrooms, moss
 function drawGroundForest(tileX: number, tileY: number) {
   return (put: Put) => {
@@ -880,6 +961,9 @@ export const SPIKE_PATTERNS: { tiles: { dx: number; dy: number }[]; w: number; h
 // Independent from SPIKE_PATTERNS so the cluster shape and the per-tile
 // art aren't tangled.
 export const SPIKE_VARIANT_COUNT = 3;
+export const CACTUS_VARIANT_COUNT = 3;
+export const QUICKSAND_VARIANT_COUNT = 4;
+export const TEMPLE_BLOCK_VARIANT_COUNT = 3;
 
 /** SMB-style staggered spike patch — 3 small back spikes + 2 larger
  *  front spikes for depth. variantIdx jitters x positions so nearby
@@ -949,6 +1033,100 @@ export function drawCastleSpikesCanvas(variantIdx: number): HTMLCanvasElement {
   drawSpike(12 + j, 27, 4, 13);
   drawSpike(20 + j, 27, 4, 13);
 
+  return canvas;
+}
+
+export function drawCactusCanvas(variantIdx: number): HTMLCanvasElement {
+  const T = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = T; canvas.height = T;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  const px = (x: number, y: number, c: string) => {
+    if (x >= 0 && x < T && y >= 0 && y < T) {
+      ctx.fillStyle = c;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  };
+  const block = (x: number, y: number, w: number, h: number, c: string) => {
+    ctx.fillStyle = c; ctx.fillRect(x, y, w, h);
+  };
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = '#1a1208';
+  ctx.beginPath(); ctx.ellipse(16, 28, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  const body = variantIdx === 1 ? '#3f8a38' : variantIdx === 2 ? '#557f34' : '#2f7a38';
+  const dark = variantIdx === 1 ? '#215a24' : '#204820';
+  const light = '#80bd65';
+  const flower = variantIdx === 2 ? '#ffd84a' : '#e35a84';
+  block(13, 9, 6, 19, dark);
+  block(14, 8, 5, 20, body);
+  block(16, 8, 1, 19, light);
+  block(8, 15, 4, 3, dark);
+  block(8, 12, 3, 6, body);
+  block(10, 12, 1, 5, light);
+  block(20, 18, 5, 3, dark);
+  block(22, 15, 3, 6, body);
+  block(23, 15, 1, 5, light);
+  for (let y = 11; y < 27; y += 4) {
+    px(12, y, '#dbe8c8'); px(19, y + 1, '#dbe8c8');
+  }
+  for (let x = 14; x < 19; x++) px(x, 7, flower);
+  px(16, 6, flower);
+  return canvas;
+}
+
+export function drawQuicksandCanvas(variantIdx: number): HTMLCanvasElement {
+  const T = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = T; canvas.height = T;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  const colors = ['#8b6a3e', '#a07a48', '#c29a5a', '#6a5032'];
+  ctx.fillStyle = '#6f5130';
+  ctx.beginPath(); ctx.ellipse(16, 17, 14, 9, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#9f7a45';
+  ctx.beginPath(); ctx.ellipse(16, 16, 12, 7, 0, 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < 5; i++) {
+    const y = 12 + i * 2;
+    const phase = variantIdx + i;
+    ctx.strokeStyle = colors[(i + variantIdx) % colors.length];
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 6; x <= 26; x++) {
+      const yy = y + Math.sin((x + phase * 3) * 0.55) * 1.5;
+      if (x === 6) ctx.moveTo(x, yy);
+      else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#d8b878';
+  ctx.globalAlpha = 0.35;
+  ctx.beginPath(); ctx.ellipse(12 + variantIdx, 12, 4, 2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  return canvas;
+}
+
+export function drawTempleBlockCanvas(variantIdx: number): HTMLCanvasElement {
+  const T = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = T; canvas.height = T;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#4f3821';
+  ctx.fillRect(2, 4, 28, 24);
+  ctx.fillStyle = variantIdx === 1 ? '#7b5a32' : variantIdx === 2 ? '#6d5538' : '#8b683c';
+  ctx.fillRect(3, 3, 26, 23);
+  ctx.fillStyle = '#b8945a';
+  ctx.fillRect(4, 4, 24, 3);
+  ctx.fillStyle = '#5f4528';
+  ctx.fillRect(4, 14, 24, 2);
+  ctx.fillRect(15, 5, 2, 20);
+  ctx.fillStyle = '#c7a36a';
+  ctx.fillRect(6 + variantIdx * 2, 8, 5, 2);
+  ctx.fillRect(19, 19 - variantIdx, 4, 2);
+  ctx.fillStyle = '#3a2a18';
+  ctx.fillRect(5, 25, 23, 2);
   return canvas;
 }
 
@@ -1275,7 +1453,9 @@ export function drawFoundation(put: Put) {
 }
 /** Create and register a ground chunk texture covering chunkSize×chunkSize tiles */
 export function createGroundChunk(scene: Phaser.Scene, chunkX: number, chunkY: number, chunkSize: number, tileSize: number, biome = 'grasslands'): string {
-  const key = `gnd_chunk_${biome}_${chunkX}_${chunkY}`;
+  const sceneLevelId = (scene as any).levelId ?? 1;
+  const terrainKey = biome === 'desert' ? `${biome}_${sceneLevelId}` : biome;
+  const key = `gnd_chunk_${terrainKey}_${chunkX}_${chunkY}`;
   if (scene.textures.exists(key)) return key;
   const pxSize = chunkSize * tileSize; // e.g. 16 * 32 = 512
   const canvas = document.createElement('canvas');
@@ -1294,6 +1474,7 @@ export function createGroundChunk(scene: Phaser.Scene, chunkX: number, chunkY: n
                  : biome === 'infected' ? drawGroundInfected(worldTX, worldTY)
                  : biome === 'river' ? drawGroundRiver(worldTX, worldTY)
                  : biome === 'castle' ? drawGroundCastle(worldTX, worldTY)
+                 : biome === 'desert' ? drawGroundDesert(worldTX, worldTY, sceneLevelId)
                  : drawGroundWorld(worldTX, worldTY);
       const ox = tx * tileSize;
       const oy = ty * tileSize;

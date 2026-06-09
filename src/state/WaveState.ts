@@ -66,6 +66,15 @@ export class WaveState {
     this.finalePackTriggered = false;
   }
 
+  enterDesertPhase2(now: number, breakMs: number) {
+    this.wave = 3;
+    this.waveSpawned = 0;
+    this.waveKills = 0;
+    this.bossCountdownUntil = 0;
+    this.waveBreakUntil = now + breakMs;
+    this.finalePackTriggered = false;
+  }
+
   /**
    * Endless-mode boss-cycle reset. Wave counter is cumulative across
    * cycles (so the displayed wave number keeps climbing), but spawn/kill

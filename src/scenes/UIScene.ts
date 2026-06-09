@@ -348,10 +348,11 @@ export class UIScene extends Phaser.Scene {
     this.progressLines = [];
     // Endless mode: 6 rolling nodes (current wave + next 5). Updated
     // dynamically in updateHud.
-    // Castle: 4 waves + queen skull + dragon skull = 6 nodes
+    // Castle/Desert: 4 waves + two boss skulls = 6 nodes
     // Others: waveCount waves + 1 boss = waveCount+1 nodes
+    const hasTwoBossProgress = this.biome === 'castle' || this.biome === 'desert';
     const totalNodes = this.difficulty === 'endless' ? 6
-      : this.biome === 'castle' ? 6
+      : hasTwoBossProgress ? 6
       : CFG.spawn.waveCount + 1;
     const nodeSpacing = this.p(36);
     const totalW = (totalNodes - 1) * nodeSpacing;
@@ -373,12 +374,12 @@ export class UIScene extends Phaser.Scene {
       this.progressCircles.push(circle);
       items.push(circle);
       // label (number or skull)
-      // Castle: nodes 2 (queen) and 5 (dragon) are boss skulls
+      // Castle/Desert: nodes 2 and 5 are boss skulls
       // Endless: labels are dynamic \u2014 placeholder, updateHud sets them
       const isBoss = this.difficulty === 'endless' ? false
-        : this.biome === 'castle' ? (i === 2 || i === 5)
+        : hasTwoBossProgress ? (i === 2 || i === 5)
         : i === totalNodes - 1;
-      const waveNum = this.biome === 'castle'
+      const waveNum = hasTwoBossProgress
         ? (i < 2 ? i + 1 : i === 2 ? 0 : i < 5 ? i : 0) // 1,2,skull,3,4,skull
         : i + 1;
       const label = this.add.text(nx, nodeY, isBoss ? '' : `${waveNum}`, {
@@ -592,6 +593,12 @@ export class UIScene extends Phaser.Scene {
     }
     const bossName = s?.bossKind === 'queen' ? 'THE PHANTOM QUEEN'
                    : s?.bossKind === 'dragon' ? 'THE CASTLE DRAGON'
+                   : s?.bossKind === 'fissure_burrower' ? 'THE FISSURE BURROWER'
+                   : s?.bossKind === 'desert_scorpion' ? 'THE GIANT SCORPION'
+                   : s?.bossKind === 'sandstorm_beast' ? 'THE SANDSTORM BEAST'
+                   : s?.bossKind === 'dune_wraith' ? 'THE DUNE WRAITH'
+                   : s?.bossKind === 'temple_construct' ? 'THE TEMPLE CONSTRUCT'
+                   : s?.bossKind === 'sun_priest' ? 'THE SUN PRIEST'
                    : s?.biome === 'forest' ? 'THE WENDIGO'
                    : s?.biome === 'infected' ? 'THE BLIGHTED ONE'
                    : s?.biome === 'river' ? 'THE FOG PHANTOM'
@@ -1095,10 +1102,10 @@ export class UIScene extends Phaser.Scene {
           this.progressLines[i].setFillStyle(0x2a3760);
         }
       }
-    } else if (this.biome === 'castle') {
-      // Castle: 6 nodes — W1, W2, Queen, W3, W4, Dragon
+    } else if (this.biome === 'castle' || this.biome === 'desert') {
+      // Castle/Desert: 6 nodes — W1, W2, Boss, W3, W4, Boss
       // Map node index to progress state
-      const cp = s.castlePhase ?? 0;
+      const cp = this.biome === 'castle' ? (s.castlePhase ?? 0) : (s.desertPhase ?? 0);
       for (let i = 0; i < this.progressCircles.length; i++) {
         const isBossNode = (i === 2 || i === 5);
         let completed = false;
@@ -1111,7 +1118,7 @@ export class UIScene extends Phaser.Scene {
         } else if (i === 1) { // Wave 2
           completed = cp >= 1;
           current = currentWave === 2 && cp === 0;
-        } else if (i === 2) { // Queen boss
+        } else if (i === 2) { // First boss
           completed = s.midBossDefeated;
           active = cp === 1 && s.bossSpawned;
         } else if (i === 3) { // Wave 3
@@ -1120,7 +1127,7 @@ export class UIScene extends Phaser.Scene {
         } else if (i === 4) { // Wave 4
           completed = cp >= 3;
           current = currentWave === 4 && cp === 2;
-        } else if (i === 5) { // Dragon boss
+        } else if (i === 5) { // Final boss
           active = cp === 3 && s.bossSpawned;
         }
 

@@ -1736,6 +1736,151 @@ export function drawEnemyCastleRat(f: EFrame) {
   };
 }
 
+type DesertEnemyVariant = 'scorpion' | 'boss_scorpion' | 'scarab' | 'sand_mite' | 'cactus_hopper' | 'dune_strider' | 'sand_wraith' | 'temple_guardian' | 'sun_mote';
+
+export function drawEnemyDesert(f: EFrame, variant: DesertEnemyVariant) {
+  return (put: Put) => {
+    if (f.startsWith('die')) {
+      const step = parseInt(f.slice(3));
+      const r = 8 - step * 2;
+      if (r <= 0) return;
+      const col = variant === 'sun_mote' ? '#ffd45a'
+        : variant === 'boss_scorpion' ? '#7f9a38'
+        : variant === 'cactus_hopper' ? '#4f8a3a'
+        : '#b88442';
+      disc(put, 16, 18, Math.max(0, r), col);
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2 + step * 0.45;
+        const d = step * 3 + 3;
+        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), '#6a4528');
+      }
+      return;
+    }
+    const flash = f === 'hit';
+    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 : 0;
+    const bob = [0, -1, 0, 1][phase];
+    const attack = f === 'atk0' || f === 'atk1';
+    const palettes: Record<DesertEnemyVariant, { d: string; m: string; l: string; hi: string }> = {
+      scorpion: { d: '#4a2512', m: '#9a5a24', l: '#d08a3a', hi: '#ffcf70' },
+      boss_scorpion: { d: '#273018', m: '#5f6f2f', l: '#9bb84a', hi: '#e4f080' },
+      scarab: { d: '#153a38', m: '#2f5c58', l: '#56a29a', hi: '#b8f0d8' },
+      sand_mite: { d: '#6a4218', m: '#c8943e', l: '#f0c060', hi: '#fff0a0' },
+      cactus_hopper: { d: '#245024', m: '#4f8a3a', l: '#87bf5c', hi: '#e0f0c8' },
+      dune_strider: { d: '#6a4920', m: '#d0a45a', l: '#f0ca78', hi: '#fff0b8' },
+      sand_wraith: { d: '#4a3c30', m: '#b8a070', l: '#e0d0a0', hi: '#fff0c8' },
+      temple_guardian: { d: '#4d3820', m: '#b89052', l: '#d8b878', hi: '#fff0a0' },
+      sun_mote: { d: '#9a4a10', m: '#ffb82e', l: '#ffe070', hi: '#ffffff' },
+    };
+    const pal = palettes[variant];
+    const d = flash ? P.white : pal.d;
+    const m = flash ? P.white : pal.m;
+    const l = flash ? P.white : pal.l;
+    const hi = flash ? P.white : pal.hi;
+
+    if (variant === 'scorpion' || variant === 'boss_scorpion') {
+      const small = variant === 'boss_scorpion';
+      disc(put, 15, 18 + bob, small ? 5 : 7, d);
+      disc(put, 15, 17 + bob, small ? 4 : 6, m);
+      rect(put, 20, 12 + bob, 3, small ? 6 : 8, d);
+      rect(put, 21, 10 + bob, small ? 3 : 4, 3, m);
+      put(25, 11 + bob, attack ? hi : small ? '#d9f06a' : '#d04020');
+      for (let i = 0; i < 4; i++) {
+        line(put, 9 + i * 3, 20 + bob, 5 + i * 2, 23 + ((i + phase) % 2), d);
+        line(put, 18 + i * 2, 20 + bob, 25 + i, 23 + ((i + phase + 1) % 2), d);
+      }
+      put(12, 15 + bob, P.outline); put(18, 15 + bob, P.outline);
+      return;
+    }
+    if (variant === 'scarab') {
+      disc(put, 16, 18 + bob, 8, d);
+      disc(put, 16, 17 + bob, 7, m);
+      rect(put, 10, 16 + bob, 12, 1, hi);
+      rect(put, 15, 10 + bob, 2, 13, d);
+      rect(put, 9, 22 + bob, 14, 2, d);
+      put(12, 14 + bob, '#ffd84a'); put(20, 14 + bob, '#ffd84a');
+      return;
+    }
+    if (variant === 'sand_mite') {
+      for (let i = 0; i < 4; i++) {
+        disc(put, 10 + i * 4, 18 + ((i + phase) % 2) + bob, i === 1 || i === 2 ? 4 : 3, i % 2 ? m : l);
+      }
+      for (let i = 0; i < 6; i++) {
+        const x = 7 + i * 3;
+        put(x, 23 + ((i + phase) % 2), d);
+        put(x + 1, 24 + ((i + phase) % 2), d);
+      }
+      put(8, 16 + bob, P.outline); put(9, 16 + bob, hi);
+      return;
+    }
+    if (variant === 'cactus_hopper') {
+      rect(put, 12, 11 + bob, 8, 14, d);
+      rect(put, 13, 10 + bob, 7, 15, m);
+      rect(put, 16, 10 + bob, 1, 14, hi);
+      rect(put, 8, 17 + bob, 4, 3, m);
+      rect(put, 20, 15 + bob, 4, 3, m);
+      rect(put, 11, 25 + bob, 5, 3, d);
+      rect(put, 18, 25 - bob, 5, 3, d);
+      put(14, 14 + bob, P.outline); put(19, 14 + bob, P.outline);
+      return;
+    }
+    if (variant === 'dune_strider') {
+      disc(put, 16, 15 + bob, 5, m);
+      rect(put, 12, 19 + bob, 8, 5, l);
+      for (let i = 0; i < 6; i++) {
+        const legX = 8 + i * 3;
+        line(put, 15, 21 + bob, legX, 27 + ((i + phase) % 2), d);
+      }
+      rect(put, 11, 12 + bob, 10, 1, hi);
+      put(13, 15 + bob, P.outline); put(19, 15 + bob, P.outline);
+      return;
+    }
+    if (variant === 'sand_wraith') {
+      ellipse(put, 16, 16 + bob, 8, 10, d);
+      ellipse(put, 16, 15 + bob, 7, 9, m);
+      for (let i = 0; i < 5; i++) {
+        const x = 10 + i * 3;
+        line(put, x, 23 + bob, x - 2 + phase, 28, i % 2 ? d : l);
+      }
+      put(13, 14 + bob, '#64c8ff'); put(19, 14 + bob, '#64c8ff');
+      if (attack) rect(put, 12, 19 + bob, 8, 2, P.outline);
+      return;
+    }
+    if (variant === 'temple_guardian') {
+      rect(put, 9, 12 + bob, 14, 13, d);
+      rect(put, 10, 11 + bob, 12, 13, m);
+      rect(put, 11, 12 + bob, 10, 2, l);
+      rect(put, 11, 19 + bob, 10, 2, d);
+      rect(put, 7, 24 + bob, 7, 4, d);
+      rect(put, 18, 24 - bob, 7, 4, d);
+      put(12, 16 + bob, '#40e0ff'); put(20, 16 + bob, '#40e0ff');
+      return;
+    }
+    // sun_mote
+    disc(put, 16, 16 + bob, attack ? 7 : 6, d);
+    disc(put, 16, 16 + bob, attack ? 6 : 5, m);
+    disc(put, 16, 16 + bob, 3, hi);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + phase * 0.25;
+      line(put,
+        Math.round(16 + Math.cos(a) * 7),
+        Math.round(16 + bob + Math.sin(a) * 7),
+        Math.round(16 + Math.cos(a) * 10),
+        Math.round(16 + bob + Math.sin(a) * 10),
+        l);
+    }
+  };
+}
+
+export function drawSunBolt(frame: 0 | 1) {
+  return (put: Put) => {
+    const shift = frame === 0 ? 0 : 1;
+    line(put, 3, 8 + shift, 12, 8 - shift, '#fff0a0');
+    line(put, 4, 9 + shift, 13, 9 - shift, '#ffb82e');
+    line(put, 5, 7 + shift, 11, 5 - shift, '#ffd84a');
+    disc(put, 12, 8 - shift, 2, '#ffffff');
+  };
+}
+
 // ==================================================================
 //  WARLOCK MAGIC BOLT (32x32) — purple orb projectile
 // ==================================================================

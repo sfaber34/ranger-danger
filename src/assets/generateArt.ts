@@ -15,6 +15,7 @@ import {
   drawEnemyMosquito, drawMosquitoDart, drawBirdPoop,
   drawEnemySkeleton, drawEnemyWarlock, drawEnemyGolem, drawEnemyShadowImp,
   drawEnemyCastleBat, drawEnemyCastleRat, drawWarlockBolt,
+  drawEnemyDesert, drawSunBolt,
 } from './art/enemies';
 import {
   Put, PutRGB, P, S,
@@ -25,7 +26,7 @@ import { BearFrame, drawBearDir, extractBearFrames } from './art/bear';
 import {
   BossFrame, ForestBossFrame, forestBossFrames,
   drawFogPhantom, drawBoss, drawRam, drawInfectedBoss, drawForestBoss,
-  drawPhantomQueen, drawCastleDragon,
+  drawPhantomQueen, drawCastleDragon, drawDesertBoss,
   drawQueenOrb, drawDragonFireball, drawDragonFireExplosion,
 } from './art/bosses';
 import {
@@ -39,15 +40,17 @@ import {
 } from './art/projectiles';
 import { drawBoulderImpact, drawHitSpark, drawDeathBurst, drawCoinPop } from './art/fx';
 import {
-  TREE_PATTERNS, SPIKE_VARIANT_COUNT,
-  drawCastleSpikesCanvas, drawTreeClusterCanvas, drawInfectedPlantCanvas, drawFoundation,
+  TREE_PATTERNS, SPIKE_VARIANT_COUNT, CACTUS_VARIANT_COUNT, QUICKSAND_VARIANT_COUNT, TEMPLE_BLOCK_VARIANT_COUNT,
+  drawCastleSpikesCanvas, drawCactusCanvas, drawQuicksandCanvas, drawTempleBlockCanvas,
+  drawTreeClusterCanvas, drawInfectedPlantCanvas, drawFoundation,
 } from './art/terrain';
 // Re-export terrain names that ChunkSystem and other callers consume from
 // generateArt — keeps the public surface stable while the implementation
 // moves to art/terrain.ts.
 export {
   RIVER_HALF_W, riverHorizontalCenterY, riverCenterPx, getRiverTileGrid,
-  TREE_PATTERNS, SPIKE_PATTERNS, SPIKE_VARIANT_COUNT, createGroundChunk,
+  TREE_PATTERNS, SPIKE_PATTERNS, SPIKE_VARIANT_COUNT, CACTUS_VARIANT_COUNT, QUICKSAND_VARIANT_COUNT, TEMPLE_BLOCK_VARIANT_COUNT,
+  createGroundChunk,
 } from './art/terrain';
 import {
   drawWall, drawIndicatorArrow, drawIndicatorCannon, drawIndicatorBoss, drawIndicatorPointer,
@@ -127,6 +130,22 @@ export function generateAllArt(scene: Phaser.Scene) {
   // Warlock magic bolt projectile
   add(scene, 'wbolt_0', makeCanvas(32, drawWarlockBolt('bolt0')));
   add(scene, 'wbolt_1', makeCanvas(32, drawWarlockBolt('bolt1')));
+  const desertEnemies = [
+    ['escp', 'scorpion'],
+    ['ebsc', 'boss_scorpion'],
+    ['esrb', 'scarab'],
+    ['esmt', 'sand_mite'],
+    ['echp', 'cactus_hopper'],
+    ['edst', 'dune_strider'],
+    ['eswr', 'sand_wraith'],
+    ['etgd', 'temple_guardian'],
+    ['esun', 'sun_mote'],
+  ] as const;
+  for (const [prefix, variant] of desertEnemies) {
+    for (const f of eFrames) add(scene, `${prefix}_${f}`, makeCanvas(32, drawEnemyDesert(f, variant)));
+  }
+  add(scene, 'sunbolt_0', makeCanvas(16, drawSunBolt(0)));
+  add(scene, 'sunbolt_1', makeCanvas(16, drawSunBolt(1)));
 
   // Shared helper to copy a loaded PNG texture to a new key
   const copyTex = (src: string, dst: string) => {
@@ -276,6 +295,10 @@ export function generateAllArt(scene: Phaser.Scene) {
   // picks per-tile across patterns so multi-tile clusters don't look stamped.
   for (let i = 0; i < SPIKE_VARIANT_COUNT; i++) add(scene, `castle_spikes_${i}`, drawCastleSpikesCanvas(i));
 
+  for (let i = 0; i < CACTUS_VARIANT_COUNT; i++) add(scene, `desert_cactus_${i}`, drawCactusCanvas(i));
+  for (let i = 0; i < QUICKSAND_VARIANT_COUNT; i++) add(scene, `desert_quicksand_${i}`, drawQuicksandCanvas(i));
+  for (let i = 0; i < TEMPLE_BLOCK_VARIANT_COUNT; i++) add(scene, `temple_block_${i}`, drawTempleBlockCanvas(i));
+
   // Firefly particle (tiny yellow-green glow, 4x4 logical)
   {
     const c = document.createElement('canvas');
@@ -362,6 +385,13 @@ export function generateAllArt(scene: Phaser.Scene) {
   for (const f of bossFrames) add(scene, `cqboss_${f}`, makeCanvas(64, drawPhantomQueen(f)));
   // Castle boss (Castle Dragon) textures
   for (const f of bossFrames) add(scene, `cdboss_${f}`, makeCanvas(64, drawCastleDragon(f)));
+
+  for (const f of bossFrames) add(scene, `dfboss_${f}`, makeCanvas(64, drawDesertBoss(f, 'burrower')));
+  for (const f of bossFrames) add(scene, `dsboss_${f}`, makeCanvas(64, drawDesertBoss(f, 'scorpion')));
+  for (const f of bossFrames) add(scene, `sbboss_${f}`, makeCanvas(64, drawDesertBoss(f, 'sandstorm')));
+  for (const f of bossFrames) add(scene, `dwboss_${f}`, makeCanvas(64, drawDesertBoss(f, 'wraith')));
+  for (const f of bossFrames) add(scene, `dtboss_${f}`, makeCanvas(64, drawDesertBoss(f, 'construct')));
+  for (const f of bossFrames) add(scene, `spboss_${f}`, makeCanvas(64, drawDesertBoss(f, 'sun_priest')));
 
   // Queen orb projectile
   add(scene, 'qorb_0', makeCanvas(32, drawQueenOrb(0)));
@@ -517,6 +547,24 @@ export function registerAnimations(scene: Phaser.Scene) {
   // Warlock bolt
   mk('wbolt-spin', ['wbolt_0','wbolt_1'], 8, -1);
 
+  const desertEnemyAnims = [
+    ['escp', 8],
+    ['esrb', 10],
+    ['esmt', 12],
+    ['echp', 7],
+    ['edst', 10],
+    ['eswr', 6],
+    ['etgd', 6],
+    ['esun', 8],
+  ] as const;
+  for (const [prefix, rate] of desertEnemyAnims) {
+    mk(`${prefix}-move`, [`${prefix}_move0`,`${prefix}_move1`,`${prefix}_move2`,`${prefix}_move3`], rate, -1);
+    mk(`${prefix}-atk`,  [`${prefix}_atk0`,`${prefix}_atk1`], rate, -1);
+    mk(`${prefix}-hit`,  [`${prefix}_hit`], 10, 0);
+    mk(`${prefix}-die`,  [`${prefix}_die0`,`${prefix}_die1`,`${prefix}_die2`,`${prefix}_die3`], 10, 0);
+  }
+  mk('sunbolt-spin', ['sunbolt_0','sunbolt_1'], 10, -1);
+
   mk('tower-top-idle',  ['t_top_0'], 1, 0);
   mk('tower-top-shoot', ['t_top_1','t_top_0'], 14, 0);
   mk('cannon-top-idle',  ['c_top_0'], 1, 0);
@@ -600,6 +648,16 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('cdboss-hit',        ['cdboss_hit'], 10, 0);
   mk('cdboss-birth',      ['cdboss_birth0','cdboss_birth1','cdboss_birth2','cdboss_birth3','cdboss_birth4'], 4, 0);
   mk('cdboss-die',        ['cdboss_die0','cdboss_die1','cdboss_die2','cdboss_die3','cdboss_die4'], 6, 0);
+
+  for (const prefix of ['dsboss', 'dwboss', 'dtboss', 'spboss']) {
+    mk(`${prefix}-idle`,       [`${prefix}_idle0`,`${prefix}_idle1`], 2, -1);
+    mk(`${prefix}-move`,       [`${prefix}_move0`,`${prefix}_move1`,`${prefix}_move2`,`${prefix}_move3`], 5, -1);
+    mk(`${prefix}-atk`,        [`${prefix}_atk0`,`${prefix}_atk1`], 4, 0);
+    mk(`${prefix}-chargewind`, [`${prefix}_chargeWind`,`${prefix}_idle0`], 6, -1);
+    mk(`${prefix}-hit`,        [`${prefix}_hit`], 10, 0);
+    mk(`${prefix}-birth`,      [`${prefix}_birth0`,`${prefix}_birth1`,`${prefix}_birth2`,`${prefix}_birth3`,`${prefix}_birth4`], 4, 0);
+    mk(`${prefix}-die`,        [`${prefix}_die0`,`${prefix}_die1`,`${prefix}_die2`,`${prefix}_die3`,`${prefix}_die4`], 6, 0);
+  }
 
   // Queen orb spin animation
   mk('qorb-spin', ['qorb_0','qorb_1'], 8, -1);

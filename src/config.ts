@@ -70,7 +70,17 @@ export const CFG = {
     golem:       { hp: 55, speed: 28,  dmg: 14, coin: 3, color: 0x3c4250 },
     shadow_imp:  { hp: 16, speed: 90,  dmg: 6,  coin: 1, color: 0x2a1a38 },
     castle_bat:  { hp: 10, speed: 120, dmg: 4,  coin: 1, color: 0x3a2a3a },
-    castle_rat:  { hp: 10, speed: 130, dmg: 4,  coin: 1, color: 0x5a4a38 }
+    castle_rat:  { hp: 10, speed: 130, dmg: 4,  coin: 1, color: 0x5a4a38 },
+    // Desert enemies
+    scorpion:        { hp: 24, speed: 58,  dmg: 8,  coin: 1, color: 0x9a5a24 },
+    boss_scorpion:   { hp: 14, speed: 96,  dmg: 5,  coin: 0, color: 0x5f6f2f },
+    scarab:          { hp: 16, speed: 105, dmg: 5,  coin: 1, color: 0x2f5c58 },
+    sand_mite:       { hp: 12, speed: 135, dmg: 4,  coin: 1, color: 0xc8943e },
+    cactus_hopper:   { hp: 32, speed: 44,  dmg: 10, coin: 2, color: 0x4f8a3a },
+    dune_strider:    { hp: 26, speed: 88,  dmg: 7,  coin: 1, color: 0xd0a45a },
+    sand_wraith:     { hp: 42, speed: 42,  dmg: 12, coin: 2, color: 0xb8a070 },
+    temple_guardian: { hp: 58, speed: 32,  dmg: 14, coin: 3, color: 0xb89052 },
+    sun_mote:        { hp: 18, speed: 60,  dmg: 6,  coin: 2, color: 0xffd45a }
   },
 
   coin: { magnetRange: 90, magnetSpeed: 420 },
@@ -181,6 +191,44 @@ export const CFG = {
     dragonFireballSplash: 56,  // AoE radius
     dragonFireballLifetime: 3500,
     dragonFireballRate: 1700,  // ms between fireballs (~30% faster than the original 2200ms)
+  },
+
+  desert: {
+    cactusDmg: 4,
+    cactusDmgRate: 650,
+    quicksandSlowFactor: 0.38,
+    quicksandDelay: 3000,
+    quicksandDmg: 4,
+    quicksandDmgRate: 800,
+    clusterMin: 2,
+    clusterMax: 4,
+    clusterSpread: 28,
+    mitePackSize: 5,
+    mitePackCooldownMin: 6500,
+    mitePackCooldownMax: 11000,
+    sunMoteRange: 330,
+    sunMoteFireRate: 2300,
+    sunBoltSpeed: 190,
+    sunBoltDmg: 7,
+    sunBoltLifetime: 3200,
+    burrowerHp: 1050,
+    burrowerSpeed: 34,
+    burrowerDmg: 16,
+    scorpionHp: 1250,
+    scorpionSpeed: 30,
+    scorpionDmg: 18,
+    sandstormHp: 1350,
+    sandstormSpeed: 42,
+    sandstormDmg: 17,
+    wraithHp: 1550,
+    wraithSpeed: 36,
+    wraithDmg: 18,
+    constructHp: 1300,
+    constructSpeed: 30,
+    constructDmg: 18,
+    sunPriestHp: 2300,
+    sunPriestSpeed: 24,
+    sunPriestDmg: 24,
   },
 
   winKills: 200, // kills needed to trigger the boss; defeating the boss wins
