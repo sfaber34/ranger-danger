@@ -644,21 +644,6 @@ function drawGroundDesert(tileX: number, tileY: number, levelId = 6) {
       }
     }
 
-    if (levelId === 6 && rnd() < 0.55) {
-      const x0 = 3 + Math.floor(rnd() * 24);
-      const y0 = 4 + Math.floor(rnd() * 22);
-      const len = 8 + Math.floor(rnd() * 13);
-      let x = x0, y = y0;
-      for (let i = 0; i < len; i++) {
-        put(x, y, '#3b2818');
-        if (rnd() < 0.45) put(x + 1, y, '#6c4525');
-        if (rnd() < 0.35) put(x, y + 1, '#2a1a10');
-        x += rnd() < 0.55 ? 1 : -1;
-        y += 1;
-        if (x < 1 || x > 30 || y > 30) break;
-      }
-    }
-
     if (levelId === 7 && rnd() < 0.45) {
       const y = 4 + Math.floor(rnd() * 24);
       for (let x = 2; x < 30; x++) {
@@ -683,6 +668,88 @@ function drawGroundDesert(tileX: number, tileY: number, levelId = 6) {
       if (rnd() < 0.6) put(rx + 1, ry, '#4f3f30');
     }
   };
+}
+
+function drawWorldFissures(ctx: CanvasRenderingContext2D, chunkX: number, chunkY: number, chunkSize: number, tileSize: number) {
+  const pxSize = chunkSize * tileSize;
+  const worldX0 = chunkX * chunkSize * tileSize;
+  const worldY0 = chunkY * chunkSize * tileSize;
+  const cellPx = tileSize * 1.48;
+  const rowPx = cellPx * 0.96;
+  const cellX0 = Math.floor(worldX0 / cellPx) - 1;
+  const cellX1 = Math.floor((worldX0 + pxSize) / cellPx) + 1;
+  const cellY0 = Math.floor(worldY0 / rowPx) - 1;
+  const cellY1 = Math.floor((worldY0 + pxSize) / rowPx) + 1;
+
+  const hash01 = (a: number, b: number, salt: number) => {
+    let h = ((a * 374761393 + b * 668265263 + salt * 2246822519) >>> 0);
+    h ^= h >>> 13;
+    h = Math.imul(h, 1274126177) >>> 0;
+    return (h & 0xffff) / 0xffff;
+  };
+
+  const crackPoint = (cx: number, cy: number) => ({
+    x: cx * cellPx + (hash01(cx, cy, 2001) - 0.5) * cellPx * 0.48,
+    y: cy * rowPx + (hash01(cx, cy, 3001) - 0.5) * rowPx * 0.48,
+  });
+
+  const strokePath = (pts: { x: number; y: number }[], width: number, color: string, alpha: number, close = false) => {
+    if (pts.length < 2) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x - worldX0, pts[0].y - worldY0);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x - worldX0, pts[i].y - worldY0);
+    if (close) ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  const drawCrack = (from: { x: number; y: number }, to: { x: number; y: number }, seedA: number, seedB: number, salt: number) => {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const invLen = 1 / Math.max(1, Math.hypot(dx, dy));
+    const nx = -dy * invLen;
+    const ny = dx * invLen;
+    const pts = [from];
+    const segments = 2 + Math.floor(hash01(seedA, seedB, salt + 11) * 3);
+    for (let i = 1; i < segments; i++) {
+      const t = i / segments;
+      const wobble = (hash01(seedA + i * 17, seedB - i * 23, salt + 101) - 0.5) * cellPx * 0.18;
+      pts.push({
+        x: from.x + dx * t + nx * wobble,
+        y: from.y + dy * t + ny * wobble,
+      });
+    }
+    pts.push(to);
+    const strength = 0.7 + hash01(seedA, seedB, salt + 211) * 0.24;
+    strokePath(pts, 2.5, '#6d4a2b', 0.07 * strength);
+    strokePath(pts, 1.25, '#9a7044', 0.09 * strength);
+    strokePath(pts, 0.75, '#59402a', 0.1 * strength);
+  };
+
+  for (let cy = cellY0; cy <= cellY1 + 1; cy++) {
+    for (let cx = cellX0; cx <= cellX1 + 1; cx++) {
+      const p = crackPoint(cx, cy);
+      if (cx <= cellX1 && hash01(cx, cy, 7001) < 0.96) {
+        drawCrack(p, crackPoint(cx + 1, cy), cx, cy, 7001);
+      }
+      if (cy <= cellY1 && hash01(cx, cy, 8001) < 0.92) {
+        drawCrack(p, crackPoint(cx, cy + 1), cx, cy, 8001);
+      }
+      if (hash01(cx, cy, 10001) < 0.1) {
+        const target = crackPoint(cx + (hash01(cx, cy, 11001) < 0.5 ? -1 : 1), cy + 1);
+        drawCrack(p, {
+          x: p.x + (target.x - p.x) * 0.45,
+          y: p.y + (target.y - p.y) * 0.45,
+        }, cx, cy, 10001);
+      }
+    }
+  }
 }
 
 // Forest ground — darker greens with brown dirt patches, leaf litter, mushrooms, moss
@@ -1495,6 +1562,9 @@ export function createGroundChunk(scene: Phaser.Scene, chunkX: number, chunkY: n
     }
   }
   ctx.putImageData(imageData, 0, 0);
+  if (biome === 'desert' && sceneLevelId === 6) {
+    drawWorldFissures(ctx, chunkX, chunkY, chunkSize, tileSize);
+  }
   if (scene.textures.exists(key)) scene.textures.remove(key);
   scene.textures.addCanvas(key, canvas);
   return key;
