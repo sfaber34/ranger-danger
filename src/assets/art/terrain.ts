@@ -609,7 +609,7 @@ function drawGroundDesert(tileX: number, tileY: number, levelId = 6) {
     let s = ((tileX * 73856093 + tileY * 19349669 + levelId * 83492791) >>> 0) % 2147483647;
     const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
     const sampleN = precomputeNoise(tileX, tileY, 7000 + levelId * 300, 4000, levelId === 8 ? 180 : 360);
-    const sampleBands = precomputeNoise(tileX, tileY, 2000, 9000 + levelId * 500, levelId === 7 ? 220 : 520);
+    const sampleBands = precomputeNoise(tileX, tileY, 2000, 9000 + levelId * 500, levelId === 7 ? 420 : 520);
     const pxHash = (x: number, y: number) => {
       let h = ((x * 374761393 + y * 668265263 + levelId * 1442695041) >>> 0);
       h = ((h ^ (h >> 13)) * 1103515245 + 12345) >>> 0;
@@ -617,7 +617,7 @@ function drawGroundDesert(tileX: number, tileY: number, levelId = 6) {
     };
 
     const fissureSand = ['#9f7b46', '#aa854f', '#b28e59', '#92703f'];
-    const duneSand = ['#b89356', '#c19d61', '#d0ad70', '#a9844c'];
+    const duneSand = ['#b89356', '#bd995d', '#c5a366', '#ae8950'];
     const templeStone = ['#8f6e42', '#9a7849', '#a88654', '#7d603a'];
     const palette = levelId === 8 ? templeStone : levelId === 7 ? duneSand : fissureSand;
 
@@ -629,8 +629,9 @@ function drawGroundDesert(tileX: number, tileY: number, levelId = 6) {
         const b = sampleBands(px, py);
         let idx = Math.min(3, Math.floor(n * 4));
         if (levelId === 7) {
-          const wave = Math.sin((wx + wy * 0.35) * 0.045) * 0.5 + 0.5;
-          idx = Math.min(3, Math.floor((wave * 0.55 + b * 0.45) * 4));
+          const wave = Math.sin((wx + wy * 0.35) * 0.024) * 0.5 + 0.5;
+          const duneTone = 0.18 + (wave * 0.5 + b * 0.3) * 0.68;
+          idx = Math.min(3, Math.floor(duneTone * 4));
         }
         put(px, py, palette[idx]);
 
@@ -644,11 +645,11 @@ function drawGroundDesert(tileX: number, tileY: number, levelId = 6) {
       }
     }
 
-    if (levelId === 7 && rnd() < 0.45) {
+    if (levelId === 7 && rnd() < 0.24) {
       const y = 4 + Math.floor(rnd() * 24);
       for (let x = 2; x < 30; x++) {
-        if (Math.sin((tileX * 32 + x) * 0.22 + y * 0.2) > 0.25) {
-          put(x, y + Math.floor(Math.sin(x * 0.3) * 2), '#d9bc7c');
+        if (Math.sin((tileX * 32 + x) * 0.11 + y * 0.16) > 0.45) {
+          put(x, y + Math.floor(Math.sin(x * 0.14) * 2), '#d9bc7c');
         }
       }
     }

@@ -23,6 +23,10 @@ type UISceneInitData = {
   difficulty?: Difficulty;
 };
 
+type TwoBossProgressNode =
+  | { kind: 'wave'; waveIndex: number }
+  | { kind: 'boss'; phase: 'mid' | 'final' };
+
 export class UIScene extends Phaser.Scene {
   hpBarGfx!: Phaser.GameObjects.Graphics;
   private hpBarX = 0; private hpBarY = 0; private hpBarW = 0; private hpBarH = 0;
@@ -127,6 +131,32 @@ export class UIScene extends Phaser.Scene {
   private displayWaveNum(cumulativeWave: number): number {
     if (this.difficulty !== 'endless') return cumulativeWave;
     return cumulativeWave - Math.floor(cumulativeWave / 4);
+  }
+
+  private twoBossProgressNodes(): TwoBossProgressNode[] | null {
+    if (this.biome === 'castle') {
+      return [
+        { kind: 'wave', waveIndex: 0 },
+        { kind: 'wave', waveIndex: 1 },
+        { kind: 'boss', phase: 'mid' },
+        { kind: 'wave', waveIndex: 2 },
+        { kind: 'wave', waveIndex: 3 },
+        { kind: 'boss', phase: 'final' },
+      ];
+    }
+    if (this.biome === 'desert') {
+      return [
+        { kind: 'wave', waveIndex: 0 },
+        { kind: 'wave', waveIndex: 1 },
+        { kind: 'wave', waveIndex: 2 },
+        { kind: 'boss', phase: 'mid' },
+        { kind: 'wave', waveIndex: 3 },
+        { kind: 'wave', waveIndex: 4 },
+        { kind: 'wave', waveIndex: 5 },
+        { kind: 'boss', phase: 'final' },
+      ];
+    }
+    return null;
   }
   /** Draw a small skull-and-jaw icon into the given Graphics object,
    *  centered on its local origin. Used as the boss marker in the
@@ -348,11 +378,11 @@ export class UIScene extends Phaser.Scene {
     this.progressLines = [];
     // Endless mode: 6 rolling nodes (current wave + next 5). Updated
     // dynamically in updateHud.
-    // Castle/Desert: 4 waves + two boss skulls = 6 nodes
+    // Castle/Desert: two-boss campaign layouts.
     // Others: waveCount waves + 1 boss = waveCount+1 nodes
-    const hasTwoBossProgress = this.biome === 'castle' || this.biome === 'desert';
+    const twoBossProgressNodes = this.twoBossProgressNodes();
     const totalNodes = this.difficulty === 'endless' ? 6
-      : hasTwoBossProgress ? 6
+      : twoBossProgressNodes ? twoBossProgressNodes.length
       : CFG.spawn.waveCount + 1;
     const nodeSpacing = this.p(36);
     const totalW = (totalNodes - 1) * nodeSpacing;
@@ -374,13 +404,14 @@ export class UIScene extends Phaser.Scene {
       this.progressCircles.push(circle);
       items.push(circle);
       // label (number or skull)
-      // Castle/Desert: nodes 2 and 5 are boss skulls
+      // Two-boss campaign layouts: skulls come from the node spec.
       // Endless: labels are dynamic \u2014 placeholder, updateHud sets them
       const isBoss = this.difficulty === 'endless' ? false
-        : hasTwoBossProgress ? (i === 2 || i === 5)
+        : twoBossProgressNodes ? twoBossProgressNodes[i].kind === 'boss'
         : i === totalNodes - 1;
-      const waveNum = hasTwoBossProgress
-        ? (i < 2 ? i + 1 : i === 2 ? 0 : i < 5 ? i : 0) // 1,2,skull,3,4,skull
+      const nodeSpec = twoBossProgressNodes?.[i];
+      const waveNum = nodeSpec?.kind === 'wave'
+        ? nodeSpec.waveIndex + 1
         : i + 1;
       const label = this.add.text(nx, nodeY, isBoss ? '' : `${waveNum}`, {
         fontFamily: 'monospace', fontSize: this.fs(10), color: '#556',
@@ -1103,31 +1134,29 @@ export class UIScene extends Phaser.Scene {
         }
       }
     } else if (this.biome === 'castle' || this.biome === 'desert') {
-      // Castle/Desert: 6 nodes — W1, W2, Boss, W3, W4, Boss
-      // Map node index to progress state
+      const nodes = this.twoBossProgressNodes();
+      if (!nodes) return;
       const cp = this.biome === 'castle' ? (s.castlePhase ?? 0) : (s.desertPhase ?? 0);
       for (let i = 0; i < this.progressCircles.length; i++) {
-        const isBossNode = (i === 2 || i === 5);
+        const node = nodes[i];
+        const isBossNode = node.kind === 'boss';
         let completed = false;
         let active = false;
         let current = false;
 
-        if (i === 0) { // Wave 1
-          completed = currentWave > 1 || cp >= 1;
-          current = currentWave === 1 && cp === 0;
-        } else if (i === 1) { // Wave 2
-          completed = cp >= 1;
-          current = currentWave === 2 && cp === 0;
-        } else if (i === 2) { // First boss
-          completed = s.midBossDefeated;
+        if (node.kind === 'wave') {
+          const waveNumber = node.waveIndex + 1;
+          const midBossWave = this.biome === 'desert' ? 3 : 2;
+          const finalBossWave = this.biome === 'desert' ? 6 : 4;
+          completed = waveNumber < currentWave
+            || (cp >= 1 && waveNumber <= midBossWave)
+            || (cp >= 3 && waveNumber <= finalBossWave);
+          current = currentWave === waveNumber
+            && ((waveNumber <= midBossWave && cp === 0) || (waveNumber > midBossWave && cp === 2));
+        } else if (node.phase === 'mid') {
+          completed = s.midBossDefeated || cp >= 2;
           active = cp === 1 && s.bossSpawned;
-        } else if (i === 3) { // Wave 3
-          completed = (cp >= 2 && currentWave > 3) || cp >= 3;
-          current = currentWave === 3 && cp === 2;
-        } else if (i === 4) { // Wave 4
-          completed = cp >= 3;
-          current = currentWave === 4 && cp === 2;
-        } else if (i === 5) { // Final boss
+        } else {
           active = cp === 3 && s.bossSpawned;
         }
 

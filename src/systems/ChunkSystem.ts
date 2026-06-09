@@ -6,7 +6,6 @@ import {
   SPIKE_PATTERNS,
   SPIKE_VARIANT_COUNT,
   CACTUS_VARIANT_COUNT,
-  QUICKSAND_VARIANT_COUNT,
   TEMPLE_BLOCK_VARIANT_COUNT,
   getRiverTileGrid,
   riverCenterPx,
@@ -565,46 +564,117 @@ export class ChunkSystem {
     const rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     const ptx = Math.floor(scene.player.x / t);
     const pty = Math.floor(scene.player.y / t);
-    const patterns = SPIKE_PATTERNS.slice(3);
     const nearSpawn = Math.abs(cx * cs) < scene.spawnDist + cs && Math.abs(cy * cs) < scene.spawnDist + cs;
     let placed = 0;
     let attempts = 0;
+
+    const makeQuicksandPattern = (): ClusterPattern => {
+      for (let shapeAttempt = 0; shapeAttempt < 16; shapeAttempt++) {
+        const targetTiles = 5 + Math.floor(rng() * 4);
+        const tiles = [{ dx: 0, dy: 0 }];
+        const seen = new Set(['0,0']);
+        let guard = 0;
+        while (tiles.length < targetTiles && guard < targetTiles * 14) {
+          guard++;
+          const base = tiles[Math.floor(rng() * tiles.length)];
+          const dir = Math.floor(rng() * 4);
+          const dx = base.dx + (dir === 0 ? 1 : dir === 1 ? -1 : 0);
+          const dy = base.dy + (dir === 2 ? 1 : dir === 3 ? -1 : 0);
+          const key = `${dx},${dy}`;
+          if (seen.has(key)) continue;
+          const nextMinX = Math.min(dx, ...tiles.map(tile => tile.dx));
+          const nextMaxX = Math.max(dx, ...tiles.map(tile => tile.dx));
+          const nextMinY = Math.min(dy, ...tiles.map(tile => tile.dy));
+          const nextMaxY = Math.max(dy, ...tiles.map(tile => tile.dy));
+          if (nextMaxX - nextMinX > 3 || nextMaxY - nextMinY > 3) continue;
+          seen.add(key);
+          tiles.push({ dx, dy });
+        }
+
+        const minX = Math.min(...tiles.map(tile => tile.dx));
+        const minY = Math.min(...tiles.map(tile => tile.dy));
+        const normalized = tiles.map(tile => ({ dx: tile.dx - minX, dy: tile.dy - minY }));
+        const w = Math.max(...normalized.map(tile => tile.dx)) + 1;
+        const h = Math.max(...normalized.map(tile => tile.dy)) + 1;
+        const isLine = w === 1 || h === 1;
+        const isFilledRect = normalized.length === w * h;
+        if (!isLine && !isFilledRect) return { tiles: normalized, w, h };
+      }
+      return {
+        tiles: [{ dx: 1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }, { dx: 2, dy: 1 }, { dx: 1, dy: 2 }],
+        w: 3,
+        h: 3,
+      };
+    };
+
+    const drawPool = (tiles: { dx: number; dy: number }[], ox: number, oy: number) => {
+      const pool = scene.add.graphics().setDepth(1);
+      let minDx = Infinity, maxDx = -Infinity, minDy = Infinity, maxDy = -Infinity;
+      for (const tile of tiles) {
+        minDx = Math.min(minDx, tile.dx);
+        maxDx = Math.max(maxDx, tile.dx);
+        minDy = Math.min(minDy, tile.dy);
+        maxDy = Math.max(maxDy, tile.dy);
+      }
+      const cxPx = (ox + (minDx + maxDx + 1) / 2) * t;
+      const cyPx = (oy + (minDy + maxDy + 1) / 2) * t;
+      const w = (maxDx - minDx + 1) * t;
+      const h = (maxDy - minDy + 1) * t;
+      const outerW = w * 0.88;
+      const outerH = h * 0.82;
+      const outerR = Math.min(t * 0.22, outerW * 0.18, outerH * 0.18);
+      const innerW = outerW - t * 0.34;
+      const innerH = outerH - t * 0.3;
+      const innerR = Math.min(t * 0.18, innerW * 0.16, innerH * 0.16);
+
+      pool.fillStyle(0x8a6840, 0.5);
+      pool.fillRoundedRect(cxPx - outerW / 2, cyPx - outerH / 2, outerW, outerH, outerR);
+      pool.fillStyle(0x9f7a45, 0.72);
+      pool.fillRoundedRect(cxPx - innerW / 2, cyPx - innerH / 2, innerW, innerH, innerR);
+      pool.lineStyle(1, 0x8a6740, 0.1);
+      for (let i = 0; i < Math.max(2, tiles.length); i++) {
+        const x = cxPx + (rng() - 0.5) * innerW * 0.72;
+        const y = cyPx + (rng() - 0.5) * innerH * 0.58;
+        pool.lineBetween(x - t * (0.12 + rng() * 0.14), y, x + t * (0.12 + rng() * 0.14), y + (rng() - 0.5) * t * 0.08);
+      }
+      const ripple = scene.add.graphics().setDepth(2);
+      ripple.lineStyle(1, 0xd8b878, 0.38);
+      for (let i = 0; i < Math.max(2, Math.floor(tiles.length * 0.7)); i++) {
+        const wx = cxPx + (rng() - 0.5) * innerW * 0.62;
+        const wy = cyPx + (rng() - 0.5) * innerH * 0.48;
+        ripple.strokeEllipse(wx, wy, t * (0.22 + rng() * 0.14), t * (0.08 + rng() * 0.06));
+      }
+      scene.tweens.add({
+        targets: ripple,
+        alpha: { from: 0.45, to: 0.18 },
+        duration: 1400 + Math.floor(rng() * 500),
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.InOut',
+      });
+      scene.quicksandSprites.push(pool, ripple);
+    };
+
     while (placed < poolsPerChunk && attempts < poolsPerChunk * 8) {
       attempts++;
-      const pattern = patterns[Math.floor(rng() * patterns.length)];
+      const pattern = makeQuicksandPattern();
       const ox = chunkTileX + Math.floor(rng() * (cs - pattern.w));
       const oy = chunkTileY + Math.floor(rng() * (cs - pattern.h));
       if (Math.abs(ox) < 4 && Math.abs(oy) < 4) continue;
+      const tiles = pattern.tiles;
       let blocked = false;
-      for (const tile of pattern.tiles) {
+      for (const tile of tiles) {
         const gx = ox + tile.dx, gy = oy + tile.dy;
         if (gridGet(scene.grid, gx, gy) !== 0) { blocked = true; break; }
         if (Math.abs(gx - ptx) <= 1 && Math.abs(gy - pty) <= 1) { blocked = true; break; }
       }
       if (blocked) continue;
-      for (const tile of pattern.tiles) gridSet(scene.grid, ox + tile.dx, oy + tile.dy, 8);
+      for (const tile of tiles) gridSet(scene.grid, ox + tile.dx, oy + tile.dy, 8);
       if (nearSpawn && !canReachFromSpawnDirections(scene.grid, ptx, pty, scene.spawnDist, 3)) {
-        for (const tile of pattern.tiles) gridSet(scene.grid, ox + tile.dx, oy + tile.dy, 0);
+        for (const tile of tiles) gridSet(scene.grid, ox + tile.dx, oy + tile.dy, 0);
         continue;
       }
-      for (const tile of pattern.tiles) {
-        const gx = ox + tile.dx, gy = oy + tile.dy;
-        const wx = gx * t + t / 2;
-        const wy = gy * t + t / 2;
-        const variant = Math.floor(rng() * QUICKSAND_VARIANT_COUNT);
-        const spr = scene.add.image(wx, wy, `desert_quicksand_${variant}`).setDepth(1);
-        scene.tweens.add({
-          targets: spr,
-          angle: { from: -1.5, to: 1.5 },
-          scaleX: { from: 0.95, to: 1.05 },
-          scaleY: { from: 1.05, to: 0.95 },
-          duration: 1200 + variant * 180,
-          yoyo: true,
-          repeat: -1,
-          ease: 'Sine.InOut',
-        });
-        scene.quicksandSprites.push(spr);
-      }
+      drawPool(tiles, ox, oy);
       placed++;
     }
   }
