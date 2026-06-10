@@ -508,11 +508,58 @@ export class ChunkSystem {
     const ptx = Math.floor(scene.player.x / t);
     const pty = Math.floor(scene.player.y / t);
     const nearSpawn = Math.abs(cx * cs) < scene.spawnDist + cs && Math.abs(cy * cs) < scene.spawnDist + cs;
+    const makeCactusBlobPattern = (): ClusterPattern => {
+      for (let shapeAttempt = 0; shapeAttempt < 16; shapeAttempt++) {
+        const targetTiles = 3 + Math.floor(rng() * 4);
+        const tiles = [{ dx: 0, dy: 0 }];
+        const seen = new Set(['0,0']);
+        let guard = 0;
+        while (tiles.length < targetTiles && guard < targetTiles * 14) {
+          guard++;
+          const base = tiles[Math.floor(rng() * tiles.length)];
+          const dir = Math.floor(rng() * 4);
+          const dx = base.dx + (dir === 0 ? 1 : dir === 1 ? -1 : 0);
+          const dy = base.dy + (dir === 2 ? 1 : dir === 3 ? -1 : 0);
+          const key = `${dx},${dy}`;
+          if (seen.has(key)) continue;
+          const nextMinX = Math.min(dx, ...tiles.map(tile => tile.dx));
+          const nextMaxX = Math.max(dx, ...tiles.map(tile => tile.dx));
+          const nextMinY = Math.min(dy, ...tiles.map(tile => tile.dy));
+          const nextMaxY = Math.max(dy, ...tiles.map(tile => tile.dy));
+          if (nextMaxX - nextMinX > 2 || nextMaxY - nextMinY > 2) continue;
+          seen.add(key);
+          tiles.push({ dx, dy });
+        }
+        const minX = Math.min(...tiles.map(tile => tile.dx));
+        const minY = Math.min(...tiles.map(tile => tile.dy));
+        const normalized = tiles.map(tile => ({ dx: tile.dx - minX, dy: tile.dy - minY }));
+        const w = Math.max(...normalized.map(tile => tile.dx)) + 1;
+        const h = Math.max(...normalized.map(tile => tile.dy)) + 1;
+        const isLine = w === 1 || h === 1;
+        const isFilledRect = normalized.length === w * h;
+        if (isLine || isFilledRect) continue;
+        const tileSet = new Set(normalized.map(tile => `${tile.dx},${tile.dy}`));
+        const filled = normalized.slice();
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            if (tileSet.has(`${x},${y}`)) continue;
+            const up = y > 0 && tileSet.has(`${x},${y - 1}`);
+            const dn = y < h - 1 && tileSet.has(`${x},${y + 1}`);
+            const lf = x > 0 && tileSet.has(`${x - 1},${y}`);
+            const rt = x < w - 1 && tileSet.has(`${x + 1},${y}`);
+            if (up && dn && lf && rt) filled.push({ dx: x, dy: y });
+          }
+        }
+        return { tiles: filled, w, h };
+      }
+      return { tiles: [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 }], w: 2, h: 2 };
+    };
+
     let placed = 0;
     let attempts = 0;
     while (placed < clustersPerChunk && attempts < maxAttempts) {
       attempts++;
-      const pattern = TREE_PATTERNS[Math.floor(rng() * Math.min(8, TREE_PATTERNS.length))];
+      const pattern = makeCactusBlobPattern();
       const ox = chunkTileX + Math.floor(rng() * (cs - pattern.w));
       const oy = chunkTileY + Math.floor(rng() * (cs - pattern.h));
       if (Math.abs(ox) < 4 && Math.abs(oy) < 4) continue;
@@ -607,8 +654,8 @@ export class ChunkSystem {
       };
     };
 
+    let poolIndex = 0;
     const drawPool = (tiles: { dx: number; dy: number }[], ox: number, oy: number) => {
-      const pool = scene.add.graphics().setDepth(1);
       let minDx = Infinity, maxDx = -Infinity, minDy = Infinity, maxDy = -Infinity;
       for (const tile of tiles) {
         minDx = Math.min(minDx, tile.dx);
@@ -616,33 +663,57 @@ export class ChunkSystem {
         minDy = Math.min(minDy, tile.dy);
         maxDy = Math.max(maxDy, tile.dy);
       }
-      const cxPx = (ox + (minDx + maxDx + 1) / 2) * t;
-      const cyPx = (oy + (minDy + maxDy + 1) / 2) * t;
-      const w = (maxDx - minDx + 1) * t;
-      const h = (maxDy - minDy + 1) * t;
-      const outerW = w * 0.88;
-      const outerH = h * 0.82;
-      const outerR = Math.min(t * 0.22, outerW * 0.18, outerH * 0.18);
-      const innerW = outerW - t * 0.34;
-      const innerH = outerH - t * 0.3;
-      const innerR = Math.min(t * 0.18, innerW * 0.16, innerH * 0.16);
-
-      pool.fillStyle(0x8a6840, 0.5);
-      pool.fillRoundedRect(cxPx - outerW / 2, cyPx - outerH / 2, outerW, outerH, outerR);
-      pool.fillStyle(0x9f7a45, 0.72);
-      pool.fillRoundedRect(cxPx - innerW / 2, cyPx - innerH / 2, innerW, innerH, innerR);
-      pool.lineStyle(1, 0x8a6740, 0.1);
-      for (let i = 0; i < Math.max(2, tiles.length); i++) {
-        const x = cxPx + (rng() - 0.5) * innerW * 0.72;
-        const y = cyPx + (rng() - 0.5) * innerH * 0.58;
-        pool.lineBetween(x - t * (0.12 + rng() * 0.14), y, x + t * (0.12 + rng() * 0.14), y + (rng() - 0.5) * t * 0.08);
+      const pad = t * 0.4;
+      const texW = Math.ceil((maxDx - minDx + 1) * t + pad * 2);
+      const texH = Math.ceil((maxDy - minDy + 1) * t + pad * 2);
+      const worldCx = (ox + (minDx + maxDx + 1) / 2) * t;
+      const worldCy = (oy + (minDy + maxDy + 1) / 2) * t;
+      const tileShapes = tiles.map(tile => ({
+        tcx: (tile.dx - minDx + 0.5) * t + pad,
+        tcy: (tile.dy - minDy + 0.5) * t + pad,
+        w: t * (1.26 + rng() * 0.2),
+        h: t * (1.26 + rng() * 0.2),
+        r: t * (0.32 + rng() * 0.14),
+        jx: (rng() - 0.5) * t * 0.18,
+        jy: (rng() - 0.5) * t * 0.18,
+      }));
+      const rimBw = 2.5;
+      const g = scene.make.graphics({ x: 0, y: 0 }, false);
+      g.fillStyle(0xa98552, 1);
+      for (const s of tileShapes) {
+        const rw = s.w + rimBw * 2;
+        const rh = s.h + rimBw * 2;
+        g.fillRoundedRect(s.tcx - rw / 2 + s.jx, s.tcy - rh / 2 + s.jy, rw, rh, s.r + rimBw);
       }
+      g.fillStyle(0x97744a, 1);
+      for (const s of tileShapes) {
+        g.fillRoundedRect(s.tcx - s.w / 2 + s.jx, s.tcy - s.h / 2 + s.jy, s.w, s.h, s.r);
+      }
+      g.lineStyle(1, 0x6f4f2a, 0.4);
+      for (const tile of tiles) {
+        const tcx = (tile.dx - minDx + 0.5) * t + pad;
+        const tcy = (tile.dy - minDy + 0.5) * t + pad;
+        const x = tcx + (rng() - 0.5) * t * 0.36;
+        const y = tcy + (rng() - 0.5) * t * 0.28;
+        g.lineBetween(x - t * (0.12 + rng() * 0.14), y, x + t * (0.12 + rng() * 0.14), y + (rng() - 0.5) * t * 0.08);
+      }
+
+      const texKey = `qs_${cx}_${cy}_${poolIndex++}`;
+      if (scene.textures.exists(texKey)) scene.textures.remove(texKey);
+      g.generateTexture(texKey, texW, texH);
+      g.destroy();
+      const img = scene.add.image(worldCx, worldCy, texKey).setOrigin(0.5).setDepth(1);
+      scene.quicksandTextureKeys.push(texKey);
+
       const ripple = scene.add.graphics().setDepth(2);
-      ripple.lineStyle(1, 0xd8b878, 0.38);
-      for (let i = 0; i < Math.max(2, Math.floor(tiles.length * 0.7)); i++) {
-        const wx = cxPx + (rng() - 0.5) * innerW * 0.62;
-        const wy = cyPx + (rng() - 0.5) * innerH * 0.48;
-        ripple.strokeEllipse(wx, wy, t * (0.22 + rng() * 0.14), t * (0.08 + rng() * 0.06));
+      ripple.lineStyle(1, 0xd8b878, 0.45);
+      for (const tile of tiles) {
+        if (rng() > 0.65) continue;
+        const tcx = (ox + tile.dx + 0.5) * t;
+        const tcy = (oy + tile.dy + 0.5) * t;
+        const wx = tcx + (rng() - 0.5) * t * 0.32;
+        const wy = tcy + (rng() - 0.5) * t * 0.24;
+        ripple.strokeEllipse(wx, wy, t * (0.24 + rng() * 0.12), t * (0.1 + rng() * 0.06));
       }
       scene.tweens.add({
         targets: ripple,
@@ -652,7 +723,8 @@ export class ChunkSystem {
         repeat: -1,
         ease: 'Sine.InOut',
       });
-      scene.quicksandSprites.push(pool, ripple);
+
+      scene.quicksandSprites.push(img, ripple);
     };
 
     while (placed < poolsPerChunk && attempts < poolsPerChunk * 8) {

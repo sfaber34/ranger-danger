@@ -451,17 +451,9 @@ export class UIScene extends Phaser.Scene {
     this.waveBarH = this.p(14);
     this.waveBarGfx = this.add.graphics();
 
-    // Build error message (persistent while hovering invalid tile)
+    // Build mode cancel hint (sits closest to the hotbar)
     const hotbarTop = H - this.p(48) - this.p(32); // matches hotbarY
-    this.buildErrorText = this.add.text(W / 2, hotbarTop - this.p(18), '', {
-      fontFamily: 'monospace', fontSize: this.fs(13), color: '#ff6a6a',
-      stroke: '#0b0f1a', strokeThickness: this.p(3),
-      backgroundColor: '#1a0a0aCC',
-      padding: { x: Number(this.p(10)), y: Number(this.p(4)) }
-    }).setOrigin(0.5, 1).setDepth(900).setVisible(false);
-
-    // Build mode cancel hint
-    this.buildHintText = this.add.text(W / 2, hotbarTop - this.p(38),
+    this.buildHintText = this.add.text(W / 2, hotbarTop - this.p(18),
       this.isMobile
         ? 'Tap selected item again to leave build menu'
         : 'Right-click, B, or ESC to leave build menu',
@@ -471,6 +463,15 @@ export class UIScene extends Phaser.Scene {
         backgroundColor: '#11172aDD', padding: { x: Number(this.p(8)), y: Number(this.p(4)) }
       }
     ).setOrigin(0.5, 1).setDepth(900).setVisible(false);
+
+    // Build error message (sits above the cancel hint while hovering invalid tile)
+    const errorY = this.buildHintText.y - this.buildHintText.height - this.p(8);
+    this.buildErrorText = this.add.text(W / 2, errorY, '', {
+      fontFamily: 'monospace', fontSize: this.fs(13), color: '#ff6a6a',
+      stroke: '#0b0f1a', strokeThickness: this.p(3),
+      backgroundColor: '#1a0a0aCC',
+      padding: { x: Number(this.p(10)), y: Number(this.p(4)) }
+    }).setOrigin(0.5, 1).setDepth(900).setVisible(false);
 
     // listen for HUD updates
     getEvents(this.game.events).on('hud', this.onHud);

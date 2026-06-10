@@ -584,65 +584,38 @@ export class CombatSystem {
     }
   }
 
-  spawnCrater(x: number, y: number, radius: number) {
+  spawnCrater(x: number, y: number, _radius: number) {
     const scene = this.scene;
     const g = scene.add.graphics().setDepth(0);
-    const cr = Math.max(11, Math.min(22, radius * 0.34));
-    // Ash streaks radiating outward — thicker near crater, tapering to a point
+    const cr = 10;
     const streakColors = [0x1a1008, 0x241810, 0x2e2014];
     const streaks = Phaser.Math.Between(5, 8);
     for (let i = 0; i < streaks; i++) {
       const a = (i / streaks) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.35, 0.35);
-      const len = Phaser.Math.FloatBetween(cr * 0.45, cr * 1.1);
+      const len = Phaser.Math.FloatBetween(6, 12);
       const steps = 5;
       const color = streakColors[i % 3];
       const alpha = Phaser.Math.FloatBetween(0.45, 0.65);
       g.fillStyle(color, alpha);
       for (let s = 0; s < steps; s++) {
-        const t = s / (steps - 1); // 0 at crater edge, 1 at tip
+        const t = s / (steps - 1);
         const d = cr * 0.7 + len * t;
         const sx = x + Math.cos(a) * d;
         const sy = y + Math.sin(a) * d;
-        const r = 2.8 * (1 - t * 0.85); // thick at start, tiny point at end
+        const r = 2.2 * (1 - t * 0.85);
         g.fillCircle(sx, sy, Math.max(r, 0.5));
       }
     }
-    // Brown crater bowl
     g.fillStyle(0x3e2e1a, 0.6);
     g.fillEllipse(x, y, cr * 2, cr * 1.5);
-    // Darker center
     g.fillStyle(0x2a1e10, 0.5);
     g.fillEllipse(x + Phaser.Math.FloatBetween(-1, 1), y + Phaser.Math.FloatBetween(-1, 1), cr * 1.1, cr * 0.8);
-    // Light dirt highlight on top rim
     g.fillStyle(0x9a7a50, 0.25);
     g.fillEllipse(x, y - cr * 0.3, cr * 1.3, cr * 0.35);
-    const dustColors = [0x806848, 0xa08458, 0x5c4a34];
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.25, 0.25);
-      const d = Phaser.Math.FloatBetween(cr * 1.0, cr * 1.9);
-      const dust = scene.add.ellipse(
-        x + Math.cos(a) * d,
-        y + Math.sin(a) * d * 0.65,
-        Phaser.Math.Between(10, 18),
-        Phaser.Math.Between(4, 8),
-        dustColors[i % dustColors.length],
-        0.4
-      ).setDepth(0.2).setRotation(a);
-      scene.tweens.add({
-        targets: dust,
-        alpha: 0,
-        scaleX: 1.6,
-        scaleY: 1.25,
-        duration: Phaser.Math.Between(900, 1300),
-        ease: 'Sine.Out',
-        onComplete: () => dust.destroy()
-      });
-    }
-    // Fade out over 15 seconds then destroy
     scene.tweens.add({
       targets: g,
       alpha: 0,
-      duration: 15000,
+      duration: 6000,
       ease: 'Sine.In',
       onComplete: () => g.destroy()
     });

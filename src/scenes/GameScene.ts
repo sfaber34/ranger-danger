@@ -223,6 +223,7 @@ export class GameScene extends Phaser.Scene {
   cactusSprites: Phaser.GameObjects.GameObject[] = [];
   cactusChunksGenerated = new Set<string>();
   quicksandSprites: Phaser.GameObjects.GameObject[] = [];
+  quicksandTextureKeys: string[] = [];
   quicksandChunksGenerated = new Set<string>();
   templeBlockSprites: Phaser.GameObjects.GameObject[] = [];
   templeChunksGenerated = new Set<string>();
@@ -311,7 +312,11 @@ export class GameScene extends Phaser.Scene {
     this.nextSpikeDmgAt = 0;
     this.cactusSprites = [];
     this.cactusChunksGenerated = new Set();
+    for (const key of this.quicksandTextureKeys) {
+      if (this.textures.exists(key)) this.textures.remove(key);
+    }
     this.quicksandSprites = [];
+    this.quicksandTextureKeys = [];
     this.quicksandChunksGenerated = new Set();
     this.templeBlockSprites = [];
     this.templeChunksGenerated = new Set();
