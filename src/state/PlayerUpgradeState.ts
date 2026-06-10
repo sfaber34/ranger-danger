@@ -2,7 +2,7 @@
  * In-level player upgrade state. Counts per stat reset on every
  * GameScene.init() — bonuses never carry across levels or replays.
  *
- * Stat scaling is additive: each purchase adds 15% of the base stat
+ * Stat scaling is additive: each purchase adds 20% of the base stat
  * value. Cost scaling is multiplicative: each purchase makes the next
  * one 1.5× more expensive, so the curve self-limits via affordability.
  */
@@ -21,7 +21,7 @@ export const STAT_LABEL: Record<UpgradableStat, string> = {
   maxHp:    'Max HP',
 };
 
-const STAT_INC = 0.15;
+const STAT_INC = 0.20;
 const COST_INC = 1.3;
 const BASE_COST = 50;
 
