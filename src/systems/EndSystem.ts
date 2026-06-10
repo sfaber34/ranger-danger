@@ -70,6 +70,16 @@ export class EndSystem {
         }
         return;
       }
+      if (scene.biome === 'desert' && scene.bossState.desertPhase < 3) {
+        if (!scene.bossState.midBossDefeated && scene.bossState.desertPhase === 1) {
+          scene.bossState.recordMidBossDefeated();
+          getEvents(scene.game.events).emit('boss-died');
+          for (const e of scene.enemies.getChildren() as Enemy[]) {
+            if (!e.dying && e.active) e.hurt(9999);
+          }
+        }
+        return;
+      }
       if (this.scene.endState.winDelayUntil === 0) {
         getEvents(scene.game.events).emit('boss-died');
         this.scene.endState.winDelayUntil = scene.vTime + 12000;

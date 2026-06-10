@@ -1724,3 +1724,161 @@ export function drawDragonFireExplosion(frame: number) {
     }
   };
 }
+
+export type DesertBossVariant = 'burrower' | 'scorpion' | 'sandstorm' | 'wraith' | 'construct' | 'sun_priest';
+
+export function drawDesertBoss(frame: BossFrame, variant: DesertBossVariant) {
+  return (put: Put) => {
+    if (frame.startsWith('die')) {
+      const step = parseInt(frame.slice(3));
+      const r = 24 - step * 4;
+      if (r <= 0) return;
+      const col = variant === 'sun_priest' ? '#ffd84a'
+        : variant === 'construct' ? '#b89052'
+        : variant === 'sandstorm' ? '#c8a45a'
+        : variant === 'burrower' ? '#8a5830'
+        : '#a06028';
+      disc(put, 32, 34, r, col);
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2 + step * 0.35;
+        const d = step * 7 + 8;
+        put(Math.round(32 + Math.cos(a) * d), Math.round(34 + Math.sin(a) * d), '#6a4528');
+      }
+      return;
+    }
+    const flash = frame === 'hit';
+    const bob = frame === 'idle1' || frame === 'move1' ? -1 : frame === 'move3' ? 1 : 0;
+    const wind = frame === 'chargeWind';
+    const atk = frame === 'atk0' || frame === 'atk1';
+    const pal = variant === 'wraith'
+      ? { d: '#4a3c30', m: '#9f875f', l: '#e0d0a0', hi: '#64c8ff' }
+      : variant === 'construct'
+      ? { d: '#4d3820', m: '#9a7849', l: '#d8b878', hi: '#40e0ff' }
+      : variant === 'sun_priest'
+      ? { d: '#8a3a10', m: '#e09a28', l: '#ffd84a', hi: '#ffffff' }
+      : variant === 'sandstorm'
+      ? { d: '#5a421f', m: '#b8893d', l: '#e0c06f', hi: '#fff0b0' }
+      : variant === 'burrower'
+      ? { d: '#3f2417', m: '#8a5830', l: '#c88a4a', hi: '#ffd090' }
+      : { d: '#4a2512', m: '#9a5a24', l: '#d08a3a', hi: '#ffcf70' };
+    const d = flash ? P.white : pal.d;
+    const m = flash ? P.white : pal.m;
+    const l = flash ? P.white : pal.l;
+    const hi = flash ? P.white : pal.hi;
+
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -24; dx <= 24; dx++) {
+        if ((dx * dx) / 576 + (dy * dy) / 6 <= 1) put(32 + dx, 58 + dy, P.shadow);
+      }
+    }
+
+    if (variant === 'burrower') {
+      const sway = frame === 'move1' ? -2 : frame === 'move3' ? 2 : 0;
+      for (let i = 0; i < 7; i++) {
+        const x = 15 + i * 5;
+        const y = 42 - Math.abs(i - 3) * 4 + bob;
+        ellipse(put, x + sway, y, 8, 7, i % 2 ? d : m);
+        ellipse(put, x + sway, y - 2, 6, 5, i % 2 ? m : l);
+        rect(put, x - 5 + sway, y + 3, 10, 2, d);
+      }
+      ellipse(put, 45 + sway, 22 + bob, 12, 10, d);
+      ellipse(put, 44 + sway, 20 + bob, 10, 8, m);
+      for (let i = 0; i < 6; i++) {
+        const a = -0.9 + i * 0.36;
+        line(put,
+          Math.round(50 + sway + Math.cos(a) * 4),
+          Math.round(20 + bob + Math.sin(a) * 4),
+          Math.round(57 + sway + Math.cos(a) * (atk ? 10 : 7)),
+          Math.round(20 + bob + Math.sin(a) * (atk ? 10 : 7)),
+          hi);
+      }
+      disc(put, 41 + sway, 18 + bob, 2, P.outline);
+      disc(put, 48 + sway, 18 + bob, 2, P.outline);
+      return;
+    }
+
+    if (variant === 'scorpion') {
+      ellipse(put, 30, 36 + bob, 20, 13, d);
+      ellipse(put, 30, 34 + bob, 18, 11, m);
+      ellipse(put, 26, 31 + bob, 10, 6, l);
+      for (let i = 0; i < 5; i++) {
+        const lx = 14 + i * 5;
+        line(put, lx, 44 + bob, lx - 9, 53 + ((i + (frame === 'move1' ? 1 : 0)) % 2), d);
+        line(put, lx + 8, 44 + bob, lx + 16, 53 + ((i + (frame === 'move3' ? 1 : 0)) % 2), d);
+      }
+      rect(put, 43, 18 + bob, 6, 22, d);
+      rect(put, 47, 13 + bob, 8, 6, m);
+      disc(put, 56, 14 + bob, wind ? 4 : 3, wind ? hi : '#d04020');
+      rect(put, 10, 31 + bob, atk ? 12 : 8, 5, d);
+      rect(put, 45, 31 + bob, atk ? 12 : 8, 5, d);
+      put(24, 29 + bob, '#ffd84a'); put(35, 29 + bob, '#ffd84a');
+      return;
+    }
+
+    if (variant === 'sandstorm') {
+      ellipse(put, 32, 36 + bob, 18, 15, d);
+      ellipse(put, 32, 33 + bob, 16, 13, m);
+      ellipse(put, 23, 26 + bob, 9, 9, d);
+      ellipse(put, 22, 24 + bob, 8, 8, m);
+      rect(put, 16, 46 + bob, 10, 8, d);
+      rect(put, 38, 46 - bob, 10, 8, d);
+      rect(put, 12, 34 + bob, atk ? 16 : 10, 5, d);
+      rect(put, 42, 34 + bob, atk ? 16 : 10, 5, d);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + (wind ? 0.4 : 0);
+        line(put,
+          Math.round(32 + Math.cos(a) * 18),
+          Math.round(34 + bob + Math.sin(a) * 12),
+          Math.round(32 + Math.cos(a) * 24),
+          Math.round(34 + bob + Math.sin(a) * 17),
+          i % 2 ? l : hi);
+      }
+      disc(put, 20, 23 + bob, 2, P.outline);
+      if (wind || atk) ring(put, 32, 34 + bob, 20, hi);
+      return;
+    }
+
+    if (variant === 'wraith') {
+      ellipse(put, 32, 30 + bob, 17, 21, d);
+      ellipse(put, 32, 28 + bob, 15, 19, m);
+      for (let i = 0; i < 9; i++) {
+        const x = 17 + i * 4;
+        line(put, x, 47 + bob, x - 4 + i, 58, i % 2 ? d : l);
+      }
+      disc(put, 25, 27 + bob, 2, hi); disc(put, 39, 27 + bob, 2, hi);
+      if (atk || wind) ring(put, 32, 31 + bob, wind ? 15 : 11, '#64c8ff');
+      return;
+    }
+
+    if (variant === 'construct') {
+      rect(put, 16, 18 + bob, 32, 33, d);
+      rect(put, 18, 16 + bob, 28, 32, m);
+      rect(put, 20, 18 + bob, 24, 5, l);
+      rect(put, 20, 34 + bob, 24, 4, d);
+      rect(put, 10, 42 + bob, 14, 10, d);
+      rect(put, 40, 42 - bob, 14, 10, d);
+      rect(put, 11, 28 + bob, 8, atk ? 18 : 12, m);
+      rect(put, 45, 28 + bob, 8, atk ? 18 : 12, m);
+      disc(put, 25, 29 + bob, 2, hi); disc(put, 39, 29 + bob, 2, hi);
+      return;
+    }
+
+    // Sun Priest
+    ellipse(put, 32, 34 + bob, 15, 18, d);
+    ellipse(put, 32, 31 + bob, 13, 16, m);
+    rect(put, 22, 21 + bob, 20, 5, l);
+    disc(put, 32, 18 + bob, wind ? 9 : 7, l);
+    disc(put, 32, 18 + bob, wind ? 5 : 4, hi);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + (wind ? 0.25 : 0);
+      line(put,
+        Math.round(32 + Math.cos(a) * 11),
+        Math.round(18 + bob + Math.sin(a) * 11),
+        Math.round(32 + Math.cos(a) * 16),
+        Math.round(18 + bob + Math.sin(a) * 16),
+        l);
+    }
+    disc(put, 27, 31 + bob, 2, P.outline); disc(put, 37, 31 + bob, 2, P.outline);
+    if (atk) ring(put, 32, 35 + bob, 18, '#ffd84a');
+  };
+}

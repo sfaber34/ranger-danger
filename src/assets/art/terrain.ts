@@ -604,6 +604,155 @@ function drawGroundCastle(tileX: number, tileY: number) {
   };
 }
 
+function drawGroundDesert(tileX: number, tileY: number, levelId = 6) {
+  return (put: Put) => {
+    let s = ((tileX * 73856093 + tileY * 19349669 + levelId * 83492791) >>> 0) % 2147483647;
+    const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    const sampleN = precomputeNoise(tileX, tileY, 7000 + levelId * 300, 4000, levelId === 8 ? 180 : 360);
+    const sampleBands = precomputeNoise(tileX, tileY, 2000, 9000 + levelId * 500, levelId === 7 ? 420 : 520);
+    const pxHash = (x: number, y: number) => {
+      let h = ((x * 374761393 + y * 668265263 + levelId * 1442695041) >>> 0);
+      h = ((h ^ (h >> 13)) * 1103515245 + 12345) >>> 0;
+      return (h & 0xffff) / 0xffff;
+    };
+
+    const fissureSand = ['#9f7b46', '#aa854f', '#b28e59', '#92703f'];
+    const duneSand = ['#b89356', '#bd995d', '#c5a366', '#ae8950'];
+    const templeStone = ['#8f6e42', '#9a7849', '#a88654', '#7d603a'];
+    const palette = levelId === 8 ? templeStone : levelId === 7 ? duneSand : fissureSand;
+
+    for (let py = 0; py < 32; py++) {
+      for (let px = 0; px < 32; px++) {
+        const wx = tileX * 32 + px;
+        const wy = tileY * 32 + py;
+        const n = sampleN(px, py);
+        const b = sampleBands(px, py);
+        let idx = Math.min(3, Math.floor(n * 4));
+        if (levelId === 7) {
+          const wave = Math.sin((wx + wy * 0.35) * 0.024) * 0.5 + 0.5;
+          const duneTone = 0.18 + (wave * 0.5 + b * 0.3) * 0.68;
+          idx = Math.min(3, Math.floor(duneTone * 4));
+        }
+        put(px, py, palette[idx]);
+
+        if (levelId === 8) {
+          const slabX = ((wx % 32) + 32) % 32;
+          const slabY = ((wy % 32) + 32) % 32;
+          if (slabX === 0 || slabY === 0) put(px, py, '#5e462a');
+          else if (slabX === 1 || slabY === 1) put(px, py, '#b99662');
+          if ((slabX === 14 || slabX === 15) && pxHash(wx, wy) < 0.18) put(px, py, '#6c5030');
+        }
+      }
+    }
+
+    if (levelId === 7 && rnd() < 0.24) {
+      const y = 4 + Math.floor(rnd() * 24);
+      for (let x = 2; x < 30; x++) {
+        if (Math.sin((tileX * 32 + x) * 0.11 + y * 0.16) > 0.45) {
+          put(x, y + Math.floor(Math.sin(x * 0.14) * 2), '#d9bc7c');
+        }
+      }
+    }
+
+    if (levelId === 8 && rnd() < 0.22) {
+      const cx = 5 + Math.floor(rnd() * 22);
+      const cy = 5 + Math.floor(rnd() * 22);
+      for (let i = 0; i < 8; i++) {
+        put(cx + Math.floor(rnd() * 7 - 3), cy + Math.floor(rnd() * 7 - 3), rnd() < 0.5 ? '#594126' : '#c7a36a');
+      }
+    }
+
+    if (rnd() < 0.2) {
+      const rx = 2 + Math.floor(rnd() * 28);
+      const ry = 2 + Math.floor(rnd() * 28);
+      put(rx, ry, '#6d5942');
+      if (rnd() < 0.6) put(rx + 1, ry, '#4f3f30');
+    }
+  };
+}
+
+function drawWorldFissures(ctx: CanvasRenderingContext2D, chunkX: number, chunkY: number, chunkSize: number, tileSize: number) {
+  const pxSize = chunkSize * tileSize;
+  const worldX0 = chunkX * chunkSize * tileSize;
+  const worldY0 = chunkY * chunkSize * tileSize;
+  const cellPx = tileSize * 1.48;
+  const rowPx = cellPx * 0.96;
+  const cellX0 = Math.floor(worldX0 / cellPx) - 1;
+  const cellX1 = Math.floor((worldX0 + pxSize) / cellPx) + 1;
+  const cellY0 = Math.floor(worldY0 / rowPx) - 1;
+  const cellY1 = Math.floor((worldY0 + pxSize) / rowPx) + 1;
+
+  const hash01 = (a: number, b: number, salt: number) => {
+    let h = ((a * 374761393 + b * 668265263 + salt * 2246822519) >>> 0);
+    h ^= h >>> 13;
+    h = Math.imul(h, 1274126177) >>> 0;
+    return (h & 0xffff) / 0xffff;
+  };
+
+  const crackPoint = (cx: number, cy: number) => ({
+    x: cx * cellPx + (hash01(cx, cy, 2001) - 0.5) * cellPx * 0.48,
+    y: cy * rowPx + (hash01(cx, cy, 3001) - 0.5) * rowPx * 0.48,
+  });
+
+  const strokePath = (pts: { x: number; y: number }[], width: number, color: string, alpha: number, close = false) => {
+    if (pts.length < 2) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x - worldX0, pts[0].y - worldY0);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x - worldX0, pts[i].y - worldY0);
+    if (close) ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  const drawCrack = (from: { x: number; y: number }, to: { x: number; y: number }, seedA: number, seedB: number, salt: number) => {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const invLen = 1 / Math.max(1, Math.hypot(dx, dy));
+    const nx = -dy * invLen;
+    const ny = dx * invLen;
+    const pts = [from];
+    const segments = 2 + Math.floor(hash01(seedA, seedB, salt + 11) * 3);
+    for (let i = 1; i < segments; i++) {
+      const t = i / segments;
+      const wobble = (hash01(seedA + i * 17, seedB - i * 23, salt + 101) - 0.5) * cellPx * 0.18;
+      pts.push({
+        x: from.x + dx * t + nx * wobble,
+        y: from.y + dy * t + ny * wobble,
+      });
+    }
+    pts.push(to);
+    const strength = 0.7 + hash01(seedA, seedB, salt + 211) * 0.24;
+    strokePath(pts, 2.5, '#6d4a2b', 0.07 * strength);
+    strokePath(pts, 1.25, '#9a7044', 0.09 * strength);
+    strokePath(pts, 0.75, '#59402a', 0.1 * strength);
+  };
+
+  for (let cy = cellY0; cy <= cellY1 + 1; cy++) {
+    for (let cx = cellX0; cx <= cellX1 + 1; cx++) {
+      const p = crackPoint(cx, cy);
+      if (cx <= cellX1 && hash01(cx, cy, 7001) < 0.96) {
+        drawCrack(p, crackPoint(cx + 1, cy), cx, cy, 7001);
+      }
+      if (cy <= cellY1 && hash01(cx, cy, 8001) < 0.92) {
+        drawCrack(p, crackPoint(cx, cy + 1), cx, cy, 8001);
+      }
+      if (hash01(cx, cy, 10001) < 0.1) {
+        const target = crackPoint(cx + (hash01(cx, cy, 11001) < 0.5 ? -1 : 1), cy + 1);
+        drawCrack(p, {
+          x: p.x + (target.x - p.x) * 0.45,
+          y: p.y + (target.y - p.y) * 0.45,
+        }, cx, cy, 10001);
+      }
+    }
+  }
+}
+
 // Forest ground — darker greens with brown dirt patches, leaf litter, mushrooms, moss
 function drawGroundForest(tileX: number, tileY: number) {
   return (put: Put) => {
@@ -880,6 +1029,9 @@ export const SPIKE_PATTERNS: { tiles: { dx: number; dy: number }[]; w: number; h
 // Independent from SPIKE_PATTERNS so the cluster shape and the per-tile
 // art aren't tangled.
 export const SPIKE_VARIANT_COUNT = 3;
+export const CACTUS_VARIANT_COUNT = 3;
+export const QUICKSAND_VARIANT_COUNT = 4;
+export const TEMPLE_BLOCK_VARIANT_COUNT = 3;
 
 /** SMB-style staggered spike patch — 3 small back spikes + 2 larger
  *  front spikes for depth. variantIdx jitters x positions so nearby
@@ -949,6 +1101,100 @@ export function drawCastleSpikesCanvas(variantIdx: number): HTMLCanvasElement {
   drawSpike(12 + j, 27, 4, 13);
   drawSpike(20 + j, 27, 4, 13);
 
+  return canvas;
+}
+
+export function drawCactusCanvas(variantIdx: number): HTMLCanvasElement {
+  const T = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = T; canvas.height = T;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  const px = (x: number, y: number, c: string) => {
+    if (x >= 0 && x < T && y >= 0 && y < T) {
+      ctx.fillStyle = c;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  };
+  const block = (x: number, y: number, w: number, h: number, c: string) => {
+    ctx.fillStyle = c; ctx.fillRect(x, y, w, h);
+  };
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = '#1a1208';
+  ctx.beginPath(); ctx.ellipse(16, 28, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  const body = variantIdx === 1 ? '#3f8a38' : variantIdx === 2 ? '#557f34' : '#2f7a38';
+  const dark = variantIdx === 1 ? '#215a24' : '#204820';
+  const light = '#80bd65';
+  const flower = variantIdx === 2 ? '#ffd84a' : '#e35a84';
+  block(13, 9, 6, 19, dark);
+  block(14, 8, 5, 20, body);
+  block(16, 8, 1, 19, light);
+  block(8, 15, 4, 3, dark);
+  block(8, 12, 3, 6, body);
+  block(10, 12, 1, 5, light);
+  block(20, 18, 5, 3, dark);
+  block(22, 15, 3, 6, body);
+  block(23, 15, 1, 5, light);
+  for (let y = 11; y < 27; y += 4) {
+    px(12, y, '#dbe8c8'); px(19, y + 1, '#dbe8c8');
+  }
+  for (let x = 14; x < 19; x++) px(x, 7, flower);
+  px(16, 6, flower);
+  return canvas;
+}
+
+export function drawQuicksandCanvas(variantIdx: number): HTMLCanvasElement {
+  const T = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = T; canvas.height = T;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  const colors = ['#8b6a3e', '#a07a48', '#c29a5a', '#6a5032'];
+  ctx.fillStyle = '#6f5130';
+  ctx.beginPath(); ctx.ellipse(16, 17, 14, 9, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#9f7a45';
+  ctx.beginPath(); ctx.ellipse(16, 16, 12, 7, 0, 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < 5; i++) {
+    const y = 12 + i * 2;
+    const phase = variantIdx + i;
+    ctx.strokeStyle = colors[(i + variantIdx) % colors.length];
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 6; x <= 26; x++) {
+      const yy = y + Math.sin((x + phase * 3) * 0.55) * 1.5;
+      if (x === 6) ctx.moveTo(x, yy);
+      else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#d8b878';
+  ctx.globalAlpha = 0.35;
+  ctx.beginPath(); ctx.ellipse(12 + variantIdx, 12, 4, 2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  return canvas;
+}
+
+export function drawTempleBlockCanvas(variantIdx: number): HTMLCanvasElement {
+  const T = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = T; canvas.height = T;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#4f3821';
+  ctx.fillRect(2, 4, 28, 24);
+  ctx.fillStyle = variantIdx === 1 ? '#7b5a32' : variantIdx === 2 ? '#6d5538' : '#8b683c';
+  ctx.fillRect(3, 3, 26, 23);
+  ctx.fillStyle = '#b8945a';
+  ctx.fillRect(4, 4, 24, 3);
+  ctx.fillStyle = '#5f4528';
+  ctx.fillRect(4, 14, 24, 2);
+  ctx.fillRect(15, 5, 2, 20);
+  ctx.fillStyle = '#c7a36a';
+  ctx.fillRect(6 + variantIdx * 2, 8, 5, 2);
+  ctx.fillRect(19, 19 - variantIdx, 4, 2);
+  ctx.fillStyle = '#3a2a18';
+  ctx.fillRect(5, 25, 23, 2);
   return canvas;
 }
 
@@ -1275,7 +1521,9 @@ export function drawFoundation(put: Put) {
 }
 /** Create and register a ground chunk texture covering chunkSize×chunkSize tiles */
 export function createGroundChunk(scene: Phaser.Scene, chunkX: number, chunkY: number, chunkSize: number, tileSize: number, biome = 'grasslands'): string {
-  const key = `gnd_chunk_${biome}_${chunkX}_${chunkY}`;
+  const sceneLevelId = (scene as any).levelId ?? 1;
+  const terrainKey = biome === 'desert' ? `${biome}_${sceneLevelId}` : biome;
+  const key = `gnd_chunk_${terrainKey}_${chunkX}_${chunkY}`;
   if (scene.textures.exists(key)) return key;
   const pxSize = chunkSize * tileSize; // e.g. 16 * 32 = 512
   const canvas = document.createElement('canvas');
@@ -1294,6 +1542,7 @@ export function createGroundChunk(scene: Phaser.Scene, chunkX: number, chunkY: n
                  : biome === 'infected' ? drawGroundInfected(worldTX, worldTY)
                  : biome === 'river' ? drawGroundRiver(worldTX, worldTY)
                  : biome === 'castle' ? drawGroundCastle(worldTX, worldTY)
+                 : biome === 'desert' ? drawGroundDesert(worldTX, worldTY, sceneLevelId)
                  : drawGroundWorld(worldTX, worldTY);
       const ox = tx * tileSize;
       const oy = ty * tileSize;
@@ -1314,6 +1563,9 @@ export function createGroundChunk(scene: Phaser.Scene, chunkX: number, chunkY: n
     }
   }
   ctx.putImageData(imageData, 0, 0);
+  if (biome === 'desert' && sceneLevelId === 6) {
+    drawWorldFissures(ctx, chunkX, chunkY, chunkSize, tileSize);
+  }
   if (scene.textures.exists(key)) scene.textures.remove(key);
   scene.textures.addCanvas(key, canvas);
   return key;

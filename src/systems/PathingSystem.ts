@@ -73,8 +73,8 @@ export class PathingSystem {
         visited[ni] = 1;
         queue.push(ni);
       }
-      // Diagonal squeeze rules mirror findPath: walls (1), trees (3), water
-      // (4) on either side block; towers (2) and bridges (5) allow the gap.
+      // Diagonal squeeze rules mirror findPath: full-tile terrain blockers
+      // on either side block; towers (2) and bridges (5) allow the gap.
       for (const [dx, dy] of diagonals) {
         const nx = cx + dx, ny = cy + dy;
         if (nx < minX || nx > maxX || ny < minY || ny > maxY) continue;
@@ -84,8 +84,8 @@ export class PathingSystem {
         if (dv >= 1 && dv !== 5) continue;
         const c1 = gridGet(grid, cx + dx, cy);
         const c2 = gridGet(grid, cx, cy + dy);
-        const solid1 = c1 === 1 || c1 === 3 || c1 === 4;
-        const solid2 = c2 === 1 || c2 === 3 || c2 === 4;
+        const solid1 = c1 === 1 || c1 === 3 || c1 === 4 || c1 === 7 || c1 === 8 || c1 === 9;
+        const solid2 = c2 === 1 || c2 === 3 || c2 === 4 || c2 === 7 || c2 === 8 || c2 === 9;
         if (solid1 || solid2 || (c1 >= 1 && c2 >= 1)) continue;
         visited[ni] = 1;
         queue.push(ni);
@@ -129,8 +129,8 @@ export class PathingSystem {
     while (safety-- > 0) {
       if (x === tx1 && y === ty1) return false;
       const v = gridGet(grid, x, y);
-      // Water/rock (4) doesn't block line of sight — enemies can see over water
-      if (v >= 1 && v !== 4 && !(x === tx0 && y === ty0)) return true;
+      // Water/rock (4) and quicksand (8) don't block line of sight.
+      if (v >= 1 && v !== 4 && v !== 8 && !(x === tx0 && y === ty0)) return true;
       const prevX = x, prevY = y;
       const e2 = 2 * err;
       if (e2 > -dy) { err -= dy; x += sx; }
@@ -139,8 +139,8 @@ export class PathingSystem {
       if (x !== prevX && y !== prevY) {
         const c1 = gridGet(grid, prevX, y);
         const c2 = gridGet(grid, x, prevY);
-        const s1 = c1 === 1 || c1 === 3;
-        const s2 = c2 === 1 || c2 === 3;
+        const s1 = c1 === 1 || c1 === 3 || c1 === 7 || c1 === 9;
+        const s2 = c2 === 1 || c2 === 3 || c2 === 7 || c2 === 9;
         if (s1 || s2 || (c1 >= 1 && c2 >= 1)) return true;
       }
     }
@@ -156,7 +156,7 @@ export class PathingSystem {
       for (let dx = -1; dx <= 1; dx++) {
         if (dx === 0 && dy === 0) continue;
         const v = gridGet(grid, gx + dx, gy + dy);
-        if (v === 1 || v === 2 || v === 3 || v === 4) return true; // wall, tower, tree, water
+        if (v === 1 || v === 2 || v === 3 || v === 4 || v === 7 || v === 8 || v === 9) return true;
       }
     }
     return false;
@@ -201,7 +201,7 @@ export class PathingSystem {
         // Only block corners where a wall/tree (solid) meets a tower (2) diagonally.
         // Wall-to-wall corners don't need blockers (both are full-tile rectangles).
         // Tower-to-tower corners are intentional gaps (gameplay feature).
-        const isSolid = (v: number) => v === 1 || v === 3 || v === 4; // wall, tree, or water/rock
+        const isSolid = (v: number) => v === 1 || v === 3 || v === 4 || v === 7 || v === 9;
         const tlbrNeedBlock = (isSolid(tr) && bl === 2) || (tr === 2 && isSolid(bl));
         const trblNeedBlock = (isSolid(tl) && br === 2) || (tl === 2 && isSolid(br));
 

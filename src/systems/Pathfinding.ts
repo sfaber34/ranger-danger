@@ -68,7 +68,7 @@ export function findPath(
       prev[ni] = cur;
       queue.push(ni);
     }
-    // Diagonals — walls (1), trees (3), water (4) block; towers (2) and bridges (5) allow squeeze-through
+    // Diagonals — full-tile terrain blockers prevent corner squeezing.
     for (const [dx, dy] of diagonals) {
       const nx = cx + dx, ny = cy + dy;
       if (!inRange(nx, ny)) continue;
@@ -78,9 +78,8 @@ export function findPath(
       if (dv >= 1 && dv !== 5) continue;
       const c1 = gridGet(g, cx + dx, cy);
       const c2 = gridGet(g, cx, cy + dy);
-      // Both blocked = no gap; wall (1), tree (3), water (4) = full-tile, no squeeze
-      const solid1 = c1 === 1 || c1 === 3 || c1 === 4;
-      const solid2 = c2 === 1 || c2 === 3 || c2 === 4;
+      const solid1 = c1 === 1 || c1 === 3 || c1 === 4 || c1 === 7 || c1 === 8 || c1 === 9;
+      const solid2 = c2 === 1 || c2 === 3 || c2 === 4 || c2 === 7 || c2 === 8 || c2 === 9;
       if (solid1 || solid2 || (c1 >= 1 && c2 >= 1)) continue;
       visited[ni] = 1;
       prev[ni] = cur;

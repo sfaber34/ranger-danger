@@ -23,6 +23,10 @@ type UISceneInitData = {
   difficulty?: Difficulty;
 };
 
+type TwoBossProgressNode =
+  | { kind: 'wave'; waveIndex: number }
+  | { kind: 'boss'; phase: 'mid' | 'final' };
+
 export class UIScene extends Phaser.Scene {
   hpBarGfx!: Phaser.GameObjects.Graphics;
   private hpBarX = 0; private hpBarY = 0; private hpBarW = 0; private hpBarH = 0;
@@ -127,6 +131,32 @@ export class UIScene extends Phaser.Scene {
   private displayWaveNum(cumulativeWave: number): number {
     if (this.difficulty !== 'endless') return cumulativeWave;
     return cumulativeWave - Math.floor(cumulativeWave / 4);
+  }
+
+  private twoBossProgressNodes(): TwoBossProgressNode[] | null {
+    if (this.biome === 'castle') {
+      return [
+        { kind: 'wave', waveIndex: 0 },
+        { kind: 'wave', waveIndex: 1 },
+        { kind: 'boss', phase: 'mid' },
+        { kind: 'wave', waveIndex: 2 },
+        { kind: 'wave', waveIndex: 3 },
+        { kind: 'boss', phase: 'final' },
+      ];
+    }
+    if (this.biome === 'desert') {
+      return [
+        { kind: 'wave', waveIndex: 0 },
+        { kind: 'wave', waveIndex: 1 },
+        { kind: 'wave', waveIndex: 2 },
+        { kind: 'boss', phase: 'mid' },
+        { kind: 'wave', waveIndex: 3 },
+        { kind: 'wave', waveIndex: 4 },
+        { kind: 'wave', waveIndex: 5 },
+        { kind: 'boss', phase: 'final' },
+      ];
+    }
+    return null;
   }
   /** Draw a small skull-and-jaw icon into the given Graphics object,
    *  centered on its local origin. Used as the boss marker in the
@@ -348,10 +378,11 @@ export class UIScene extends Phaser.Scene {
     this.progressLines = [];
     // Endless mode: 6 rolling nodes (current wave + next 5). Updated
     // dynamically in updateHud.
-    // Castle: 4 waves + queen skull + dragon skull = 6 nodes
+    // Castle/Desert: two-boss campaign layouts.
     // Others: waveCount waves + 1 boss = waveCount+1 nodes
+    const twoBossProgressNodes = this.twoBossProgressNodes();
     const totalNodes = this.difficulty === 'endless' ? 6
-      : this.biome === 'castle' ? 6
+      : twoBossProgressNodes ? twoBossProgressNodes.length
       : CFG.spawn.waveCount + 1;
     const nodeSpacing = this.p(36);
     const totalW = (totalNodes - 1) * nodeSpacing;
@@ -373,13 +404,14 @@ export class UIScene extends Phaser.Scene {
       this.progressCircles.push(circle);
       items.push(circle);
       // label (number or skull)
-      // Castle: nodes 2 (queen) and 5 (dragon) are boss skulls
+      // Two-boss campaign layouts: skulls come from the node spec.
       // Endless: labels are dynamic \u2014 placeholder, updateHud sets them
       const isBoss = this.difficulty === 'endless' ? false
-        : this.biome === 'castle' ? (i === 2 || i === 5)
+        : twoBossProgressNodes ? twoBossProgressNodes[i].kind === 'boss'
         : i === totalNodes - 1;
-      const waveNum = this.biome === 'castle'
-        ? (i < 2 ? i + 1 : i === 2 ? 0 : i < 5 ? i : 0) // 1,2,skull,3,4,skull
+      const nodeSpec = twoBossProgressNodes?.[i];
+      const waveNum = nodeSpec?.kind === 'wave'
+        ? nodeSpec.waveIndex + 1
         : i + 1;
       const label = this.add.text(nx, nodeY, isBoss ? '' : `${waveNum}`, {
         fontFamily: 'monospace', fontSize: this.fs(10), color: '#556',
@@ -419,17 +451,9 @@ export class UIScene extends Phaser.Scene {
     this.waveBarH = this.p(14);
     this.waveBarGfx = this.add.graphics();
 
-    // Build error message (persistent while hovering invalid tile)
+    // Build mode cancel hint (sits closest to the hotbar)
     const hotbarTop = H - this.p(48) - this.p(32); // matches hotbarY
-    this.buildErrorText = this.add.text(W / 2, hotbarTop - this.p(18), '', {
-      fontFamily: 'monospace', fontSize: this.fs(13), color: '#ff6a6a',
-      stroke: '#0b0f1a', strokeThickness: this.p(3),
-      backgroundColor: '#1a0a0aCC',
-      padding: { x: Number(this.p(10)), y: Number(this.p(4)) }
-    }).setOrigin(0.5, 1).setDepth(900).setVisible(false);
-
-    // Build mode cancel hint
-    this.buildHintText = this.add.text(W / 2, hotbarTop - this.p(38),
+    this.buildHintText = this.add.text(W / 2, hotbarTop - this.p(18),
       this.isMobile
         ? 'Tap selected item again to leave build menu'
         : 'Right-click, B, or ESC to leave build menu',
@@ -439,6 +463,15 @@ export class UIScene extends Phaser.Scene {
         backgroundColor: '#11172aDD', padding: { x: Number(this.p(8)), y: Number(this.p(4)) }
       }
     ).setOrigin(0.5, 1).setDepth(900).setVisible(false);
+
+    // Build error message (sits above the cancel hint while hovering invalid tile)
+    const errorY = this.buildHintText.y - this.buildHintText.height - this.p(8);
+    this.buildErrorText = this.add.text(W / 2, errorY, '', {
+      fontFamily: 'monospace', fontSize: this.fs(13), color: '#ff6a6a',
+      stroke: '#0b0f1a', strokeThickness: this.p(3),
+      backgroundColor: '#1a0a0aCC',
+      padding: { x: Number(this.p(10)), y: Number(this.p(4)) }
+    }).setOrigin(0.5, 1).setDepth(900).setVisible(false);
 
     // listen for HUD updates
     getEvents(this.game.events).on('hud', this.onHud);
@@ -592,6 +625,12 @@ export class UIScene extends Phaser.Scene {
     }
     const bossName = s?.bossKind === 'queen' ? 'THE PHANTOM QUEEN'
                    : s?.bossKind === 'dragon' ? 'THE CASTLE DRAGON'
+                   : s?.bossKind === 'fissure_burrower' ? 'THE FISSURE BURROWER'
+                   : s?.bossKind === 'desert_scorpion' ? 'THE GIANT SCORPION'
+                   : s?.bossKind === 'sandstorm_beast' ? 'THE SANDSTORM BEAST'
+                   : s?.bossKind === 'dune_wraith' ? 'THE DUNE WRAITH'
+                   : s?.bossKind === 'temple_construct' ? 'THE TEMPLE CONSTRUCT'
+                   : s?.bossKind === 'sun_priest' ? 'THE SUN PRIEST'
                    : s?.biome === 'forest' ? 'THE WENDIGO'
                    : s?.biome === 'infected' ? 'THE BLIGHTED ONE'
                    : s?.biome === 'river' ? 'THE FOG PHANTOM'
@@ -1095,32 +1134,30 @@ export class UIScene extends Phaser.Scene {
           this.progressLines[i].setFillStyle(0x2a3760);
         }
       }
-    } else if (this.biome === 'castle') {
-      // Castle: 6 nodes — W1, W2, Queen, W3, W4, Dragon
-      // Map node index to progress state
-      const cp = s.castlePhase ?? 0;
+    } else if (this.biome === 'castle' || this.biome === 'desert') {
+      const nodes = this.twoBossProgressNodes();
+      if (!nodes) return;
+      const cp = this.biome === 'castle' ? (s.castlePhase ?? 0) : (s.desertPhase ?? 0);
       for (let i = 0; i < this.progressCircles.length; i++) {
-        const isBossNode = (i === 2 || i === 5);
+        const node = nodes[i];
+        const isBossNode = node.kind === 'boss';
         let completed = false;
         let active = false;
         let current = false;
 
-        if (i === 0) { // Wave 1
-          completed = currentWave > 1 || cp >= 1;
-          current = currentWave === 1 && cp === 0;
-        } else if (i === 1) { // Wave 2
-          completed = cp >= 1;
-          current = currentWave === 2 && cp === 0;
-        } else if (i === 2) { // Queen boss
-          completed = s.midBossDefeated;
+        if (node.kind === 'wave') {
+          const waveNumber = node.waveIndex + 1;
+          const midBossWave = this.biome === 'desert' ? 3 : 2;
+          const finalBossWave = this.biome === 'desert' ? 6 : 4;
+          completed = waveNumber < currentWave
+            || (cp >= 1 && waveNumber <= midBossWave)
+            || (cp >= 3 && waveNumber <= finalBossWave);
+          current = currentWave === waveNumber
+            && ((waveNumber <= midBossWave && cp === 0) || (waveNumber > midBossWave && cp === 2));
+        } else if (node.phase === 'mid') {
+          completed = s.midBossDefeated || cp >= 2;
           active = cp === 1 && s.bossSpawned;
-        } else if (i === 3) { // Wave 3
-          completed = (cp >= 2 && currentWave > 3) || cp >= 3;
-          current = currentWave === 3 && cp === 2;
-        } else if (i === 4) { // Wave 4
-          completed = cp >= 3;
-          current = currentWave === 4 && cp === 2;
-        } else if (i === 5) { // Dragon boss
+        } else {
           active = cp === 3 && s.bossSpawned;
         }
 

@@ -61,17 +61,8 @@ export class Shadow {
   }
 
   update(sprite: Phaser.GameObjects.Sprite): void {
-    // Rotate the ground-offset anchor with the sprite so that for rotating
-    // kinds (snakes / rats) the shadow stays under the body axis instead of
-    // detaching when the sprite spins. For rotation === 0 this reduces to
-    // (x, y + groundOffset), matching the previous behavior.
-    const sin = Math.sin(sprite.rotation);
-    const cos = Math.cos(sprite.rotation);
-    this.ellipse.setPosition(
-      sprite.x - this.groundOffset * sin,
-      sprite.y + this.groundOffset * cos,
-    );
-    this.ellipse.setRotation(sprite.rotation);
+    this.ellipse.setPosition(sprite.x, sprite.y + this.groundOffset);
+    this.ellipse.setRotation(0);
     this.ellipse.setDepth(sprite.depth + SHADOW_DEPTH_BIAS);
   }
 

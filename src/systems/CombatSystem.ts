@@ -313,12 +313,18 @@ export class CombatSystem {
     if (pr.groundTarget) return;
     SFX.play('hit');
     const dmgApplied = Math.min(pr.damage, Math.max(0, b.hp));
+    const mirageActive = !!(b as any)._mirageActive;
+    const mirageLethal = mirageActive && pr.damage >= b.hp;
     b.hurt(pr.damage);
     scene.runStats.damageDealt += dmgApplied;
     const spark = scene.add.sprite(pr.x, pr.y, 'fx_hit_0').setDepth(15).setScale(0.5);
     spark.play('fx-hit');
     spark.once('animationcomplete', () => spark.destroy());
     pr.destroy();
+    if (mirageLethal) {
+      scene.enemyBoss.resolveMirageDeath(b);
+      return;
+    }
     // Only the primary boss drives the top HUD bar — otherwise endless-
     // mode double-boss events flicker the bar between two HP values as
     // hits land on each. Each boss still gets its own in-world bar via
@@ -338,6 +344,12 @@ export class CombatSystem {
       scene.runStats.bossesKilled++;
       const bucket = b.bossKind === 'queen' ? 'queen'
         : b.bossKind === 'dragon' ? 'dragon'
+        : b.bossKind === 'fissure_burrower' ? 'fissureBurrower'
+        : b.bossKind === 'desert_scorpion' ? 'giantScorpion'
+        : b.bossKind === 'sandstorm_beast' ? 'sandstormBeast'
+        : b.bossKind === 'dune_wraith' ? 'duneWraith'
+        : b.bossKind === 'temple_construct' ? 'templeConstruct'
+        : b.bossKind === 'sun_priest' ? 'sunPriest'
         : b.animPrefix === 'fboss' ? 'wendigo'
         : b.animPrefix === 'iboss' ? 'blighted'
         : b.animPrefix === 'rboss' ? 'fog'
@@ -441,21 +453,7 @@ export class CombatSystem {
       onComplete: () => shell.destroy()
     });
 
-    // 4) Expanding shockwave ring outline
-    const ring = scene.add.circle(x, y, radius, 0x000000, 0)
-      .setStrokeStyle(3, 0xffd070, 0.95)
-      .setDepth(17)
-      .setScale(0.2);
-    scene.tweens.add({
-      targets: ring,
-      scale: 1.15,
-      alpha: { from: 1, to: 0 },
-      duration: 360,
-      ease: 'Sine.Out',
-      onComplete: () => ring.destroy()
-    });
-
-    // 5) Fiery shrapnel sparks shooting outward
+    // 4) Fiery shrapnel sparks shooting outward
     const sparkCount = 14;
     for (let i = 0; i < sparkCount; i++) {
       const a = (i / sparkCount) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.2, 0.2);
@@ -474,35 +472,35 @@ export class CombatSystem {
       });
     }
 
-    // 6) Smoke puffs that linger after the fire fades
-    const smokeCount = 7;
+    // 5) Dust and smoke puffs that linger after the fire fades
+    const smokeCount = 11;
     for (let i = 0; i < smokeCount; i++) {
       const a = Phaser.Math.FloatBetween(0, Math.PI * 2);
-      const offD = Phaser.Math.FloatBetween(0, radius * 0.6);
+      const offD = Phaser.Math.FloatBetween(0, radius * 0.82);
       const px = x + Math.cos(a) * offD;
       const py = y + Math.sin(a) * offD;
-      const shade = [0x6a6a74, 0x858590, 0x4a4a54][i % 3];
-      const puff = scene.add.circle(px, py, Phaser.Math.Between(8, 13), shade, 0.65)
-        .setStrokeStyle(1, 0x2a2a32, 0.4)
+      const shade = [0x6a5a42, 0x8c7650, 0x4a4030, 0xa88a5a][i % 4];
+      const puff = scene.add.ellipse(px, py, Phaser.Math.Between(14, 24), Phaser.Math.Between(7, 13), shade, 0.62)
+        .setRotation(Phaser.Math.FloatBetween(0, Math.PI))
+        .setStrokeStyle(1, 0x2a2118, 0.35)
         .setDepth(13)
-        .setScale(0.4);
-      const driftX = Phaser.Math.Between(-10, 10);
-      const driftY = Phaser.Math.Between(-20, -8); // smoke rises
-      // small delay so smoke emerges as the fire dies down
+        .setScale(0.3);
+      const driftX = Math.cos(a) * Phaser.Math.Between(8, 20);
+      const driftY = Math.sin(a) * Phaser.Math.Between(5, 14) - Phaser.Math.Between(6, 16);
       scene.tweens.add({
         targets: puff,
-        scale: { from: 0.4, to: 1.4 },
-        alpha: { from: 0.7, to: 0 },
+        scale: { from: 0.3, to: 1.6 },
+        alpha: { from: 0.65, to: 0 },
         x: px + driftX,
         y: py + driftY,
-        duration: Phaser.Math.Between(600, 900),
+        duration: Phaser.Math.Between(650, 1050),
         delay: Phaser.Math.Between(40, 140),
         ease: 'Sine.Out',
         onComplete: () => puff.destroy()
       });
     }
 
-    // 7) Permanent dirt crater on the ground
+    // 6) Dirt crater on the ground
     this.spawnCrater(x, y, radius);
 
     // Damage all enemies in radius
@@ -515,7 +513,10 @@ export class CombatSystem {
       if (dx * dx + dy * dy <= r2) hitList.push(en);
       return true;
     });
-    for (const en of hitList) this.applyDamageToEnemy(en, dmg);
+    for (const en of hitList) {
+      this.spawnCannonSplashHitFeedback(en, x, y);
+      this.applyDamageToEnemy(en, dmg);
+    }
 
     // Also chip the boss if in range
     if (scene.bossState.boss && scene.bossState.boss.active && !scene.bossState.boss.dying) {
@@ -532,11 +533,61 @@ export class CombatSystem {
     }
   }
 
+  spawnCannonSplashHitFeedback(en: Enemy, cx: number, cy: number) {
+    const scene = this.scene;
+    const dx = en.x - cx;
+    const dy = en.y - cy;
+    const d = Math.hypot(dx, dy) || 1;
+    const nx = dx / d;
+    const ny = dy / d;
+    const flash = scene.add.circle(en.x, en.y - 4, 10, 0xfff0a0, 0.75)
+      .setDepth(en.depth + 0.6)
+      .setScale(0.35);
+    scene.tweens.add({
+      targets: flash,
+      scale: 1.1,
+      alpha: 0,
+      duration: 180,
+      ease: 'Cubic.Out',
+      onComplete: () => flash.destroy()
+    });
+    const dust = scene.add.ellipse(en.x, en.y + 10, 20, 8, 0x8c7650, 0.55)
+      .setRotation(Math.atan2(ny, nx))
+      .setDepth(en.depth - 0.2)
+      .setScale(0.5);
+    scene.tweens.add({
+      targets: dust,
+      x: en.x + nx * 12,
+      y: en.y + 10 + ny * 6,
+      scale: 1.3,
+      alpha: 0,
+      duration: 300,
+      ease: 'Sine.Out',
+      onComplete: () => dust.destroy()
+    });
+    for (let i = 0; i < 4; i++) {
+      const spread = Phaser.Math.FloatBetween(-0.75, 0.75);
+      const sx = nx * Math.cos(spread) - ny * Math.sin(spread);
+      const sy = nx * Math.sin(spread) + ny * Math.cos(spread);
+      const chip = scene.add.circle(en.x, en.y - 3, Phaser.Math.Between(2, 3), i % 2 ? 0xffd070 : 0x7a4a28, 0.95)
+        .setDepth(en.depth + 0.8);
+      scene.tweens.add({
+        targets: chip,
+        x: en.x + sx * Phaser.Math.Between(12, 22),
+        y: en.y - 3 + sy * Phaser.Math.Between(8, 18),
+        alpha: 0,
+        scale: 0.35,
+        duration: Phaser.Math.Between(220, 360),
+        ease: 'Cubic.Out',
+        onComplete: () => chip.destroy()
+      });
+    }
+  }
+
   spawnCrater(x: number, y: number, _radius: number) {
     const scene = this.scene;
     const g = scene.add.graphics().setDepth(0);
     const cr = 10;
-    // Ash streaks radiating outward — thicker near crater, tapering to a point
     const streakColors = [0x1a1008, 0x241810, 0x2e2014];
     const streaks = Phaser.Math.Between(5, 8);
     for (let i = 0; i < streaks; i++) {
@@ -547,28 +598,24 @@ export class CombatSystem {
       const alpha = Phaser.Math.FloatBetween(0.45, 0.65);
       g.fillStyle(color, alpha);
       for (let s = 0; s < steps; s++) {
-        const t = s / (steps - 1); // 0 at crater edge, 1 at tip
+        const t = s / (steps - 1);
         const d = cr * 0.7 + len * t;
         const sx = x + Math.cos(a) * d;
         const sy = y + Math.sin(a) * d;
-        const r = 2.2 * (1 - t * 0.85); // thick at start, tiny point at end
+        const r = 2.2 * (1 - t * 0.85);
         g.fillCircle(sx, sy, Math.max(r, 0.5));
       }
     }
-    // Brown crater bowl
     g.fillStyle(0x3e2e1a, 0.6);
     g.fillEllipse(x, y, cr * 2, cr * 1.5);
-    // Darker center
     g.fillStyle(0x2a1e10, 0.5);
     g.fillEllipse(x + Phaser.Math.FloatBetween(-1, 1), y + Phaser.Math.FloatBetween(-1, 1), cr * 1.1, cr * 0.8);
-    // Light dirt highlight on top rim
     g.fillStyle(0x9a7a50, 0.25);
     g.fillEllipse(x, y - cr * 0.3, cr * 1.3, cr * 0.35);
-    // Fade out over 15 seconds then destroy
     scene.tweens.add({
       targets: g,
       alpha: 0,
-      duration: 15000,
+      duration: 6000,
       ease: 'Sine.In',
       onComplete: () => g.destroy()
     });

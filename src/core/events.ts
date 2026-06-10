@@ -24,6 +24,7 @@ export type HudState = {
   countdownMsg: string;
   countdownColor: string;
   castlePhase: number;
+  desertPhase: number;
   midBossDefeated: boolean;
 };
 

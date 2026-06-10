@@ -10,6 +10,7 @@ import type { Boss } from '../entities/Boss';
  * Other biomes ignore this field (it stays at 0).
  */
 export type CastlePhase = 0 | 1 | 2 | 3;
+export type DesertPhase = 0 | 1 | 2 | 3;
 
 /**
  * Boss-fight state. Replaces the seven scattered fields that used to live
@@ -38,6 +39,9 @@ export class BossState {
 
   /** Castle phase 0–3 (see CastlePhase). 0 outside castle. */
   castlePhase: CastlePhase = 0;
+
+  /** Desert phase 0–3: first waves, mid-boss, second waves, final boss. */
+  desertPhase: DesertPhase = 0;
 
   /** Cumulative count of bosses defeated in endless mode. */
   endlessBossesCleared = 0;
@@ -78,6 +82,28 @@ export class BossState {
     this.castlePhase = 3;
   }
 
+  /** Desert mid-boss spawn. */
+  enterDesertMidBoss(b: Boss) {
+    this.boss = b;
+    this.midBoss = b;
+    this.bossSpawned = true;
+    this.desertPhase = 1;
+  }
+
+  /** Desert mid-boss has died, resume waves toward final boss. */
+  enterPostDesertMidBossWaves() {
+    this.desertPhase = 2;
+    this.bossSpawned = false;
+    this.boss = null;
+  }
+
+  /** Desert Temple final boss spawn. */
+  enterDesertFinalBoss(b: Boss) {
+    this.boss = b;
+    this.bossSpawned = true;
+    this.desertPhase = 3;
+  }
+
   /** Generic non-castle boss spawn. */
   enterBossFight(b: Boss) {
     this.boss = b;
@@ -116,6 +142,7 @@ export class BossState {
     this.bossSpawned = false;
     this.midBossDefeated = false;
     this.castlePhase = 0;
+    this.desertPhase = 0;
     this.endlessBossesCleared = 0;
     this.endlessResetUntil = 0;
   }
