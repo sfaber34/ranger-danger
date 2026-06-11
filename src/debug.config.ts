@@ -13,7 +13,7 @@ type InitialSpawn = {
  * to apply. All flags default to off — file is harmless to leave in source.
  */
 export const DEBUG = {
-  noDamage: true,
+  noDamage: false,
   pauseWaveSpawns: false,
 
   /**
