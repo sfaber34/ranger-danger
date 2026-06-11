@@ -1,85 +1,146 @@
 // Player + bow sprites. The "Ranger" hero — top-down blue-clad,
 // 16-px-wide body, plus a separate bow frame that the ranger holds.
+//
+// drawPlayer(frame, pose):
+//  - frame: 4-frame idle (breathing bob + blink), 6-frame run cycle
+//    (legs scissor along x with a swing-leg lift, body dips on contact).
+//  - pose: vertical aim stance picked by GameScene from the bow angle.
+//    'up' tilts the head back and slides the hood; 'down' tucks the chin
+//    and bends the knees into a slight crouch.
 
-import { Put, P, mirrorX, rect, disc, line } from './canvas';
+import { Put, P, rect, disc, line } from './canvas';
 
-export type PFrame = 'idle0'|'idle1'|'move0'|'move1'|'move2'|'move3'|'shoot0'|'shoot1'|'hit';
+export type PPose = 'level' | 'up' | 'down';
+export type PFrame =
+  'idle0' | 'idle1' | 'idle2' | 'idle3' |
+  'move0' | 'move1' | 'move2' | 'move3' | 'move4' | 'move5' |
+  'shoot0' | 'shoot1' | 'hit';
 
-export function drawPlayer(frame: PFrame) {
-  return (put: Put) => {
+export function drawPlayer(frame: PFrame, pose: PPose = 'level') {
+  return (rawPut: Put) => {
     const cx = 16;
-    const bob = frame === 'idle1' ? 1 : 0;
 
-    // ----- shadow ellipse under feet
+    // ----- shadow ellipse under feet (raw — not outlined or hit-flashed)
     for (let dy = -1; dy <= 1; dy++)
       for (let dx = -6; dx <= 6; dx++)
-        if ((dx * dx) / 36 + (dy * dy) / 1.5 <= 1) put(cx + dx, 28 + dy, P.shadow);
+        if ((dx * dx) / 36 + (dy * dy) / 1.5 <= 1) rawPut(cx + dx, 28 + dy, P.shadow);
 
-    // ----- legs
-    let lLeftY = 0, lRightY = 0;
-    if (frame === 'move0') { lLeftY = -1; lRightY = 1; }
-    if (frame === 'move2') { lLeftY = 1; lRightY = -1; }
-    if (frame === 'move1' || frame === 'move3') { /* center */ }
-    // left leg
-    rect(put, cx - 4, 22 + lLeftY, 3, 5, P.blueD);
-    rect(put, cx - 4, 27 + lLeftY, 3, 1, P.outline); // boot
-    // right leg
-    rect(put, cx + 1, 22 + lRightY, 3, 5, P.blueD);
-    rect(put, cx + 1, 27 + lRightY, 3, 1, P.outline);
+    // Record body pixels so we can outline the silhouette + hit-flash it.
+    const body = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      body.add(y * 32 + x);
+      rawPut(x, y, c);
+    };
+
+    // ----- frame parameters
+    const idleIdx = frame.startsWith('idle') ? +frame[4] : frame.startsWith('shoot') ? 0 : -1;
+    const moveIdx = frame.startsWith('move') ? +frame[4] : -1;
+    // positive bob = torso/head sink 1px (feet stay planted)
+    const bob = idleIdx >= 0 ? [0, 1, 1, 0][idleIdx]
+              : moveIdx >= 0 ? [1, 0, 0, 1, 0, 0][moveIdx] : 0;
+    const blink = idleIdx === 2;
+    // run cycle: legs scissor along x; the swinging (airborne) leg lifts
+    const strideL = moveIdx >= 0 ? [2, 1, -1, -2, -1, 1][moveIdx] : 0;
+    const strideR = -strideL;
+    const liftL = moveIdx === 4 || moveIdx === 5 ? -1 : 0;
+    const liftR = moveIdx === 1 || moveIdx === 2 ? -1 : 0;
+
+    // ----- pose (vertical aim stance)
+    const crouch = pose === 'down' ? 1 : 0;                     // knees bend, body sinks
+    const headDy = pose === 'up' ? -1 : pose === 'down' ? 1 : 0; // head tilts back / tucks
+    const eyeDy = headDy;                                        // eyes track the aim
+    const hoodDx = pose === 'up' ? -1 : 0;                       // hood slides back when looking up
+    const brimDrop = pose === 'down' ? 1 : 0;                    // brim shades the eyes when looking down
+
+    // ----- legs (far leg first so the near leg overlaps it)
+    const leg = (x: number, lift: number, trouser: string) => {
+      rect(put, x, 22 + crouch + lift, 3, 4 - crouch, trouser);
+      rect(put, x, 26 + lift, 3, 1, P.woodM); // boot
+      rect(put, x, 27 + lift, 3, 1, P.woodD); // sole
+    };
+    leg(cx - 4 + strideL, liftL, P.blueD);
+    leg(cx + 1 + strideR, liftR, P.blueM);
+    put(cx + 1 + strideR, 22 + crouch + liftR, P.blue); // near-thigh highlight
 
     // ----- torso (tunic) -----
-    const torsoY = 13 + bob;
+    const torsoY = 13 + bob + crouch;
     rect(put, cx - 6, torsoY, 12, 9, P.blue);
-    // highlight band along top + left shoulder
-    rect(put, cx - 6, torsoY, 12, 1, P.blueL);
-    rect(put, cx - 6, torsoY + 1, 1, 8, P.blueM);
-    rect(put, cx + 5, torsoY + 1, 1, 8, P.blueD);
-    rect(put, cx - 5, torsoY + 8, 10, 1, P.blueD);
-    // belt
+    rect(put, cx - 6, torsoY, 12, 1, P.blueL);     // collar highlight
+    rect(put, cx - 6, torsoY + 1, 1, 8, P.blueM);  // left shade
+    rect(put, cx + 5, torsoY + 1, 1, 8, P.blueD);  // right shade
+    rect(put, cx - 5, torsoY + 8, 10, 1, P.blueD); // hem
+    put(cx, torsoY + 8, P.blueM);                  // tunic front split
+    // quiver strap: left shoulder down to right hip
+    line(put, cx - 5, torsoY + 1, cx + 4, torsoY + 6, P.woodD);
+    // belt + buckle + hip pouch
     rect(put, cx - 6, torsoY + 6, 12, 1, P.woodD);
-    put(cx, torsoY + 6, P.goldL); // buckle
-    // chest strap
-    rect(put, cx - 2, torsoY + 1, 4, 1, P.blueL);
+    put(cx, torsoY + 6, P.goldL);
+    rect(put, cx + 3, torsoY + 7, 3, 2, P.wood);
+    put(cx + 3, torsoY + 7, P.woodL);
+    put(cx + 5, torsoY + 8, P.woodD);
+
+    // ----- quiver tube over the left shoulder -----
+    const qy = torsoY - 6;
+    rect(put, cx - 9, qy, 3, 6, P.woodM);
+    rect(put, cx - 9, qy, 1, 6, P.woodD); // shaded edge
+    rect(put, cx - 9, qy, 3, 1, P.woodL); // rim
+    // arrows peeking out
+    put(cx - 8, qy - 1, P.arrow);
+    put(cx - 8, qy - 2, P.red);
+    put(cx - 7, qy - 1, P.arrowD);
+    put(cx - 7, qy - 2, P.redL);
 
     // ----- shoulder stubs (arms are on the bow sprite) -----
     const armY = torsoY + 2;
-    // left shoulder nub
     rect(put, cx - 7, armY, 2, 3, P.blue);
     put(cx - 7, armY, P.blueL);
-    // right shoulder nub
     rect(put, cx + 5, armY, 2, 3, P.blue);
     put(cx + 6, armY, P.blueL);
 
     // ----- head -----
-    const headCx = cx, headCy = 9 + bob;
+    const headCx = cx + (moveIdx >= 0 ? 1 : 0); // slight forward lean at a run
+    const headCy = 9 + bob + headDy + crouch;
     disc(put, headCx, headCy, 4, P.skin);
-    // hair cap
-    for (let y = -4; y <= -1; y++)
-      for (let x = -4; x <= 4; x++)
-        if (x * x + y * y <= 16) put(headCx + x, headCy + y, P.woodD);
-    // hair highlight
-    put(headCx - 2, headCy - 3, P.wood);
-    put(headCx - 1, headCy - 4, P.wood);
-    // eyes
-    put(headCx - 2, headCy, P.outline);
-    put(headCx + 1, headCy, P.outline);
-    // mouth
-    put(headCx, headCy + 2, P.skinD);
-    // chin shadow
-    put(headCx - 1, headCy + 3, P.skinD);
-    put(headCx + 1, headCy + 3, P.skinD);
     // neck
     rect(put, cx - 1, headCy + 4, 3, 1, P.skinD);
+    // hood dome (1px proud of the skull) + brim
+    for (let y = -5; y <= -1 + brimDrop; y++)
+      for (let x = -5; x <= 5; x++)
+        if (x * x + y * y <= 23) put(headCx + x + hoodDx, headCy + y, P.blueD);
+    for (let x = -4; x <= 4; x++)
+      if (x * x + 1 <= 23) put(headCx + x + hoodDx, headCy - 1 + brimDrop, P.blueM);
+    // hood tail trailing off the back
+    put(headCx + hoodDx - 5, headCy - 1, P.blueD);
+    put(headCx + hoodDx - 6, headCy, P.blueD);
+    put(headCx + hoodDx - 5, headCy, P.blueM);
+    // gold feather swept back along the hood
+    put(headCx + hoodDx - 4, headCy - 4, P.gold);
+    put(headCx + hoodDx - 5, headCy - 3, P.gold);
+    put(headCx + hoodDx - 6, headCy - 2, P.goldM);
+    // face (quarter view — features sit toward the facing side)
+    const eyeC = blink ? P.skinD : P.outline;
+    put(headCx, headCy + eyeDy, eyeC);
+    put(headCx + 2, headCy + eyeDy, eyeC);
+    put(headCx + 1, headCy + 2 + eyeDy, P.skinD); // mouth
+    put(headCx - 1, headCy + 3, P.skinD);         // chin shadow
+    put(headCx + 1, headCy + 3, P.skinD);
 
-    // ----- hit flash overlay (white-out) -----
-    if (frame === 'hit') {
-      for (let y = 5; y < 30; y++) {
-        for (let x = 4; x < 28; x++) {
-          // can't easily re-test silhouette; do a simple body-area flash
-          if (y >= headCy - 4 && y <= 29 && x >= cx - 8 && x <= cx + 8) put(x, y, P.white);
-        }
+    // ----- crisp 1px outline around the silhouette -----
+    const NB: ReadonlyArray<readonly [number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const edges: number[] = [];
+    for (const k of body) {
+      const x = k % 32, y = (k / 32) | 0;
+      for (const [dx, dy] of NB) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= 32 || ny >= 32) continue;
+        if (!body.has(ny * 32 + nx)) edges.push(ny * 32 + nx);
       }
     }
+    for (const k of edges) rawPut(k % 32, (k / 32) | 0, P.outline);
+
+    // ----- hit flash (white-out the silhouette, keep the outline) -----
+    if (frame === 'hit') for (const k of body) rawPut(k % 32, (k / 32) | 0, P.white);
   };
 }
 

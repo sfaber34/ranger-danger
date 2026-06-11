@@ -1030,14 +1030,11 @@ export class GameScene extends Phaser.Scene {
       const runMult = this.playerUpgrades.multiplier('runSpeed');
       this.player.setVelocity(vx * CFG.player.speed * speedMult * runMult, vy * CFG.player.speed * speedMult * runMult);
       if (vx !== 0) this.player.facingRight = vx > 0;
-      this.player.setFlipX(!this.player.facingRight);
-      if (this.player.anims.currentAnim?.key !== 'player-move') this.player.play('player-move');
     } else {
       this.player.setVelocity(0, 0);
-      if (
-        this.player.anims.currentAnim?.key !== 'player-idle'
-      ) this.player.play('player-idle');
     }
+    // Facing + body animation are resolved below, after the aim target is
+    // known — the stance (up/down/backpedal) depends on the aim direction.
 
     // Tutorial leash: keep tower visible on screen
     if (getRegistry(this.game).get('tutorialActive') && this.towers.length > 0) {
@@ -1067,24 +1064,38 @@ export class GameScene extends Phaser.Scene {
     // Find most threatening enemy — prioritizes shortest path distance, not euclidean
     const target = this.combat.findMostThreateningEnemy(this.player.x, this.player.y, CFG.player.range * this.playerUpgrades.multiplier('atkRange'));
 
+    // Vertical aim stance + backpedal, resolved once the target is known
+    let aimPose: 'level' | 'up' | 'down' = 'level';
+    let backpedal = false;
+
     if (target) {
       // Aim bow at target
       const aimAngle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
       bow.setRotation(aimAngle);
       bow.setFlipY(Math.abs(aimAngle) > Math.PI / 2);
 
+      // Stance: tilt the body when shooting steeply up or down. Aiming up
+      // means shooting away from the camera, so the bow renders behind the
+      // body (DepthSortSystem reads bowBehind).
+      const vert = Math.sin(aimAngle); // negative = aiming up-screen
+      aimPose = vert < -0.45 ? 'up' : vert > 0.45 ? 'down' : 'level';
+      this.player.bowBehind = vert < -0.3;
+
       // Push bow outward from body center along the aim direction
       // More offset when aiming horizontally, less when vertical
       const horizFactor = Math.abs(Math.cos(aimAngle)); // 1 at sides, 0 at top/bottom
       const offset = 6 + horizFactor * 5; // 6px minimum, up to 11px at the sides
+      // Anchor at shoulder height when aiming up, hip height when aiming down
+      const bowAnchorY = aimPose === 'up' ? 0 : aimPose === 'down' ? 4 : 2;
       this._bowOffsetX = Math.cos(aimAngle) * offset;
-      this._bowOffsetY = 2 + Math.sin(aimAngle) * offset;
+      this._bowOffsetY = bowAnchorY + Math.sin(aimAngle) * offset;
       bow.setPosition(this.player.x + this._bowOffsetX, this.player.y + this._bowOffsetY);
 
-      // Flip player body to face target
-      this.player.setFlipX(target.x < this.player.x);
-      if (target.x >= this.player.x) this.player.facingRight = true;
-      else this.player.facingRight = false;
+      // Body faces the target; if horizontal movement opposes the facing,
+      // the ranger backpedals (run cycle played in reverse) so he keeps
+      // aiming at an enemy behind him while retreating.
+      this.player.facingRight = target.x >= this.player.x;
+      backpedal = moving && vx !== 0 && (vx > 0) !== this.player.facingRight;
 
       // Fire rate: half speed while moving, full speed after standing still for 400ms
       if (moving) {
@@ -1125,6 +1136,17 @@ export class GameScene extends Phaser.Scene {
       this._bowOffsetX = idleDir * 10;
       this._bowOffsetY = 2;
       bow.setPosition(this.player.x + this._bowOffsetX, this.player.y + this._bowOffsetY);
+      this.player.bowBehind = false;
+    }
+
+    // Body animation: pose-variant idle/run; backpedal plays the run cycle
+    // in reverse so the legs read as retreating while the torso keeps
+    // facing the target.
+    this.player.setFlipX(!this.player.facingRight);
+    const animKey = (moving ? 'player-move' : 'player-idle') + (aimPose === 'level' ? '' : `-${aimPose}`);
+    if (this.player.anims.currentAnim?.key !== animKey || this.player.anims.inReverse !== backpedal) {
+      if (backpedal) this.player.playReverse(animKey);
+      else this.player.play(animKey);
     }
 
     // Nocked arrow rides with the bow — fletching tip sits on the bowstring.

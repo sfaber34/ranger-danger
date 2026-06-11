@@ -11,6 +11,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   invuln = 0;
   facing = 0; // radians
   facingRight = true; // last horizontal direction
+  bowBehind = false; // aiming up-screen — bow renders behind the body
   bow: Phaser.GameObjects.Sprite;
   nockedArrow: Phaser.GameObjects.Sprite;
 

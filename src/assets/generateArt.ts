@@ -5,7 +5,7 @@
 // in order via registerAnimations().
 
 import Phaser from 'phaser';
-import { PFrame, drawPlayer, drawBow } from './art/player';
+import { PFrame, PPose, drawPlayer, drawBow } from './art/player';
 import {
   EFrame, ToadFrame,
   drawEnemyBasic, drawEnemyHeavy, drawEnemySnake, drawEnemyRat, drawEnemyDeer,
@@ -71,18 +71,20 @@ let artGenerated = false;
 export function generateAllArt(scene: Phaser.Scene) {
   if (artGenerated) return;
   artGenerated = true;
-  // Player
-  const pFrames: { k: string; f: PFrame }[] = [
-    { k: 'p_idle_0',  f: 'idle0' },
-    { k: 'p_idle_1',  f: 'idle1' },
-    { k: 'p_move_0',  f: 'move0' },
-    { k: 'p_move_1',  f: 'move1' },
-    { k: 'p_move_2',  f: 'move2' },
-    { k: 'p_move_3',  f: 'move3' },
-    { k: 'p_shoot_0', f: 'shoot0' },
-    { k: 'p_shoot_1', f: 'shoot1' }
+  // Player — 3 vertical aim poses × (4-frame idle + 6-frame run), plus shoot/hit
+  const pPoses: { pose: PPose; tag: string }[] = [
+    { pose: 'level', tag: '' },
+    { pose: 'up',    tag: 'up_' },
+    { pose: 'down',  tag: 'down_' },
   ];
-  for (const { k, f } of pFrames) add(scene, k, makeCanvas(32, drawPlayer(f)));
+  for (const { pose, tag } of pPoses) {
+    for (let i = 0; i < 4; i++)
+      add(scene, `p_idle_${tag}${i}`, makeCanvas(32, drawPlayer(`idle${i}` as PFrame, pose)));
+    for (let i = 0; i < 6; i++)
+      add(scene, `p_move_${tag}${i}`, makeCanvas(32, drawPlayer(`move${i}` as PFrame, pose)));
+  }
+  add(scene, 'p_shoot_0', makeCanvas(32, drawPlayer('shoot0')));
+  add(scene, 'p_shoot_1', makeCanvas(32, drawPlayer('shoot1')));
   add(scene, 'p_hit_0', makeCanvas(32, drawPlayer('hit')));
 
   // Bow (separate rotatable sprite, 32x32, origin will be at ~left-center)
@@ -419,8 +421,14 @@ export function registerAnimations(scene: Phaser.Scene) {
     a.create({ key, frames: framesFromKeys(keys), frameRate, repeat });
   };
 
-  mk('player-idle',  ['p_idle_0', 'p_idle_1'], 3, -1);
-  mk('player-move',  ['p_move_0','p_move_1','p_move_2','p_move_3'], 10, -1);
+  const pIdle = (tag: string) => Array.from({ length: 4 }, (_, i) => `p_idle_${tag}${i}`);
+  const pMove = (tag: string) => Array.from({ length: 6 }, (_, i) => `p_move_${tag}${i}`);
+  mk('player-idle',      pIdle(''),      4, -1);
+  mk('player-idle-up',   pIdle('up_'),   4, -1);
+  mk('player-idle-down', pIdle('down_'), 4, -1);
+  mk('player-move',      pMove(''),      12, -1);
+  mk('player-move-up',   pMove('up_'),   12, -1);
+  mk('player-move-down', pMove('down_'), 12, -1);
   mk('player-shoot', ['p_shoot_0','p_shoot_1'], 14, 0);
   mk('player-hit',   ['p_hit_0'], 8, 0);
   mk('bow-idle',  ['bow_0'], 1, 0);
