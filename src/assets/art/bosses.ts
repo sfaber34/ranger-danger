@@ -1,7 +1,7 @@
 // All boss art lives here. Each biome has its own 64×64 boss with shared phase
 // types (BossFrame for the standard boss anims, ForestBossFrame for the wendigo).
 
-import { Put, P, mirrorX, rect, disc, ring, line, ellipse } from './canvas';
+import { Put, P, mirrorX, strokeOutline, rect, disc, ring, line, ellipse } from './canvas';
 
 // ==================================================================
 //  BOSS — The Brood Mother (64x64, 2x2 tile footprint)
@@ -395,12 +395,17 @@ export interface RamOpts {
   pockets?: number;
   rearUp?: boolean;
   legStep?: number;
-  headDown?: boolean; // atk windup: head lowered
+  headDown?: number;  // px the head is lowered (atk windup → slam)
+  earFlick?: boolean; // idle fidget — ear swivels up
+  tailWag?: number;   // -1 | 0 | 1 vertical tail offset
+  breath?: boolean;   // snort puff ahead of the nose
 }
 
-export function drawRamBody(put: Put, opts: RamOpts) {
-  const cx = 32;
-  const baseCy = 34 + (opts.bob ?? 0) + (opts.rearUp ? -2 : 0);
+export function drawRamBody(rawPut: Put, opts: RamOpts) {
+  const bob = opts.bob ?? 0;
+  const frontLift = opts.rearUp ? 3 : 0;  // windup: front end rears off the ground
+  const headDown = opts.headDown ?? 0;
+  const ls = opts.legStep ?? 0;
 
   const col = {
     out: opts.flash ? P.white : P.outline,
@@ -420,143 +425,227 @@ export function drawRamBody(put: Put, opts: RamOpts) {
     b: opts.flash ? P.white : P.horn,
     l: opts.flash ? P.white : P.hornL
   };
+  const fc = (c: string) => opts.flash ? P.white : c;
+
+  // Record body pixels for the silhouette outline (matches the ranger look).
+  // Shadow + breath stay on rawPut so they aren't outlined.
+  const px = new Set<number>();
+  const put: Put = (x, y, c) => {
+    if (c == null || x < 0 || y < 0 || x >= 64 || y >= 64) return;
+    px.add(y * 64 + x);
+    rawPut(x, y, c);
+  };
 
   // Drop shadow
   for (let dy = -2; dy <= 2; dy++)
     for (let dx = -24; dx <= 24; dx++)
-      if ((dx * dx) / 576 + (dy * dy) / 5 <= 1) put(cx + dx, 59 + dy, P.shadow);
+      if ((dx * dx) / 576 + (dy * dy) / 5 <= 1) rawPut(32 + dx, 59 + dy, P.shadow);
 
-  // --- Legs (4 thick legs) ---
-  const legStep = opts.legStep ?? 0;
-  // Back legs
-  rect(put, cx - 18, baseCy + 12 + legStep, 5, 10, col.d);
-  rect(put, cx - 17, baseCy + 13 + legStep, 3, 8, col.m);
-  rect(put, cx - 10, baseCy + 14 - legStep, 5, 9, col.d);
-  rect(put, cx - 9, baseCy + 15 - legStep, 3, 7, col.m);
-  // Front legs
-  rect(put, cx + 6, baseCy + 14 - legStep, 5, 9, col.d);
-  rect(put, cx + 7, baseCy + 15 - legStep, 3, 7, col.m);
-  rect(put, cx + 14, baseCy + 12 + legStep, 5, 10, col.d);
-  rect(put, cx + 15, baseCy + 13 + legStep, 3, 8, col.m);
-  // Hooves (dark)
-  rect(put, cx - 18, baseCy + 22 + legStep, 6, 2, col.out);
-  rect(put, cx - 10, baseCy + 22 - legStep, 6, 2, col.out);
-  rect(put, cx + 6, baseCy + 22 - legStep, 6, 2, col.out);
-  rect(put, cx + 14, baseCy + 22 + legStep, 6, 2, col.out);
+  // --- proportions: side-profile quadruped facing right ---
+  // rump x~10 → chest x~46, barrel centre (26, bodyCy), skull out front at
+  // (50, headY) on a wool neck. headDown drives the slam; rearUp the windup.
+  const bodyCy = 36 + bob;
+  const headY = bodyCy - 12 - frontLift + headDown;
 
-  // --- Woolly body (big round barrel) ---
-  disc(put, cx, baseCy, 22, col.out);
-  disc(put, cx, baseCy, 21, wc.d);
-  disc(put, cx, baseCy, 19, wc.b);
+  // Trot gait: diagonal leg pairs swing in opposition, swinging pair lifts.
+  const liftA = Math.max(0, ls);   // near-front + far-rear
+  const liftB = Math.max(0, -ls);  // far-front + near-rear
+  const leg = (x: number, dx: number, lift: number, near: boolean, front: boolean) => {
+    const fl = front ? frontLift * 2 : 0;
+    const hoofY = 54 - lift - fl;
+    const topY = bodyCy + 4 - (front ? frontLift : 0);
+    const lx = x + dx;
+    rect(put, x, topY, 4, 6, near ? col.b : col.d);                                  // thigh
+    rect(put, lx, topY + 6, 3, Math.max(0, hoofY - topY - 6), near ? col.m : col.d); // shin
+    if (near) rect(put, lx + 2, topY + 6, 1, Math.max(0, hoofY - topY - 6), col.l);
+    rect(put, lx, hoofY, 3, 2, col.out);                                             // hoof
+    put(lx + 1, hoofY, opts.flash ? P.white : P.stoneD);                             // split
+  };
 
-  // Upper back wool — darker, textured
-  for (let y = -19; y <= -3; y++)
-    for (let x = -18; x <= 18; x++)
-      if (x * x + y * y <= 361) put(cx + x, baseCy + y, wc.d);
-  for (let y = -17; y <= -5; y++)
-    for (let x = -16; x <= 16; x++)
-      if (x * x + y * y <= 289) put(cx + x, baseCy + y, wc.b);
+  // far-side legs first — the body overlaps them
+  leg(35, -ls, liftB, false, true);
+  leg(18, ls, liftA, false, false);
 
-  // Wool highlight (upper-left)
-  for (let y = -16; y <= -8; y++)
-    for (let x = -14; x <= -2; x++)
-      if (x * x + y * y <= 225) put(cx + x, baseCy + y, wc.l);
+  // --- woolly tail (wags) ---
+  const tw = opts.tailWag ?? 0;
+  disc(put, 9, bodyCy - 3 + tw, 3, wc.d);
+  disc(put, 9, bodyCy - 3 + tw, 2, wc.b);
+  put(8, bodyCy - 5 + tw, wc.l);
 
-  // Wool texture lumps
-  disc(put, cx - 8, baseCy - 8, 5, wc.b);
-  disc(put, cx + 4, baseCy - 6, 4, wc.b);
-  disc(put, cx - 2, baseCy - 12, 4, wc.l);
-  disc(put, cx + 10, baseCy - 4, 3, wc.b);
+  // --- fleece barrel + haunch + shoulder masses ---
+  ellipse(put, 26, bodyCy, 17, 10, wc.d);
+  ellipse(put, 26, bodyCy, 16, 9, wc.b);
+  disc(put, 15, bodyCy + 1, 8, wc.d);   // rear haunch
+  disc(put, 15, bodyCy + 1, 7, wc.b);
+  // hunched shoulder hump — the silhouette looms over the lowered skull
+  disc(put, 36, bodyCy - 4 - frontLift, 9, wc.d);
+  disc(put, 36, bodyCy - 4 - frontLift, 8, wc.b);
+  disc(put, 36, bodyCy - 10 - frontLift, 5, wc.d);
+  disc(put, 35, bodyCy - 10 - frontLift, 3, wc.b);
 
-  // Belly (lighter underside)
-  for (let y = 4; y <= 19; y++)
-    for (let x = -16; x <= 16; x++)
-      if (x * x + y * y <= 380) put(cx + x, baseCy + y, P.ramBelly);
-  for (let y = 10; y <= 19; y++)
-    for (let x = -12; x <= 12; x++)
-      if (x * x + y * y <= 340) put(cx + x, baseCy + y, P.ramL);
-
-  // --- Shoulder hump ---
-  disc(put, cx + 12, baseCy - 6, 8, wc.d);
-  disc(put, cx + 12, baseCy - 6, 6, wc.b);
-
-  // --- Head ---
-  const headOff = opts.headDown ? 3 : 0;
-  const hx = cx + 22, hy = baseCy - 4 + headOff;
-
-  // Neck
-  rect(put, cx + 12, hy - 4, 12, 12, col.b);
-  rect(put, cx + 14, hy - 2, 8, 8, col.l);
-
-  // Head shape
-  disc(put, hx, hy, 8, col.out);
-  disc(put, hx, hy, 7, col.d);
-  disc(put, hx, hy, 6, col.b);
-  // Forehead lighter
-  disc(put, hx + 1, hy - 2, 4, col.l);
-  // Muzzle
-  rect(put, hx + 4, hy, 6, 5, col.b);
-  rect(put, hx + 5, hy + 1, 5, 3, col.l);
-  // Nose
-  put(hx + 9, hy + 1, col.out); put(hx + 10, hy + 1, col.out);
-  put(hx + 9, hy + 2, col.out); put(hx + 10, hy + 2, col.out);
-  // Mouth
-  rect(put, hx + 5, hy + 4, 5, 1, col.d);
-  // Ear
-  rect(put, hx - 2, hy - 8, 3, 4, col.d);
-  put(hx - 1, hy - 7, '#8a5a5a');
-
-  // Eye — angry amber
-  put(hx + 2, hy - 2, '#ffcc20'); put(hx + 3, hy - 2, '#ffcc20');
-  put(hx + 2, hy - 1, '#ffaa00'); put(hx + 3, hy - 1, '#ffcc20');
-  put(hx + 3, hy - 2, col.out); // pupil
-  // Brow ridge
-  rect(put, hx + 1, hy - 3, 4, 1, col.d);
-
-  // --- HORNS — massive curling spirals ---
-  // Right horn (curls from forehead outward and down)
-  rect(put, hx - 2, hy - 6, 4, 3, hc.b);
-  rect(put, hx - 5, hy - 8, 4, 3, hc.b);
-  rect(put, hx - 8, hy - 8, 4, 3, hc.m);
-  rect(put, hx - 10, hy - 6, 3, 4, hc.m);
-  rect(put, hx - 11, hy - 3, 3, 4, hc.d);
-  rect(put, hx - 10, hy, 3, 3, hc.d);
-  rect(put, hx - 8, hy + 2, 3, 2, hc.d);
-  // Horn ridges (texture rings)
-  put(hx - 3, hy - 7, hc.d); put(hx - 6, hy - 8, hc.d);
-  put(hx - 9, hy - 6, hc.d); put(hx - 10, hy - 1, hc.d);
-  // Horn highlight
-  put(hx - 4, hy - 7, hc.l); put(hx - 7, hy - 7, hc.l);
-
-  // Left horn (behind head, partial)
-  rect(put, hx + 2, hy - 7, 3, 3, hc.b);
-  rect(put, hx + 4, hy - 9, 3, 3, hc.b);
-  rect(put, hx + 6, hy - 9, 3, 2, hc.m);
-  rect(put, hx + 8, hy - 7, 2, 3, hc.d);
-  put(hx + 5, hy - 8, hc.d);
-
-  // Charge glow — horns shimmer
-  if (opts.chargeGlow) {
-    put(hx - 6, hy - 8, P.sparkL);
-    put(hx - 10, hy - 2, P.sparkL);
-    put(hx - 8, hy + 2, P.spark);
-    put(hx + 6, hy - 9, P.sparkL);
+  // lumpy back line with crevices between the lumps
+  const lumps: ReadonlyArray<readonly [number, number, number]> =
+    [[14, -8, 3], [20, -10, 4], [27, -11, 4], [34, -10, 4]];
+  for (const [lx, ly, r] of lumps) {
+    disc(put, lx, bodyCy + ly, r, wc.b);
+    for (let a = 0.5; a < 2.6; a += 0.4)
+      put(lx + Math.round(Math.cos(a) * (r + 1)), bodyCy + ly + Math.round(Math.sin(a) * (r + 1)), wc.d);
+  }
+  // matted, filth-streaked fleece — dark speckling dominates the highlight
+  ellipse(put, 20, bodyCy - 5, 7, 3, wc.l);
+  for (let y = -10; y <= 9; y++)
+    for (let x = -16; x <= 16; x++) {
+      if ((x * x) / 289 + (y * y) / 100 > 1) continue;
+      if ((x * 3 + y * 7 + 64) % 17 === 0) put(26 + x, bodyCy + y, wc.l);
+      else if ((x * 5 + y * 3 + 64) % 9 === 0) put(26 + x, bodyCy + y, wc.d);
+    }
+  // bone spurs breaking through the fleece along the spine
+  for (const [sx, sy] of [[17, -11], [24, -13], [31, -13], [38, -12]] as const) {
+    put(sx, bodyCy + sy, fc(P.wBoneD));
+    put(sx, bodyCy + sy - 1, fc(P.wBone));
+    put(sx, bodyCy + sy - 2, fc(P.wBoneL));
+  }
+  // old gash raked across the flank — pale scar tissue over a dark wound
+  for (let i = 0; i < 5; i++) {
+    put(20 + i, bodyCy - 1 + i, wc.d);
+    put(21 + i, bodyCy - 1 + i, fc(P.wBone));
+  }
+  put(23, bodyCy + 1, fc(P.redD));
+  // shaded belly with long matted clumps dangling off it
+  ellipse(put, 26, bodyCy + 7, 13, 3, wc.d);
+  for (let x = 14; x <= 39; x += 3) {
+    put(x, bodyCy + 10, wc.d);
+    put(x + 1, bodyCy + 11, wc.d);
   }
 
-  // --- Tail (short woolly) ---
-  put(cx - 22, baseCy + 2, wc.d);
-  put(cx - 23, baseCy + 1, wc.d);
-  put(cx - 22, baseCy + 3, wc.d);
-  put(cx - 23, baseCy + 2, wc.b);
+  // chest wool + hanging tuft
+  disc(put, 42, bodyCy + 1 - frontLift, 5, wc.b);
+  put(43, bodyCy + 6 - frontLift, wc.d);
+  put(44, bodyCy + 5 - frontLift, wc.b);
 
-  // --- Birth pockets on back ---
+  // near-side legs (over the body)
+  leg(40, ls, liftA, true, true);
+  leg(12, -ls, liftB, true, false);
+
+  // --- wool neck stepping up to the skull ---
+  const neckPts: ReadonlyArray<readonly [number, number]> = [
+    [40, bodyCy - 7 - frontLift],
+    [44, Math.round((bodyCy - 9 - frontLift + headY + 4) / 2)],
+    [47, headY + 4],
+  ];
+  for (const [nx, ny] of neckPts) {
+    disc(put, nx, ny, 4, wc.d);
+    disc(put, nx, ny, 3, wc.b);
+  }
+
+  // --- far horn: heavy curl behind the head ---
+  for (let t = 0; t <= 0.7; t += 0.02) {
+    const a = (-90 - 310 * t) * (Math.PI / 180);
+    const r = 8 - 4.8 * t;
+    disc(put, Math.round(42 + Math.cos(a) * r), Math.round(headY + Math.sin(a) * r), 1, t < 0.4 ? hc.m : hc.d);
+  }
+
+  // --- ear (torn and notched; swivels up on the idle flick) ---
+  if (opts.earFlick) {
+    rect(put, 43, headY - 7, 2, 3, col.d);
+    put(43, headY - 6, fc('#8a5a5a'));
+  } else {
+    rect(put, 43, headY - 4, 3, 2, col.d);
+    put(44, headY - 4, fc('#8a5a5a'));
+    put(44, headY - 5, col.d);            // ragged tip
+  }
+
+  // --- head: gaunt skull, jutting brow, roman-nose profile ---
+  disc(put, 50, headY, 5, col.d);
+  disc(put, 50, headY, 4, col.b);
+  put(49, headY + 2, col.m);              // sunken cheek
+  put(50, headY + 2, col.m);
+  rect(put, 46, headY - 6, 8, 2, col.d);  // bony forehead plate
+  rect(put, 49, headY - 4, 5, 1, col.d);  // brow juts out, casting the eye in shadow
+  put(53, headY - 3, col.d);
+  put(48, headY - 3, col.m);
+  // scar raked down the face
+  put(53, headY - 2, fc(P.wBone));
+  put(54, headY - 1, fc(P.wBone));
+  put(55, headY, fc(P.wBone));
+  // muzzle slopes down and forward, snout wrinkled mid-snarl
+  rect(put, 53, headY + 1, 4, 4, col.b);
+  rect(put, 55, headY + 3, 3, 4, col.m);
+  rect(put, 56, headY + 5, 3, 3, col.b);
+  put(55, headY + 4, col.d);              // snarl wrinkle
+  put(56, headY + 3, col.d);
+  put(58, headY + 6, col.out);            // flared nostril
+  put(57, headY + 5, fc(P.redD));         // nostril rim flushed red
+  // snarling jaw — lips pulled back over bared teeth
+  rect(put, 55, headY + 8, 4, 1, P.white);  // teeth
+  rect(put, 55, headY + 9, 4, 1, col.out);  // open jaw shadow
+  put(54, headY + 8, col.d);                // lip curl
+  put(54, headY + 7, col.m);
+  // eye — burning red, sunk deep under the brow
+  put(51, headY - 1, fc('#ff2020'));
+  put(52, headY - 1, fc('#ff4040'));
+  put(51, headY, fc('#aa0000'));
+  put(52, headY, col.out);                // pupil
+  put(50, headY - 1, fc('#7a1410'));      // ember bleed at the socket
+  put(53, headY - 1, fc('#7a1410'));
+  if (opts.chargeGlow) {                  // eye flares while winding up
+    put(50, headY, '#ff6020');
+    put(53, headY, '#ff6020');
+    rawPut(49, headY - 1, P.spark);       // heat shimmer off the socket
+  }
+
+  // --- the signature horn: massive, battle-worn curling spiral ---
+  // top of skull → back over the ear → down the jaw → tip snapped off mid-curl
+  const hornCx = 46, hornCy = headY + 1;
+  const hornPt = (t: number, rOff = 0) => {
+    const a = (-90 - 310 * t) * (Math.PI / 180);
+    const r = 10 - 6.6 * t + rOff;
+    return [Math.round(hornCx + Math.cos(a) * r), Math.round(hornCy + Math.sin(a) * r)] as const;
+  };
+  for (let t = 0; t <= 0.93; t += 0.015) {
+    const [hx, hy] = hornPt(t);
+    disc(put, hx, hy, t < 0.5 ? 2 : 1, t < 0.45 ? hc.b : t < 0.8 ? hc.m : hc.d);
+  }
+  // growth-ring ridges along the outer edge
+  for (let t = 0.04; t < 0.85; t += 0.08) {
+    const [hx, hy] = hornPt(t, 1.6);
+    put(hx, hy, hc.d);
+  }
+  // deep cracks gouged across the curl
+  for (const t of [0.18, 0.42, 0.63]) {
+    const [hx, hy] = hornPt(t);
+    put(hx, hy, col.out);
+    const [ox, oy] = hornPt(t, 1.4);
+    put(ox, oy, col.out);
+  }
+  // jagged snapped-off tip with the exposed core
+  {
+    const [bx, by] = hornPt(0.93);
+    put(bx, by, hc.d);
+    put(bx + 1, by - 1, col.out);
+    put(bx, by - 1, fc(P.wBone));   // raw marrow
+    put(bx + 1, by, hc.m);
+  }
+  // dull edge light — worn, not polished
+  for (let t = 0; t < 0.25; t += 0.05) {
+    const [hx, hy] = hornPt(t, -1.2);
+    put(hx, hy, hc.l);
+  }
+  if (opts.chargeGlow) { // horn crackles with heat
+    for (const t of [0, 0.3, 0.55, 0.8]) {
+      const [hx, hy] = hornPt(t, 2);
+      rawPut(hx, hy, P.sparkL);
+    }
+    rawPut(hornCx, hornCy - 13, P.spark);
+  }
+
+  // --- birth pockets along the back ---
   if (opts.pockets !== undefined) {
     const stage = opts.pockets;
     const pockets: Array<[number, number]> = [
-      [-10, -13], [-2, -15], [6, -14]
+      [16, bodyCy - 10], [25, bodyCy - 12], [34, bodyCy - 11]
     ];
-    for (const [px, py] of pockets) {
-      const ox = cx + px, oy = baseCy + py;
+    for (const [ox, oy] of pockets) {
       if (stage === 0) {
         disc(put, ox, oy, 3, wc.l);
         disc(put, ox, oy, 2, wc.b);
@@ -583,20 +672,47 @@ export function drawRamBody(put: Put, opts: RamOpts) {
       }
     }
   }
+
+  // --- snort puff (unrecorded — soft mist with an ember in it) ---
+  if (opts.breath) {
+    rawPut(60, headY + 5, P.stoneL);
+    rawPut(61, headY + 6, P.white);
+    rawPut(60, headY + 7, P.stoneL);
+    rawPut(62, headY + 4, P.stoneL);
+    rawPut(59, headY + 6, P.stoneL);
+    rawPut(62, headY + 6, P.spark);   // ember carried on the breath
+  }
+
+  // Crisp 1px silhouette outline (matches the ranger + meadow enemies)
+  strokeOutline(px, rawPut, 64);
 }
 
-export function drawRam(frame: BossFrame) {
+/** Ram frame set — the shared BossFrame plus extra idle/move/atk in-betweens
+ *  for smoother animation (the ram is the tutorial-adjacent boss the player
+ *  stares at the longest). */
+export type RamFrame = BossFrame | 'idle2' | 'idle3' | 'move4' | 'move5' | 'atk2' | 'atk3';
+
+export function drawRam(frame: RamFrame) {
   return (put: Put) => {
     switch (frame) {
+      // breathing bob with an ear flick + tail wag mid-cycle
       case 'idle0':      return drawRamBody(put, { bob: 0 });
-      case 'idle1':      return drawRamBody(put, { bob: 1 });
-      case 'move0':      return drawRamBody(put, { bob: 0, legStep: 1 });
-      case 'move1':      return drawRamBody(put, { bob: 1, legStep: 0 });
-      case 'move2':      return drawRamBody(put, { bob: 0, legStep: -1 });
-      case 'move3':      return drawRamBody(put, { bob: 1, legStep: 0 });
-      case 'atk0':       return drawRamBody(put, { rearUp: true, headDown: true, bob: -1 });
-      case 'atk1':       return drawRamBody(put, { bob: 2 });
-      case 'chargeWind': return drawRamBody(put, { chargeGlow: true, headDown: true, bob: 0 });
+      case 'idle1':      return drawRamBody(put, { bob: 1, tailWag: 1 });
+      case 'idle2':      return drawRamBody(put, { bob: 1, earFlick: true, tailWag: 1 });
+      case 'idle3':      return drawRamBody(put, { bob: 0 });
+      // 6-step trot: legs swing through ±2 with the body dipping on contact
+      case 'move0':      return drawRamBody(put, { bob: 1, legStep: 2 });
+      case 'move1':      return drawRamBody(put, { bob: 0, legStep: 1, tailWag: 1 });
+      case 'move2':      return drawRamBody(put, { bob: 0, legStep: -1, tailWag: 1 });
+      case 'move3':      return drawRamBody(put, { bob: 1, legStep: -2 });
+      case 'move4':      return drawRamBody(put, { bob: 0, legStep: -1, tailWag: -1 });
+      case 'move5':      return drawRamBody(put, { bob: 0, legStep: 1, tailWag: -1 });
+      // 4-step slam: rear up → drop → full headbutt (with snort) → recover
+      case 'atk0':       return drawRamBody(put, { rearUp: true, headDown: 0, bob: -1 });
+      case 'atk1':       return drawRamBody(put, { headDown: 2, bob: 1 });
+      case 'atk2':       return drawRamBody(put, { headDown: 5, bob: 2, breath: true });
+      case 'atk3':       return drawRamBody(put, { headDown: 2, bob: 1 });
+      case 'chargeWind': return drawRamBody(put, { chargeGlow: true, headDown: 3, bob: 0, breath: true });
       case 'hit':        return drawRamBody(put, { flash: true });
       case 'birth0':     return drawRamBody(put, { pockets: 0 });
       case 'birth1':     return drawRamBody(put, { pockets: 1 });

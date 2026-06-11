@@ -108,6 +108,15 @@ export class WaveState {
     this.waveStartAt = startAt;
   }
 
+  /** Dev shortcut (?boss=1): jump straight to the given boss wave. Counters
+   *  are fast-forwarded to `spawned` so SpawnSystem's boss-lead-in branch
+   *  (stragglers → prep countdown → boss) engages immediately. */
+  jumpToBossWave(wave: number, spawned: number) {
+    this.wave = wave;
+    this.waveSpawned = spawned;
+    this.waveKills = spawned;
+  }
+
   /** Tutorial: pause spawning indefinitely. */
   suspendInitialBuildPhase() {
     this.waveStartAt = Infinity;

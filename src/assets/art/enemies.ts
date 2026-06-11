@@ -2,9 +2,13 @@
 // the projectile/poop fx that come from them. Bear is in bear.ts (its own palette
 // and frame schema), bosses are in bosses.ts.
 
-import { Put, P, mirrorX, rect, disc, ring, line, ellipse } from './canvas';
+import { Put, P, mirrorX, strokeOutline, rect, disc, ring, line, ellipse } from './canvas';
 
 export type EFrame = 'move0'|'move1'|'move2'|'move3'|'atk0'|'atk1'|'hit'|'die0'|'die1'|'die2'|'die3';
+
+/** Extended frame set for the meadow enemies (snake/rat/deer) — 6-frame move
+ *  cycles and 4-frame attacks for smoother animation. */
+export type EFrame6 = EFrame | 'move4' | 'move5' | 'atk2' | 'atk3';
 
 export function drawEnemyBasic(f: EFrame) {
   return (put: Put) => {
@@ -165,21 +169,32 @@ export function drawEnemyHeavy(f: EFrame) {
 // ==================================================================
 //  SNAKE (32x32) — slithering viper, meadow basic enemy
 // ==================================================================
-export function drawEnemySnake(f: EFrame) {
+export function drawEnemySnake(f: EFrame6) {
   return (rawPut: Put) => {
-    const put = f.startsWith('die') ? rawPut : mirrorX(rawPut);
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 6 - step * 1.5;
       if (r <= 0) return;
-      disc(put, 16, 22, Math.max(0, Math.round(r)), P.snake);
+      disc(rawPut, 16, 22, Math.max(0, Math.round(r)), P.snake);
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2 + step * 0.5;
         const d = step * 3 + 2;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(22 + Math.sin(a) * d), P.snakeD);
+        const x = Math.round(16 + Math.cos(a) * d), y = Math.round(22 + Math.sin(a) * d);
+        rawPut(x, y, P.snakeD);
+        rawPut(x + 1, y, i % 2 === 0 ? P.snakeBelly : P.snakePat);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    // Record body pixels for the silhouette outline (matches the ranger look)
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
     const body = flash ? P.white : P.snake;
     const bodyD = flash ? P.white : P.snakeD;
@@ -187,241 +202,312 @@ export function drawEnemySnake(f: EFrame) {
     const belly = flash ? P.white : P.snakeBelly;
     const pat = flash ? P.white : P.snakePat;
 
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 1 : 0;
+    // 6-phase slither; attacks map onto a strike lunge
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const phase = mi >= 0 ? mi : ai >= 0 ? [0, 1, 2, 1][ai] : 0;
+    const lunge = ai >= 0 ? [0, 1, 3, 2][ai] : 0; // head thrust toward prey
     const cy = 22;
 
-    // Body segments — sinusoidal wave
-    const segs = [
-      { x: 8,  y: cy + [0, -1, 0, 1][phase] },
-      { x: 11, y: cy + [-1, 0, 1, 0][phase] },
-      { x: 14, y: cy + [0, 1, 0, -1][phase] },
-      { x: 17, y: cy + [1, 0, -1, 0][phase] },
-      { x: 20, y: cy + [0, -1, 0, 1][phase] },
-      { x: 23, y: cy + [-1, 0, 1, 0][phase] },
-    ];
-
-    // Tail
-    put(24, segs[5].y, bodyD);
-    put(25, segs[5].y - 1, bodyD);
-
-    // Body segments back to front
-    for (let i = segs.length - 1; i >= 0; i--) {
-      const s = segs[i];
-      const thick = i <= 1 ? 2 : i >= 4 ? 2 : 3;
-      const ty = s.y - Math.floor(thick / 2);
-      rect(put, s.x, ty, 4, thick, body);
-      // Belly
-      rect(put, s.x, ty + thick - 1, 4, 1, belly);
-      // Diamond pattern
-      if (i % 2 === 0) rect(put, s.x + 1, ty, 2, 1, pat);
+    // --- continuous sinusoidal body, tail tip (x=27) to neck (x=8) ---
+    // The wave travels backwards as phase advances, so the slither reads as
+    // pushing the snake forward.
+    const yAt = (x: number) => cy + Math.round(Math.sin(x * 0.55 - phase * (Math.PI / 3)) * 1.8);
+    for (let x = 27; x >= 8; x--) {
+      const th = x >= 25 ? 1 : x >= 21 ? 2 : x >= 13 ? 4 : 3; // taper: tail → thick mid → neck
+      const y = yAt(x);
+      const top = y - (th >> 1);
+      for (let i = 0; i < th; i++) {
+        const c = i === 0 && th >= 3 ? bodyL : i === th - 1 && th >= 2 ? belly : body;
+        put(x, top + i, c);
+      }
+      // diamond back pattern — scrolls along the body with the wave
+      if ((x + phase) % 4 < 2 && th >= 3) put(x, top, pat);
+      if ((x + phase) % 4 === 0 && th >= 4) put(x, top + 1, bodyD);
+      // dark banding toward the tail
+      if (th <= 2 && x % 3 === 0) put(x, y, bodyD);
     }
 
-    // Head
-    const headY = segs[0].y;
-    rect(put, 5, headY - 2, 5, 4, bodyL);
-    rect(put, 4, headY - 1, 2, 3, bodyL);
-    rect(put, 6, headY - 2, 3, 1, body);
+    // --- head (viper wedge) ---
+    const hx = 5 - lunge; // skull front-left
+    const hy = yAt(9);    // rides the neck wave
+    rect(put, hx + 1, hy - 2, 5, 5, body);
+    rect(put, hx, hy - 1, 1, 3, body);            // snout tip
+    rect(put, hx + 1, hy - 2, 5, 1, bodyD);       // brow ridge
+    put(hx + 5, hy - 2, bodyL);                   // skull sheen
+    put(hx + 4, hy - 2, bodyL);
+    rect(put, hx + 1, hy + 2, 5, 1, belly);       // jaw
+    put(hx, hy, P.outline);                       // nostril
+    // eye — yellow with slit pupil
+    put(hx + 3, hy - 1, flash ? P.white : '#ffcc00');
+    put(hx + 4, hy - 1, flash ? P.white : '#ffe060');
+    put(hx + 3, hy, flash ? P.white : P.outline); // slit
 
-    // Eyes
-    put(5, headY - 1, '#ffcc00');
-    put(6, headY - 1, '#ffcc00');
-    put(5, headY - 1, P.outline);
-
-    // Tongue (flickers on certain frames)
-    if (phase < 2) {
-      put(3, headY, '#dd3333');
-      put(2, headY, '#dd3333');
-      if (phase === 0) {
-        put(1, headY - 1, '#dd3333');
-        put(1, headY + 1, '#dd3333');
+    if (ai >= 0) {
+      // hood flare while striking
+      for (let x = 9; x <= 13; x++) {
+        put(x, yAt(x) - 3, bodyD);
+        put(x, yAt(x) + 3, bodyD);
+      }
+      // open jaw + fangs
+      rect(put, hx - 1, hy, 2, 3, P.outline);
+      put(hx - 1, hy, P.white);                   // upper fang
+      put(hx - 1, hy + 2, P.white);               // lower fang
+      if (ai === 2) put(hx - 2, hy + 3, '#80e060'); // venom drip at full extension
+    } else if (phase % 3 !== 2) {
+      // forked tongue flicker
+      put(hx - 1, hy, '#dd3333');
+      put(hx - 2, hy, '#dd3333');
+      if (phase % 3 === 0) {
+        put(hx - 3, hy - 1, '#dd3333');
+        put(hx - 3, hy + 1, '#dd3333');
       }
     }
 
-    // Attack — open mouth
-    if (f === 'atk0' || f === 'atk1') {
-      rect(put, 3, headY, 3, 2, P.outline);
-      put(3, headY + 1, P.white); // fang
-      put(5, headY + 1, P.white);
-    }
+    strokeOutline(px, mput);
   };
 }
 
 // ==================================================================
 //  RAT SWARM (32x32) — cluster of 3 rats, meadow runner pack
 // ==================================================================
-export function drawEnemyRat(f: EFrame) {
+export function drawEnemyRat(f: EFrame6) {
   return (rawPut: Put) => {
-    const put = f.startsWith('die') ? rawPut : mirrorX(rawPut);
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 7 - step * 2;
       if (r <= 0) return;
-      disc(put, 16, 20, Math.max(0, r), P.rat);
+      disc(rawPut, 16, 20, Math.max(0, r), P.rat);
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2 + step * 0.5;
         const d = step * 3 + 2;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(20 + Math.sin(a) * d), P.ratD);
+        const x = Math.round(16 + Math.cos(a) * d), y = Math.round(20 + Math.sin(a) * d);
+        rawPut(x, y, P.ratD);
+        rawPut(x + 1, y, i % 2 === 0 ? P.ratTail : P.ratL);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
     const bodyA = flash ? P.white : P.rat;
     const bodyB = flash ? P.white : P.ratD;
     const bodyC = flash ? P.white : P.ratL;
     const tail = flash ? P.white : P.ratTail;
+    const bellyC = flash ? P.white : '#a89888';
+    const earC = flash ? P.white : '#e8a0a0';
+    const whisker = flash ? P.white : '#c8c8c8';
 
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 2 : 0;
+    // 6-phase scurry; attacks map onto a biting lunge
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : ai >= 0 ? [0, 2, 4, 2][ai] : 0;
+    const lunge = ai >= 0 ? [0, 1, 2, 1][ai] : 0;
 
+    // Three rats, staggered so the pack boils rather than hops in sync
     const rats = [
-      { x: 10, y: 19 + [0, 1, 0, -1][phase], c: bodyA },
-      { x: 16, y: 17 + [0, -1, 0, 1][(phase + 1) % 4], c: bodyB },
-      { x: 14, y: 22 + [0, 1, 0, -1][(phase + 2) % 4], c: bodyC },
+      { x: 10, y: 19, k: 0, c: bodyA },
+      { x: 17, y: 16, k: 2, c: bodyB },
+      { x: 14, y: 22, k: 4, c: bodyC },
     ];
 
-    // Tails first (behind)
-    for (let i = 0; i < rats.length; i++) {
-      const r = rats[i];
-      const tw = [0, 1, 0, -1][(phase + i) % 4];
-      put(r.x + 6, r.y + 1 + tw, tail);
-      put(r.x + 7, r.y + tw, tail);
-      put(r.x + 8, r.y + tw, tail);
-      put(r.x + 9, r.y - 1 + tw, tail);
+    for (const r of rats) {
+      const bob = Math.round(Math.sin((ph + r.k) * (Math.PI / 3)) * 1.2);
+      const x = r.x - lunge, y = r.y + bob;
+
+      // soft ground shading under each rat (unrecorded — no outline)
+      rect(mput, x, y + 5, 7, 1, P.shadow);
+
+      // tail — whips in an S behind the body
+      for (let s = 0; s < 4; s++) {
+        const ty = y + 1 - Math.round(Math.sin((ph + r.k) * (Math.PI / 3) + s * 0.9) * 1.2);
+        put(x + 7 + s, ty, tail);
+      }
+
+      // body — rounded back, haunch highlight, lighter belly
+      rect(put, x, y, 7, 4, r.c);
+      rect(put, x + 1, y - 1, 5, 1, r.c);
+      rect(put, x + 4, y - 1, 2, 1, flash ? P.white : '#9a8a7a'); // haunch
+      rect(put, x + 1, y + 3, 5, 1, bellyC);
+
+      // legs — front/back pairs alternate with the scurry
+      const lo = (ph + r.k) % 2;
+      put(x + 1, y + 4, bodyB);
+      put(x + 2, y + 4 - lo, bodyB);
+      put(x + 5, y + 4 - (1 - lo), bodyB);
+      put(x + 6, y + 4, bodyB);
+
+      // head — wedge with snout
+      rect(put, x - 2, y, 3, 3, r.c);
+      put(x - 3, y + 1, r.c); // snout
+      // ears (outer + pink inner)
+      put(x - 1, y - 1, r.c);
+      put(x, y - 1, r.c);
+      put(x - 1, y - 2, earC);
+      // eye — red glint
+      put(x - 2, y + 1, flash ? P.white : '#ff2222');
+      // nose
+      put(x - 4, y + 1, earC);
+      // whiskers
+      put(x - 4, y, whisker);
+      put(x - 4, y + 2, whisker);
+      // bared teeth mid-lunge
+      if (ai === 1 || ai === 2) put(x - 3, y + 2, P.white);
     }
 
-    // Rat bodies
-    for (let i = 0; i < rats.length; i++) {
-      const r = rats[i];
-      const legOff = [0, 1, 0, 1][(phase + i) % 4];
-      // Body
-      rect(put, r.x, r.y, 7, 4, r.c);
-      rect(put, r.x + 1, r.y - 1, 5, 1, r.c);
-      // Legs
-      put(r.x, r.y + 4 - legOff, bodyB);
-      put(r.x + 1, r.y + 4 - legOff, bodyB);
-      put(r.x + 5, r.y + 4 + legOff, bodyB);
-      put(r.x + 6, r.y + 4 + legOff, bodyB);
-      // Head
-      rect(put, r.x - 2, r.y, 3, 3, r.c);
-      // Ear
-      put(r.x - 1, r.y - 1, '#e8a0a0');
-      // Eye
-      put(r.x - 2, r.y + 1, '#ff2222');
-      // Nose
-      put(r.x - 3, r.y + 1, '#e8a0a0');
-    }
+    strokeOutline(px, mput);
   };
 }
 
 // ==================================================================
 //  DEER (32x32) — corrupted stag, meadow heavy enemy
 // ==================================================================
-export function drawEnemyDeer(f: EFrame) {
+export function drawEnemyDeer(f: EFrame6) {
   return (rawPut: Put) => {
-    const put = f.startsWith('die') ? rawPut : mirrorX(rawPut);
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 10 - step * 2;
       if (r <= 0) return;
-      disc(put, 16, 18, Math.max(0, r), P.deer);
-      disc(put, 16, 18, Math.max(0, r - 2), P.deerL);
+      disc(rawPut, 16, 18, Math.max(0, r), P.deer);
+      disc(rawPut, 16, 18, Math.max(0, r - 2), P.deerL);
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2 + step * 0.4;
         const d = step * 3 + 3;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), P.deerD);
-        put(Math.round(16 + Math.cos(a) * d) + 1, Math.round(18 + Math.sin(a) * d), P.antler);
+        rawPut(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), P.deerD);
+        rawPut(Math.round(16 + Math.cos(a) * d) + 1, Math.round(18 + Math.sin(a) * d), P.antler);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
     const body = flash ? P.white : P.deer;
     const bodyD = flash ? P.white : P.deerD;
+    const bodyM = flash ? P.white : P.deerM;
     const bodyL = flash ? P.white : P.deerL;
     const belly = flash ? P.white : P.deerBelly;
     const horn = flash ? P.white : P.antler;
     const hornD = flash ? P.white : P.antlerD;
+    const hornL = flash ? P.white : P.hornL;
 
-    // Shadow (drawn first so body renders on top)
+    // Shadow (unrecorded — stays outside the outline)
     for (let dy = -1; dy <= 1; dy++)
       for (let dx = -7; dx <= 7; dx++)
-        if ((dx * dx) / 49 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+        if ((dx * dx) / 49 + (dy * dy) / 1.5 <= 1) mput(16 + dx, 28 + dy, P.shadow);
 
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 2 : 0;
-    const bob = [0, -1, 0, -1][phase];
+    // 6-phase gallop; attacks map onto an antler-thrust lunge
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : 0;
+    const bob = mi >= 0 ? [0, -1, -1, 0, -1, -1][ph] : ai >= 0 ? [0, 0, 1, 0][ai] : 0;
+    const headDown = ai >= 0 ? [1, 2, 4, 2][ai] : 0;
+    const lunge = ai >= 0 ? [0, 1, 3, 1][ai] : 0;
     const cy = 14 + bob;
 
-    // Legs (4 thin legs)
+    // --- legs: 4-beat gallop — each leg swings/lifts on its own phase ---
     const legY = cy + 8;
-    if (phase === 0) {
-      rect(put, 11, legY, 2, 7, bodyD); rect(put, 15, legY, 2, 7, bodyD);
-      rect(put, 19, legY, 2, 7, bodyD); rect(put, 22, legY, 2, 7, bodyD);
-    } else if (phase === 1) {
-      rect(put, 10, legY, 2, 8, bodyD); rect(put, 15, legY, 2, 6, bodyD);
-      rect(put, 18, legY, 2, 8, bodyD); rect(put, 23, legY, 2, 6, bodyD);
-    } else {
-      rect(put, 12, legY, 2, 6, bodyD); rect(put, 15, legY, 2, 8, bodyD);
-      rect(put, 20, legY, 2, 6, bodyD); rect(put, 22, legY, 2, 8, bodyD);
+    const legXs = [11, 15, 19, 22];
+    const legKs = [0, 1, 3, 4]; // front pair leads, rear pair follows
+    for (let i = 0; i < 4; i++) {
+      const ang = (ph + legKs[i]) * (Math.PI / 3);
+      const dx = mi >= 0 ? Math.round(Math.sin(ang) * 2) : 0;
+      const lift = mi >= 0 ? Math.max(0, Math.round(Math.cos(ang) * 1.5)) : 0;
+      const x = legXs[i] + dx;
+      rect(put, x, legY, 2, 7 - lift, bodyD);
+      put(x, legY + 2, bodyM);                       // knee highlight
+      rect(put, x, legY + 7 - lift, 2, 1, P.outline); // hoof
     }
-    // Hooves
-    const hoofOff = phase === 1 ? 1 : phase === 2 ? -1 : 0;
-    rect(put, 11 + (phase === 1 ? -1 : phase === 2 ? 1 : 0), legY + 7 + hoofOff, 2, 1, P.outline);
-    rect(put, 15, legY + 7 - hoofOff, 2, 1, P.outline);
-    rect(put, 19 + (phase === 1 ? -1 : phase === 2 ? 1 : 0), legY + 7 + hoofOff, 2, 1, P.outline);
-    rect(put, 22, legY + 7 - hoofOff, 2, 1, P.outline);
 
-    // Body
+    // --- body ---
     rect(put, 10, cy + 2, 16, 7, body);
     rect(put, 11, cy + 1, 14, 1, body);
-    // Belly
-    rect(put, 13, cy + 7, 8, 2, belly);
-    // Back (darker stripe)
-    rect(put, 12, cy + 1, 10, 2, bodyD);
-    // White spots
+    rect(put, 13, cy + 7, 8, 2, belly);     // belly
+    rect(put, 12, cy + 1, 10, 2, bodyD);    // dark back stripe
+    // muscle shading — shoulder + haunch
+    disc(put, 13, cy + 5, 2, bodyM);
+    disc(put, 22, cy + 5, 2, bodyM);
+    put(23, cy + 4, body);
+    // white rump patch
+    rect(put, 23, cy + 2, 3, 2, bodyL);
+    put(25, cy + 4, bodyL);
+    // fawn spots
     put(14, cy + 3, bodyL); put(17, cy + 4, bodyL);
     put(20, cy + 3, bodyL); put(12, cy + 5, bodyL);
-    put(22, cy + 5, bodyL);
+    put(18, cy + 2, bodyL); put(15, cy + 6, bodyL);
 
-    // Neck
-    rect(put, 8, cy, 4, 5, body);
-    // Head
-    rect(put, 6, cy - 1, 5, 4, body);
-    rect(put, 5, cy, 2, 3, body);
-    // Snout
-    rect(put, 4, cy + 1, 3, 2, bodyL);
-    // Nose
-    put(4, cy + 1, P.outline); put(5, cy + 1, P.outline);
-    // Eye — red (corrupted)
-    put(7, cy, '#ff3030'); put(8, cy, '#ff3030');
-    put(7, cy, '#aa0000');
-    // Ear
-    rect(put, 8, cy - 3, 2, 2, bodyD);
+    // --- neck + head (shifted by the attack lunge) ---
+    const hx = -lunge, hy = headDown;
+    rect(put, 8 + hx, cy + hy, 4, 5, body);
+    put(9 + hx, cy + 1 + hy, bodyM);               // neck shading
+    rect(put, 6 + hx, cy - 1 + hy, 5, 4, body);
+    rect(put, 5 + hx, cy + hy, 2, 3, body);
+    // snout + nose + mouth
+    rect(put, 4 + hx, cy + 1 + hy, 3, 2, bodyL);
+    put(4 + hx, cy + 1 + hy, P.outline);
+    put(5 + hx, cy + 1 + hy, P.outline);
+    put(5 + hx, cy + 2 + hy, bodyD);               // mouth line
+    // eye — corrupted red with glint
+    put(7 + hx, cy + hy, flash ? P.white : '#aa0000');
+    put(8 + hx, cy + hy, flash ? P.white : '#ff3030');
+    put(8 + hx, cy - 1 + hy, flash ? P.white : '#ff8080'); // glint
+    // ear with pink inner
+    rect(put, 8 + hx, cy - 3 + hy, 2, 2, bodyD);
+    put(9 + hx, cy - 3 + hy, flash ? P.white : '#e8a0a0');
 
-    // Antlers
-    // Left antler
-    rect(put, 7, cy - 5, 1, 3, horn);
-    rect(put, 6, cy - 7, 1, 2, horn);
-    put(5, cy - 8, horn); put(5, cy - 9, hornD);
-    rect(put, 8, cy - 6, 1, 2, horn);
-    put(9, cy - 7, hornD);
-    // Right antler
-    rect(put, 10, cy - 5, 1, 3, horn);
-    rect(put, 11, cy - 7, 1, 2, horn);
-    put(12, cy - 8, horn); put(12, cy - 9, hornD);
-    rect(put, 9, cy - 6, 1, 2, horn);
+    // --- antlers: taller beams, three tines each, light tips ---
+    // near antler
+    rect(put, 7 + hx, cy - 5 + hy, 1, 3, horn);
+    rect(put, 6 + hx, cy - 8 + hy, 1, 3, horn);
+    put(5 + hx, cy - 9 + hy, horn);
+    put(5 + hx, cy - 10 + hy, hornL);              // tip
+    rect(put, 8 + hx, cy - 7 + hy, 1, 2, horn);
+    put(9 + hx, cy - 8 + hy, hornD);
+    put(9 + hx, cy - 9 + hy, hornL);
+    put(4 + hx, cy - 6 + hy, hornD);               // brow tine
+    put(3 + hx, cy - 7 + hy, hornL);
+    // far antler
+    rect(put, 10 + hx, cy - 5 + hy, 1, 3, hornD);
+    rect(put, 11 + hx, cy - 8 + hy, 1, 3, hornD);
+    put(12 + hx, cy - 9 + hy, hornD);
+    put(12 + hx, cy - 10 + hy, horn);
+    rect(put, 9 + hx, cy - 6 + hy, 1, 1, hornD);
+    put(13 + hx, cy - 7 + hy, hornD);
 
-    // Tail
-    const tailWag = [0, 1, 0, -1][phase];
+    // --- tail: smooth wag ---
+    const tailWag = Math.round(Math.sin(ph * (Math.PI / 3)) * 1.5);
     put(26, cy + 2 + tailWag, bodyL);
     put(26, cy + 3 + tailWag, bodyL);
     put(27, cy + 1 + tailWag, bodyL);
 
-    // Attack — antlers thrust forward
-    if (f === 'atk0' || f === 'atk1') {
-      put(4, cy - 2, horn); put(3, cy - 3, horn);
-      put(4, cy - 4, horn); put(3, cy - 5, hornD);
+    // --- attack: antlers rake forward with motion streaks ---
+    if (ai >= 0) {
+      put(4 + hx, cy - 2 + hy, horn);
+      put(3 + hx, cy - 3 + hy, horn);
+      put(4 + hx, cy - 4 + hy, horn);
+      put(3 + hx, cy - 5 + hy, hornD);
+      put(2 + hx, cy - 4 + hy, hornL);
+      if (ai === 2) { // streaks at full extension
+        put(1, cy - 3 + hy, hornD);
+        put(2, cy - 6 + hy, hornD);
+        put(1, cy + hy, bodyD);
+      }
     }
+
+    strokeOutline(px, mput);
   };
 }
 

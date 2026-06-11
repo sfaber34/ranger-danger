@@ -7,7 +7,7 @@
 import Phaser from 'phaser';
 import { PFrame, PPose, drawPlayer, drawBow } from './art/player';
 import {
-  EFrame, ToadFrame,
+  EFrame, EFrame6, ToadFrame,
   drawEnemyBasic, drawEnemyHeavy, drawEnemySnake, drawEnemyRat, drawEnemyDeer,
   drawEnemyInfectedBasic, drawEnemyInfectedHeavy,
   drawEnemyToad, drawToadGlob, drawEnemyWolf,
@@ -24,7 +24,7 @@ import {
 } from './art/canvas';
 import { BearFrame, drawBearDir, extractBearFrames } from './art/bear';
 import {
-  BossFrame, ForestBossFrame, forestBossFrames,
+  BossFrame, RamFrame, ForestBossFrame, forestBossFrames,
   drawFogPhantom, drawBoss, drawRam, drawInfectedBoss, drawForestBoss,
   drawPhantomQueen, drawCastleDragon, drawDesertBoss,
   drawQueenOrb, drawDragonFireball, drawDragonFireExplosion,
@@ -96,9 +96,11 @@ export function generateAllArt(scene: Phaser.Scene) {
   const eFrames: EFrame[] = ['move0','move1','move2','move3','atk0','atk1','hit','die0','die1','die2','die3'];
   for (const f of eFrames) add(scene, `eb_${f}`, makeCanvas(32, drawEnemyBasic(f)));
   for (const f of eFrames) add(scene, `eh_${f}`, makeCanvas(32, drawEnemyHeavy(f)));
-  for (const f of eFrames) add(scene, `esnk_${f}`, makeCanvas(32, drawEnemySnake(f)));
-  for (const f of eFrames) add(scene, `erat_${f}`, makeCanvas(32, drawEnemyRat(f)));
-  for (const f of eFrames) add(scene, `eder_${f}`, makeCanvas(32, drawEnemyDeer(f)));
+  // Meadow enemies use the extended frame set (6-frame move, 4-frame atk)
+  const e6Frames: EFrame6[] = ['move0','move1','move2','move3','move4','move5','atk0','atk1','atk2','atk3','hit','die0','die1','die2','die3'];
+  for (const f of e6Frames) add(scene, `esnk_${f}`, makeCanvas(32, drawEnemySnake(f)));
+  for (const f of e6Frames) add(scene, `erat_${f}`, makeCanvas(32, drawEnemyRat(f)));
+  for (const f of e6Frames) add(scene, `eder_${f}`, makeCanvas(32, drawEnemyDeer(f)));
   for (const f of eFrames) add(scene, `eib_${f}`, makeCanvas(32, drawEnemyInfectedBasic(f)));
   for (const f of eFrames) add(scene, `eih_${f}`, makeCanvas(32, drawEnemyInfectedHeavy(f)));
   // Blighted Toad — uses its own frame set (idle + hop + atk + hit + die)
@@ -374,7 +376,9 @@ export function generateAllArt(scene: Phaser.Scene) {
     'die0','die1','die2','die3','die4'
   ];
   for (const f of bossFrames) add(scene, `boss_${f}`, makeCanvas(64, drawBoss(f)));
-  for (const f of bossFrames) add(scene, `ram_${f}`, makeCanvas(64, drawRam(f)));
+  // Ram gets extra in-between frames on top of the shared boss set
+  const ramFrames: RamFrame[] = [...bossFrames, 'idle2', 'idle3', 'move4', 'move5', 'atk2', 'atk3'];
+  for (const f of ramFrames) add(scene, `ram_${f}`, makeCanvas(64, drawRam(f)));
   for (const f of bossFrames) add(scene, `iboss_${f}`, makeCanvas(64, drawInfectedBoss(f)));
 
   // Forest boss (Ent) textures
@@ -444,18 +448,20 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('eh-hit',  ['eh_hit'], 8, 0);
   mk('eh-die',  ['eh_die0','eh_die1','eh_die2','eh_die3'], 8, 0);
 
-  mk('esnk-move', ['esnk_move0','esnk_move1','esnk_move2','esnk_move3'], 8, -1);
-  mk('esnk-atk',  ['esnk_atk0','esnk_atk1'], 8, -1);
+  // Meadow enemies: 6-frame move cycles + 4-frame attacks. Frame rates are
+  // scaled up so cycle durations stay close to the old 4/2-frame timings.
+  mk('esnk-move', ['esnk_move0','esnk_move1','esnk_move2','esnk_move3','esnk_move4','esnk_move5'], 12, -1);
+  mk('esnk-atk',  ['esnk_atk0','esnk_atk1','esnk_atk2','esnk_atk3'], 10, -1);
   mk('esnk-hit',  ['esnk_hit'], 10, 0);
   mk('esnk-die',  ['esnk_die0','esnk_die1','esnk_die2','esnk_die3'], 10, 0);
 
-  mk('erat-move', ['erat_move0','erat_move1','erat_move2','erat_move3'], 10, -1);
-  mk('erat-atk',  ['erat_atk0','erat_atk1'], 10, -1);
+  mk('erat-move', ['erat_move0','erat_move1','erat_move2','erat_move3','erat_move4','erat_move5'], 14, -1);
+  mk('erat-atk',  ['erat_atk0','erat_atk1','erat_atk2','erat_atk3'], 12, -1);
   mk('erat-hit',  ['erat_hit'], 10, 0);
   mk('erat-die',  ['erat_die0','erat_die1','erat_die2','erat_die3'], 10, 0);
 
-  mk('eder-move', ['eder_move0','eder_move1','eder_move2','eder_move3'], 6, -1);
-  mk('eder-atk',  ['eder_atk0','eder_atk1'], 6, -1);
+  mk('eder-move', ['eder_move0','eder_move1','eder_move2','eder_move3','eder_move4','eder_move5'], 9, -1);
+  mk('eder-atk',  ['eder_atk0','eder_atk1','eder_atk2','eder_atk3'], 8, -1);
   mk('eder-hit',  ['eder_hit'], 8, 0);
   mk('eder-die',  ['eder_die0','eder_die1','eder_die2','eder_die3'], 8, 0);
 
@@ -604,9 +610,12 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('boss-die',        ['boss_die0','boss_die1','boss_die2','boss_die3','boss_die4'], 6, 0);
 
   // Meadow boss (Ancient Ram) animations
-  mk('ram-idle',       ['ram_idle0','ram_idle1'], 2, -1);
-  mk('ram-move',       ['ram_move0','ram_move1','ram_move2','ram_move3'], 5, -1);
-  mk('ram-atk',        ['ram_atk0','ram_atk1'], 4, 0);
+  // 4-frame idle (breath + ear flick), 6-frame trot, 4-frame slam.
+  // ram-atk keeps its ~500ms total duration (2@4fps → 4@8fps) so boss
+  // attack timing in EnemyBossSystem is unchanged.
+  mk('ram-idle',       ['ram_idle0','ram_idle1','ram_idle2','ram_idle3'], 3, -1);
+  mk('ram-move',       ['ram_move0','ram_move1','ram_move2','ram_move3','ram_move4','ram_move5'], 8, -1);
+  mk('ram-atk',        ['ram_atk0','ram_atk1','ram_atk2','ram_atk3'], 8, 0);
   mk('ram-chargewind', ['ram_chargeWind','ram_idle0'], 6, -1);
   mk('ram-hit',        ['ram_hit'], 10, 0);
   mk('ram-birth',      ['ram_birth0','ram_birth1','ram_birth2','ram_birth3','ram_birth4'], 4, 0);

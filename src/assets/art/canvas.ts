@@ -280,6 +280,21 @@ export function mirrorX(put: Put): Put {
   return (x, y, c) => put(31 - x, y, c);
 }
 
+/** Stroke a 1px P.outline border around a recorded silhouette. `body` is the
+ *  set of painted body pixels keyed `y * size + x` (collect them with a
+ *  recording put wrapper); every empty pixel 4-adjacent to the body gets the
+ *  outline colour. Draw shadows with the raw (unrecorded) put so they stay
+ *  outside the stroke. */
+export function strokeOutline(body: Set<number>, put: Put, size = 32) {
+  for (const k of body) {
+    const x = k % size, y = (k / size) | 0;
+    if (!body.has(k - size)) put(x, y - 1, P.outline);
+    if (!body.has(k + size)) put(x, y + 1, P.outline);
+    if (x > 0 && !body.has(k - 1)) put(x - 1, y, P.outline);
+    if (x + 1 < size && !body.has(k + 1)) put(x + 1, y, P.outline);
+  }
+}
+
 export function rect(put: Put, x: number, y: number, w: number, h: number, c: string | null) {
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) put(x + i, y + j, c);
 }

@@ -83,6 +83,16 @@ function isBgmBiome(biome: Biome): biome is BgmBiome {
   return BGM_BIOMES.includes(biome as BgmBiome);
 }
 
+/** Dev flag (?boss=1): every level jumps its wave sequence straight to the
+ *  boss wave. Gated like the debug gallery — dev builds / localhost only. */
+export function isBossStartRequested(): boolean {
+  if (new URLSearchParams(window.location.search).get('boss') !== '1') return false;
+  const hostname = window.location.hostname;
+  return import.meta.env.DEV
+    || hostname === 'localhost'
+    || hostname === '127.0.0.1';
+}
+
 function randomRectZone(x: number, y: number, width: number, height: number): Phaser.Types.GameObjects.Particles.ParticleEmitterRandomZoneConfig {
   return {
     type: 'random',
@@ -690,6 +700,18 @@ export class GameScene extends Phaser.Scene {
     this.waveState.startInitialBuildPhase(CFG.spawn.startDelay);
     this.countdownMsg = '';
     this.countdownColor = '#7cc4ff';
+
+    // Dev flag (?boss=1): skip the lead-in waves and go straight to the boss.
+    // Castle/desert jump to their phase-0 mid-boss wave; endless to the first
+    // boss cycle (its SpawnSystem branch fast-forwards its own counters).
+    if (isBossStartRequested()) {
+      const bossWave = this.difficulty === 'endless' ? 3
+        : this.biome === 'castle' ? 1
+        : this.biome === 'desert' ? 2
+        : this.levelWaveCount - 1;
+      const spawned = this.difficulty === 'endless' ? 0 : this.levelWaveSize;
+      this.waveState.jumpToBossWave(bossWave, spawned);
+    }
 
     // Biome atmosphere effects
     if (this.biome === 'forest') {
