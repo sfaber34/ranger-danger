@@ -149,6 +149,13 @@ export const P = {
   spiderM: '#1a1a1a',
   spiderL: '#4a4a4a',
   spiderEye: '#ff2020',
+  // tarantula browns (spider redesign)
+  spdr:   '#6a4a34',   // abdomen brown
+  spdrD:  '#3e2a1e',   // dark mottling / shadow
+  spdrM:  '#544038',   // cephalothorax + legs
+  spdrL:  '#8a6a4e',   // fuzz highlight
+  spdrO:  '#c87a4a',   // orange leg bands + tarsi
+  spdrF:  '#d89a5a',   // pale fangs
 
   // Forest boss (Wendigo) + shared bark/leaf for boulders etc.
   bark:    '#4a3420',

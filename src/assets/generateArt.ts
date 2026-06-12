@@ -115,7 +115,8 @@ export function generateAllArt(scene: Phaser.Scene) {
   for (const f of eFrames) add(scene, `ew_${f}`, makeCanvas(32, drawEnemyWolf(f)));
   // Bear: extract frames from sprite sheet, strip grey bg, register as textures
   extractBearFrames(scene);
-  for (const f of eFrames) add(scene, `es_${f}`, makeCanvas(32, drawEnemySpider(f)));
+  // Spider uses the extended frame set (6-frame scuttle, 4-frame lunge)
+  for (const f of e6Frames) add(scene, `es_${f}`, makeCanvas(32, drawEnemySpider(f)));
   // River flying enemies
   for (const f of eFrames) add(scene, `ecr_${f}`, makeCanvas(32, drawEnemyCrow(f)));
   for (const f of eFrames) add(scene, `ebt_${f}`, makeCanvas(32, drawEnemyBat(f)));
@@ -509,8 +510,9 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('eal-hit',  ['eal_hit'], 8, 0);
   mk('eal-die',  ['eal_die0','eal_die1','eal_die2','eal_die3'], 8, 0);
 
-  mk('es-move', ['es_move0','es_move1','es_move2','es_move3'], 8, -1);
-  mk('es-atk',  ['es_atk0','es_atk1'], 8, -1);
+  // 6-frame scuttle + 4-frame rear-and-lunge (front legs up → fang strike)
+  mk('es-move', ['es_move0','es_move1','es_move2','es_move3','es_move4','es_move5'], 12, -1);
+  mk('es-atk',  ['es_atk0','es_atk1','es_atk2','es_atk3'], 10, -1);
   mk('es-hit',  ['es_hit'], 10, 0);
   mk('es-die',  ['es_die0','es_die1','es_die2','es_die3'], 10, 0);
 

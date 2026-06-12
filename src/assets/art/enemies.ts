@@ -901,78 +901,149 @@ export function drawEnemyWolf(f: EFrame) {
 // ==================================================================
 //  ENEMY SPIDER (32x32) — dark arachnid with red eyes
 // ==================================================================
-export function drawEnemySpider(f: EFrame) {
-  return (put: Put) => {
+export function drawEnemySpider(f: EFrame6) {
+  return (rawPut: Put) => {
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 6 - step * 2;
       if (r <= 0) return;
-      disc(put, 16, 18, r, P.spider);
-      disc(put, 16, 18, Math.max(0, r - 1), P.spiderL);
+      disc(rawPut, 16, 18, r, P.spdr);
+      disc(rawPut, 16, 18, Math.max(0, r - 1), P.spdrL);
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2 + step * 0.4;
         const d = step * 3 + 3;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), P.spiderD);
+        const x = Math.round(16 + Math.cos(a) * d), y = Math.round(18 + Math.sin(a) * d);
+        rawPut(x, y, P.spdrD);
+        rawPut(x + 1, y, i % 2 === 0 ? P.spdrO : P.spdrM);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
-    const body = flash ? P.white : P.spider;
-    const bodyD = flash ? P.white : P.spiderD;
-    const bodyM = flash ? P.white : P.spiderM;
-    const bodyL = flash ? P.white : P.spiderL;
-    const eye = flash ? P.white : P.spiderEye;
+    const ab  = flash ? P.white : P.spdr;   // abdomen brown
+    const abD = flash ? P.white : P.spdrD;  // mottling / shadow
+    const abM = flash ? P.white : P.spdrM;  // cephalothorax + legs
+    const abL = flash ? P.white : P.spdrL;  // fuzz highlight
+    const band = flash ? P.white : P.spdrO; // orange joints + tarsi
+    const fang = flash ? P.white : P.spdrF;
 
-    // shadow
-    for (let dy = -1; dy <= 1; dy++)
-      for (let dx = -7; dx <= 7; dx++)
-        if ((dx * dx) / 49 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+    // 6-phase scuttle; attack = rear up → lunge with fangs
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : 0;
+    const bob = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 1) : 0;
+    const ox = ai >= 0 ? [0, 0, -3, -1][ai] : 0;       // lunge thrust (toward prey)
+    const hdy = ai >= 0 ? [-1, -2, -1, 0][ai] : 0;     // body rears back/up
 
-    // legs — 4 per side, animated
-    const legStep = (f === 'move1' || f === 'move3') ? 1 : 0;
-    const legAngles = [-0.8, -0.3, 0.2, 0.7]; // spread angles
-    for (let i = 0; i < 4; i++) {
-      const a = legAngles[i];
-      const flip = (i + legStep) % 2 === 0 ? 1 : -1;
-      // Left leg
-      const lx1 = 16 - 5, ly1 = 18 + Math.round(a * 6);
-      const lx2 = lx1 - 6, ly2 = ly1 + flip * 3;
-      put(lx1, ly1, bodyD); put(lx1 - 1, ly1, bodyM);
-      put(lx2, ly2, bodyD); put(lx2 + 1, ly2, bodyM);
-      put(lx2 - 1, ly2 + 1, P.outline); // foot
-      // Right leg
-      const rx1 = 16 + 5, ry1 = 18 + Math.round(a * 6);
-      const rx2 = rx1 + 6, ry2 = ry1 + flip * 3;
-      put(rx1, ry1, bodyD); put(rx1 + 1, ry1, bodyM);
-      put(rx2, ry2, bodyD); put(rx2 - 1, ry2, bodyM);
-      put(rx2 + 1, ry2 + 1, P.outline); // foot
-    }
+    // ground shadow (unrecorded)
+    for (let dy = 0; dy <= 1; dy++)
+      for (let dx = -9; dx <= 9; dx++)
+        if ((dx * dx) / 81 + (dy * dy) / 1.2 <= 1) mput(16 + dx + ox, 27 + dy, P.shadow);
 
-    // abdomen (rear body)
-    disc(put, 16, 21, 6, bodyD);
-    disc(put, 16, 21, 5, body);
-    disc(put, 16, 20, 3, bodyL);
-    // markings on abdomen
-    put(15, 23, bodyM); put(17, 23, bodyM);
-    put(16, 24, bodyM);
+    // ---- legs ----
+    // Each leg: femur up to an orange knee, tibia down to an orange tarsus.
+    // [attachX, attachY, kneeX, kneeY, footX] — front legs first (low x).
+    const LEGS: ReadonlyArray<readonly [number, number, number, number, number]> = [
+      [7, 19, 3, 12, 1],
+      [10, 20, 7, 12, 6],
+      [13, 20, 13, 12, 13],
+      [16, 19, 20, 12, 24],
+    ];
+    // raised front-leg poses per attack frame: [knee, foot] for legs 0 and 1
+    const RAISED: ReadonlyArray<ReadonlyArray<readonly [number, number, number, number]>> = [
+      [[3, 10, 1, 14], [7, 11, 4, 15]],   // atk0 — front legs lift
+      [[3, 8, 0, 11], [7, 9, 3, 12]],     // atk1 — reared high
+      [[2, 11, 0, 18], [6, 11, 2, 17]],   // atk2 — striking down mid-lunge
+      [[3, 11, 1, 19], [7, 12, 5, 20]],   // atk3 — recovering
+    ];
+    const drawLeg = (k: number, far: boolean) => {
+      let [ax2, ay2, kx, ky, fx2] = LEGS[k];
+      let fy2 = far ? 24 : 25;
+      if (ai >= 0 && k < 2 && !far) {
+        [kx, ky, fx2, fy2] = RAISED[ai][k];   // near front legs rear up
+      } else if (mi >= 0) {
+        const ang = (ph / 6) * Math.PI * 2 + k * (Math.PI / 2) + (far ? Math.PI : 0);
+        const swing = Math.round(Math.sin(ang) * 2);
+        const lift = Math.max(0, Math.round(Math.cos(ang) * 1.2));
+        kx += swing >> 1;
+        fx2 += swing;
+        fy2 -= lift;
+      }
+      const c = far ? abD : abM;
+      const off = far ? 2 : 0;
+      line(put, ax2 + ox + off, ay2 + bob, kx + ox + off, ky + bob, c);
+      line(put, kx + ox + off, ky + bob, fx2 + ox + off, fy2, c);
+      if (!far) {
+        put(kx + ox, ky + bob, band);          // orange knee
+        put(kx + ox, ky + 1 + bob, band);
+        put(fx2 + ox, fy2, band);              // orange tarsus tip
+        put(fx2 + ox, fy2 + 1, band);
+      }
+    };
+    // far-side legs behind the body
+    for (let k = 0; k < 4; k++) drawLeg(k, true);
 
-    // head (front)
-    disc(put, 16, 14, 4, bodyD);
-    disc(put, 16, 14, 3, body);
-    disc(put, 16, 13, 2, bodyL);
+    // ---- abdomen: big mottled ball (the reference's signature) ----
+    const acx = 21 + ox, acy = 16 + bob;
+    ellipse(put, acx, acy, 8, 6, ab);
+    // dark mottled blotches
+    disc(put, acx - 3, acy - 2, 2, abD);
+    disc(put, acx + 2, acy - 1, 2, abD);
+    disc(put, acx - 1, acy + 2, 1, abD);
+    put(acx + 4, acy - 3, abD);
+    put(acx + 5, acy + 1, abD);
+    // fuzz highlight along the top, shadow along the belly
+    for (let x = -5; x <= 4; x++)
+      if ((x * x) / 64 < 0.9) put(acx + x, acy - 5 + ((x + 32) % 2), abL);
+    for (let x = -5; x <= 5; x++) put(acx + x, acy + 5, abD);
 
-    // eyes (4 red dots)
-    put(14, 12, eye); put(18, 12, eye);
-    put(13, 14, eye); put(19, 14, eye);
-
-    // fangs
-    if (f === 'atk0' || f === 'atk1') {
-      put(14, 17, P.outline); put(15, 18, P.outline);
-      put(18, 17, P.outline); put(17, 18, P.outline);
-      if (f === 'atk1') { put(15, 19, P.red); put(17, 19, P.red); }
+    // ---- cephalothorax (head) ----
+    const hcx = 9 + ox, hcy = 19 + bob + hdy;
+    disc(put, hcx, hcy, 4, abM);
+    disc(put, hcx, hcy - 1, 2, abL);            // fuzz on top
+    put(hcx + 3, hcy + 2, abD);                 // shadow toward the body
+    // bead-eye cluster with wet glints
+    put(hcx - 3, hcy - 3, P.outline);
+    put(hcx - 2, hcy - 4, P.outline);
+    put(hcx - 1, hcy - 3, P.outline);
+    put(hcx - 3, hcy - 2, P.outline);
+    put(hcx - 2, hcy - 3, P.white);             // glint
+    put(hcx - 1, hcy - 2, P.outline);
+    // ---- fangs ----
+    if (ai >= 0) {
+      // spread wide and thrust forward with the lunge
+      put(hcx - 4, hcy + 2, fang);
+      put(hcx - 5, hcy + 3, fang);
+      put(hcx - 6, hcy + 4, flash ? P.white : P.bronzeM);
+      put(hcx - 2, hcy + 3, fang);
+      put(hcx - 3, hcy + 4, fang);
+      put(hcx - 4, hcy + 5, flash ? P.white : P.bronzeM);
+      if (ai === 2) {                            // bite connects — venom glint
+        put(hcx - 7, hcy + 5, P.white);
+        put(hcx - 5, hcy + 6, P.white);
+      }
     } else {
-      put(14, 17, P.outline); put(18, 17, P.outline);
+      // hanging at rest
+      put(hcx - 3, hcy + 3, fang);
+      put(hcx - 3, hcy + 4, fang);
+      put(hcx - 3, hcy + 5, flash ? P.white : P.bronzeM);
+      put(hcx - 1, hcy + 3, fang);
+      put(hcx - 1, hcy + 4, fang);
+      put(hcx - 1, hcy + 5, flash ? P.white : P.bronzeM);
     }
+
+    // near-side legs over the body
+    for (let k = 0; k < 4; k++) drawLeg(k, false);
+
+    strokeOutline(px, mput);
   };
 }
 
