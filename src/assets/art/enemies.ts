@@ -813,88 +813,196 @@ export function drawToadGlob(f: 'glob0' | 'glob1') {
 // ==================================================================
 //  ENEMY WOLF (32x32) — fast grey pack hunter
 // ==================================================================
-export function drawEnemyWolf(f: EFrame) {
-  return (put: Put) => {
+export function drawEnemyWolf(f: EFrame6) {
+  return (rawPut: Put) => {
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 7 - step * 2;
       if (r <= 0) return;
-      disc(put, 16, 18, r, P.wolf);
-      disc(put, 16, 18, Math.max(0, r - 1), P.wolfL);
+      disc(rawPut, 16, 18, r, P.wlf);
+      disc(rawPut, 16, 18, Math.max(0, r - 1), P.wlfC);
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2 + step * 0.5;
         const d = step * 3 + 3;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), P.wolfD);
+        rawPut(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), P.wlfD);
+        rawPut(Math.round(16 + Math.cos(a) * d) + 1, Math.round(18 + Math.sin(a) * d), P.wlfCD);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
-    const body = flash ? P.white : P.wolf;
-    const bodyD = flash ? P.white : P.wolfD;
-    const bodyM = flash ? P.white : P.wolfM;
-    const bodyL = flash ? P.white : P.wolfL;
+    const top  = flash ? P.white : P.wlfD;   // dark slate saddle
+    const bod  = flash ? P.white : P.wlf;    // mid coat
+    const mid  = flash ? P.white : P.wlfM;
+    const lite = flash ? P.white : P.wlfL;   // light flank
+    const crm  = flash ? P.white : P.wlfC;   // cream underside
+    const crmD = flash ? P.white : P.wlfCD;
+    const amber = flash ? P.white : '#e8b428';
 
-    // shadow
-    for (let dy = -1; dy <= 1; dy++)
-      for (let dx = -6; dx <= 6; dx++)
-        if ((dx * dx) / 36 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+    // 6-phase trot; attack = jaws open + coil → lunge gaping → SNAP shut
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : 0;
+    const bob = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 1) : 0;
+    const ox = ai >= 0 ? [2, -2, -2, -1][ai] : 0;     // lunge thrust (toward prey)
+    const hdy = ai >= 0 ? [1, 0, 0, 1][ai] : bob;     // head drops as it coils
+    const jawOpen = ai === 0 || ai === 1;             // mouth opens through the lunge
+    const gape = ai === 1 ? 3 : 2;                    // wide at full extension
+    const snap = ai === 2;                            // jaws clack shut on impact
 
-    // tail (bushy, curves up)
-    let tailY = 0;
-    if (f === 'move1' || f === 'move3') tailY = 1;
-    put(6, 14 + tailY, bodyD); put(5, 13 + tailY, bodyM); put(4, 12 + tailY, body);
-    put(4, 11 + tailY, bodyL); put(5, 11 + tailY, body);
-
-    // hind legs
-    let footY = 0;
-    if (f === 'move1') footY = -1;
-    if (f === 'move3') footY = 1;
-    rect(put, 9, 24 + footY, 3, 3, bodyD);
-    rect(put, 19, 24 - footY, 3, 3, bodyD);
-    put(9, 26 + footY, P.outline);
-    put(11, 26 + footY, P.outline);
-    put(19, 26 - footY, P.outline);
-    put(21, 26 - footY, P.outline);
-
-    // body (elongated oval)
-    for (let dy = -5; dy <= 5; dy++)
+    // ground shadow (unrecorded)
+    for (let dy = 0; dy <= 1; dy++)
       for (let dx = -8; dx <= 8; dx++)
-        if ((dx * dx) / 64 + (dy * dy) / 25 <= 1)
-          put(16 + dx, 18 + dy, bodyD);
-    for (let dy = -4; dy <= 4; dy++)
-      for (let dx = -7; dx <= 7; dx++)
-        if ((dx * dx) / 49 + (dy * dy) / 16 <= 1)
-          put(16 + dx, 18 + dy, body);
-    // belly highlight
-    for (let dy = -2; dy <= 2; dy++)
-      for (let dx = -5; dx <= 5; dx++)
-        if ((dx * dx) / 25 + (dy * dy) / 4 <= 1)
-          put(16 + dx, 17 + dy, bodyL);
+        if ((dx * dx) / 64 + (dy * dy) / 1.2 <= 1) mput(16 + dx + ox, 27 + dy, P.shadow);
 
-    // head (snout pointing right)
-    disc(put, 22, 15, 4, bodyD);
-    disc(put, 22, 15, 3, body);
-    disc(put, 22, 14, 2, bodyL);
-    // snout
-    rect(put, 25, 15, 4, 2, bodyM);
-    rect(put, 26, 15, 3, 2, bodyL);
-
-    // ears (pointed)
-    put(20, 10, bodyD); put(21, 10, body); put(21, 9, bodyL);
-    put(24, 10, bodyD); put(23, 10, body); put(23, 9, bodyL);
-
-    // eyes
-    put(21, 14, P.outline); put(24, 14, P.outline);
-    put(21, 13, bodyL); put(24, 13, bodyL);
-
-    // mouth / fangs
-    if (f === 'atk0' || f === 'atk1') {
-      rect(put, 26, 17, 3, 2, P.outline);
-      put(27, 17, P.white); put(28, 17, P.white);
-      if (f === 'atk1') put(27, 18, P.red);
-    } else {
-      put(27, 17, P.outline); put(28, 17, P.outline);
+    // ---- bushy tail, slate over a cream underside ----
+    const tw = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 1) : ai === 0 ? -1 : 0;
+    for (let t = 0; t <= 1; t += 0.18) {
+      const tx2 = Math.round(22 + 6 * t) + ox;
+      const ty2 = Math.round(15 + bob + 6 * Math.pow(t, 1.3)) + tw;
+      disc(put, tx2, ty2, t < 0.6 ? 2 : 1, bod);
+      put(tx2, ty2 - (t < 0.6 ? 2 : 1), top);          // dark top
+      put(tx2, ty2 + (t < 0.6 ? 2 : 1), crm);          // cream underside
+      // fluff breaking the silhouette
+      if (Math.round(t * 5) % 2 === 0) {
+        put(tx2 + 1, ty2 - (t < 0.6 ? 3 : 2), top);
+        put(tx2 - 1, ty2 + (t < 0.6 ? 3 : 2), crmD);
+      }
     }
+    put(29 + ox, 22 + tw, crm);                        // pale tail tip
+    put(28 + ox, 23 + tw, crmD);
+
+    // ---- legs: long and slender, cream lower halves, pale paws ----
+    // [hipX, phaseOffset] — diagonal trot pairs
+    const legs: ReadonlyArray<readonly [number, number]> = [[9, 0], [20, Math.PI], [11, Math.PI], [22, 0]];
+    for (let k = 0; k < 4; k++) {
+      const [hipX, off] = legs[k];
+      const far = k >= 2;
+      let dx = 0, lift = 0;
+      if (mi >= 0) {
+        const ang = (ph / 6) * Math.PI * 2 + off + (far ? Math.PI / 2 : 0);
+        dx = Math.round(Math.sin(ang) * 2);
+        lift = Math.max(0, Math.round(Math.cos(ang) * 1.2));
+      } else if (ai === 0) {
+        dx = k % 2 === 0 ? 1 : -1;                     // legs coil under the body
+      }
+      const x = hipX + dx + ox + (far ? 1 : 0);
+      const footY = 26 - lift;
+      rect(put, x, 17 + bob, 2, 4, far ? top : mid);   // thigh
+      if (!far) put(x, 17 + bob, bod);                 // thigh light
+      // rear legs kink backward at the hock
+      const hock = k === 1 || k === 3 ? 1 : 0;
+      rect(put, x + hock, 21 + bob, far ? 1 : 2, footY - 21 - bob, far ? crmD : crm); // cream shank
+      put(x + hock, footY, far ? crmD : crm);          // pale paw
+      if (!far) {
+        put(x + hock + 1, footY, crm);
+        put(x + hock - 1, footY, flash ? P.white : P.outline); // toe split
+      }
+    }
+
+    // ---- body: sleek, dark saddle over light flank over cream belly ----
+    const bcx = 15 + ox, bcy = 15 + bob;
+    ellipse(put, bcx, bcy, 8, 4, bod);
+    // dark saddle along the back
+    for (let xx = -7; xx <= 7; xx++)
+      for (let yy = -4; yy <= -1; yy++)
+        if ((xx * xx) / 64 + (yy * yy) / 16 <= 1) put(bcx + xx, bcy + yy, top);
+    // layered fur strokes — dark in the saddle, light through the flank
+    for (let xx = -7; xx <= 7; xx++)
+      for (let yy = -4; yy <= 3; yy++) {
+        const X = bcx + xx, Y = bcy + yy;
+        if (!px.has(Y * 32 + X)) continue;
+        if (yy < -1 && (xx * 3 + yy * 7 + 64) % 7 === 0) put(X, Y, mid);
+        else if (yy >= -1 && (xx * 5 + yy * 3 + 64) % 9 === 0) put(X, Y, lite);
+      }
+    // muscled haunch + shoulder definition
+    disc(put, bcx + 5, bcy, 2, mid);
+    put(bcx + 4, bcy - 1, lite);
+    disc(put, bcx - 5, bcy + 1, 2, mid);
+    put(bcx - 5, bcy, lite);
+    // cream belly — two-row gradient
+    for (let xx = -5; xx <= 5; xx++) put(bcx + xx, bcy + 4, crm);
+    for (let xx = -4; xx <= 4; xx += 2) put(bcx + xx, bcy + 3, crmD);
+    put(bcx - 5, bcy + 3, crm);
+    // ragged fur fringe under the ribs
+    put(bcx - 2, bcy + 5, crmD);
+    put(bcx + 2, bcy + 5, crmD);
+    put(bcx, bcy + 5, crm);
+
+    // ---- neck + head: long muzzle, amber eye, upright ears ----
+    const hcx = 8 + ox, hcy = 11 + hdy;
+    rect(put, hcx + 1, hcy + 1, 4, 5, bod);            // neck
+    rect(put, hcx + 2, hcy, 3, 2, top);                // nape
+    put(hcx + 3, hcy + 5, crm);                        // chest ruff
+    put(hcx + 4, hcy + 6, crm);
+    put(hcx + 2, hcy + 6, crmD);
+    put(hcx + 5, hcy + 7, crmD);
+    disc(put, hcx, hcy, 3, bod);                       // skull
+    rect(put, hcx - 2, hcy - 3, 5, 2, top);            // dark crown
+    put(hcx - 3, hcy - 2, top);                        // crown tapers to the bridge
+    // cheek ruff — fuller, breaking the jawline
+    put(hcx + 2, hcy + 2, crm);
+    put(hcx + 3, hcy + 3, crm);
+    put(hcx + 2, hcy + 3, crmD);
+    put(hcx + 1, hcy + 2, crmD);
+    // ears — pinned flat through the lunge + snap, upright otherwise
+    if (ai === 1 || ai === 2) {
+      rect(put, hcx + 1, hcy - 4, 3, 2, bod);
+      put(hcx + 4, hcy - 3, top);
+    } else {
+      rect(put, hcx, hcy - 6, 2, 4, bod);              // near ear
+      put(hcx, hcy - 6, top);
+      put(hcx + 1, hcy - 5, top);                      // pointed tip
+      put(hcx + 1, hcy - 4, crmD);                     // pale inner
+      rect(put, hcx + 3, hcy - 5, 2, 3, top);          // far ear
+      put(hcx + 4, hcy - 4, mid);
+    }
+    // muzzle — slate bridge over a cream lower jaw
+    rect(put, hcx - 5, hcy - 1, 5, 2, bod);
+    rect(put, hcx - 5, hcy - 1, 5, 1, top);
+    put(hcx - 3, hcy - 1, mid);                        // bridge shading step
+    rect(put, hcx - 6, hcy - 1, 1, 2, flash ? P.white : P.outline); // big nose
+    put(hcx - 5, hcy, flash ? P.white : '#10141c');    // nostril
+    // amber eye under a brow ridge
+    put(hcx - 1, hcy - 2, top);                        // brow
+    put(hcx, hcy - 2, top);
+    put(hcx - 1, hcy - 1, amber);
+    put(hcx - 2, hcy - 1, flash ? P.white : P.outline);
+    // ---- the jaw: opens through the lunge, SNAPS shut on impact ----
+    if (jawOpen) {
+      rect(put, hcx - 5, hcy + 1, 5, gape - 1, flash ? P.white : '#2a0808'); // open maw
+      put(hcx - 5, hcy + 1, P.white);                  // upper fangs
+      put(hcx - 3, hcy + 1, P.white);
+      rect(put, hcx - 5, hcy + gape, 5, 1, crm);       // dropped lower jaw
+      put(hcx - 4, hcy + gape - 1, P.white);           // lower fang
+      put(hcx - 5, hcy + gape - 1, P.white);
+      if (gape >= 3) put(hcx - 2, hcy + 2, flash ? P.white : P.red); // tongue
+    } else if (snap) {
+      // jaws clenched shut at full extension — the clack
+      rect(put, hcx - 5, hcy + 1, 5, 1, crm);
+      put(hcx - 5, hcy + 1, P.white);                  // teeth clenched at the tip
+      put(hcx - 4, hcy + 1, P.white);
+      put(hcx - 3, hcy + 1, crmD);                     // tight lip line
+      // impact burst radiating off the muzzle
+      mput(hcx - 6, hcy - 3, P.white);
+      mput(hcx - 6, hcy + 1, P.white);
+      mput(hcx - 6, hcy + 3, P.white);
+      mput(hcx - 5, hcy - 2, lite);
+      mput(hcx - 5, hcy + 2, lite);
+    } else {
+      rect(put, hcx - 5, hcy + 1, 5, 1, crm);          // closed cream jaw
+      put(hcx - 4, hcy + 1, crmD);                     // lip line
+    }
+
+    strokeOutline(px, mput);
   };
 }
 

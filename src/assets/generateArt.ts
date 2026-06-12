@@ -112,7 +112,8 @@ export function generateAllArt(scene: Phaser.Scene) {
   // Toad glob projectile
   add(scene, 'tglob_0', makeCanvas(16, drawToadGlob('glob0')));
   add(scene, 'tglob_1', makeCanvas(16, drawToadGlob('glob1')));
-  for (const f of eFrames) add(scene, `ew_${f}`, makeCanvas(32, drawEnemyWolf(f)));
+  // Wolf uses the extended frame set (6-frame trot, 4-frame bite)
+  for (const f of e6Frames) add(scene, `ew_${f}`, makeCanvas(32, drawEnemyWolf(f)));
   // Bear: extract frames from sprite sheet, strip grey bg, register as textures
   extractBearFrames(scene);
   // Spider uses the extended frame set (6-frame scuttle, 4-frame lunge)
@@ -495,8 +496,9 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('etd-die',  ['etd_die0','etd_die1','etd_die2','etd_die3'], 8, 0);
   mk('tglob-spin', ['tglob_0','tglob_1'], 8, -1);
 
-  mk('ew-move', ['ew_move0','ew_move1','ew_move2','ew_move3'], 10, -1);
-  mk('ew-atk',  ['ew_atk0','ew_atk1'], 10, -1);
+  // 6-frame trot + 4-frame coil-and-bite lunge
+  mk('ew-move', ['ew_move0','ew_move1','ew_move2','ew_move3','ew_move4','ew_move5'], 14, -1);
+  mk('ew-atk',  ['ew_atk0','ew_atk1','ew_atk2','ew_atk3'], 12, -1);
   mk('ew-hit',  ['ew_hit'], 10, 0);
   mk('ew-die',  ['ew_die0','ew_die1','ew_die2','ew_die3'], 10, 0);
 

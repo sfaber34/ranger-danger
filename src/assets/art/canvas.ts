@@ -138,6 +138,13 @@ export const P = {
   wolfD:   '#4a4a4a',
   wolfM:   '#6a6a6a',
   wolfL:   '#b0b0b0',
+  // grey wolf redesign — slate top coat over cream underside
+  wlf:     '#5a606c',
+  wlfD:    '#363c48',
+  wlfM:    '#484e5a',
+  wlfL:    '#7a8290',
+  wlfC:    '#d8d0c0',   // cream chest/belly/paws
+  wlfCD:   '#a8a092',
 
   bear:    '#5a3a1a',
   bearD:   '#2a1a0a',

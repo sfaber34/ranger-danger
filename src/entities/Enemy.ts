@@ -102,7 +102,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.play('eder-move');
         break;
       case 'wolf':
-        applyEntityVisual(this, 'wolf', 'move', 0.45, 22, 18, 21, 26);
+        // 0.45 → 0.54: wolves render 20% larger (hitbox scales with it,
+        // same as every other enemy — still well under a tile).
+        applyEntityVisual(this, 'wolf', 'move', 0.54, 22, 18, 21, 26);
         this.play('ew-move');
         break;
       case 'bear':
