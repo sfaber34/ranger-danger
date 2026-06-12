@@ -213,6 +213,11 @@ export const P = {
   fogD:    '#1a2840',
   fogM:    '#283450',
   fogL:    '#506888',
+  // river phantom blue-flame ramp (dark edge → white-hot core)
+  bfire:   '#2848d8',
+  bfireD:  '#18246e',
+  bfireL:  '#5aa0ff',
+  bfireC:  '#d8eeff',
   fogGlow: '#64c8ff',
   fogGlowD:'#3090c0',
   fogCore: '#405878',

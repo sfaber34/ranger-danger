@@ -24,7 +24,7 @@ import {
 } from './art/canvas';
 import { BearFrame, drawBearDir, extractBearFrames } from './art/bear';
 import {
-  BossFrame, RamFrame, ForestBossFrame, forestBossFrames,
+  BossFrame, RamFrame, ForestBossFrame, forestBossFrames, riverBossFrames,
   drawFogPhantom, drawBoss, drawRam, drawInfectedBoss, drawForestBoss,
   drawPhantomQueen, drawCastleDragon, drawDesertBoss,
   drawQueenOrb, drawDragonFireball, drawDragonFireExplosion,
@@ -387,7 +387,8 @@ export function generateAllArt(scene: Phaser.Scene) {
   for (const f of forestBossFrames) add(scene, `fboss_${f}`, makeCanvas(64, drawForestBoss(f)));
 
   // River boss (Fog Phantom) textures
-  for (const f of bossFrames) add(scene, `rboss_${f}`, makeCanvas(64, drawFogPhantom(f)));
+  // River boss gets extra idle + windup frames on top of the shared boss set
+  for (const f of riverBossFrames) add(scene, `rboss_${f}`, makeCanvas(64, drawFogPhantom(f)));
 
   // Castle boss (Phantom Queen) textures
   for (const f of bossFrames) add(scene, `cqboss_${f}`, makeCanvas(64, drawPhantomQueen(f)));
@@ -655,10 +656,19 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('fboss-die',        ['fboss_die0','fboss_die1','fboss_die2','fboss_die3','fboss_die4'], 6, 0);
 
   // River boss (Fog Phantom)
-  mk('rboss-idle',       ['rboss_idle0','rboss_idle1'], 2, -1);
-  mk('rboss-move',       ['rboss_move0','rboss_move1','rboss_move2','rboss_move3'], 5, -1);
+  // 4-frame idle/move at flicker rates so the blue flames + chest vortex
+  // never sit still
+  mk('rboss-idle',       ['rboss_idle0','rboss_idle1','rboss_idle2','rboss_idle3'], 6, -1);
+  mk('rboss-move',       ['rboss_move0','rboss_move1','rboss_move2','rboss_move3'], 8, -1);
   mk('rboss-atk',        ['rboss_atk0','rboss_atk1'], 4, 0);
-  mk('rboss-chargewind', ['rboss_chargeWind','rboss_idle0'], 6, -1);
+  // Dash windup: plays ONCE (repeat 0) over the 1.2s charge_wind state —
+  // the claw arm rises a single time (cw0→cw1), then stays locked overhead
+  // while the peak frames (cw2-5, flame phases 0-3) keep the inferno pulsing.
+  mk('rboss-chargewind', [
+    'rboss_chargeWind0','rboss_chargeWind1',
+    'rboss_chargeWind2','rboss_chargeWind3','rboss_chargeWind4','rboss_chargeWind5',
+    'rboss_chargeWind2','rboss_chargeWind3','rboss_chargeWind4','rboss_chargeWind5',
+  ], 8, 0);
   mk('rboss-hit',        ['rboss_hit'], 10, 0);
   mk('rboss-birth',      ['rboss_birth0','rboss_birth1','rboss_birth2','rboss_birth3','rboss_birth4'], 4, 0);
   mk('rboss-die',        ['rboss_die0','rboss_die1','rboss_die2','rboss_die3','rboss_die4'], 6, 0);

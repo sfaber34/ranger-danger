@@ -213,124 +213,289 @@ export interface FogOpts {
   bob?: number;
   flash?: boolean;
   chargeGlow?: boolean;
-  pockets?: number;   // birth animation — tendrils extend
-  rearUp?: boolean;    // atk windup
-  phase?: number;      // movement animation phase 0-3
+  pockets?: number;   // birth animation — spectral bulges
+  rearUp?: boolean;    // legacy alias for armRaised
+  phase?: number;      // 0-3 flame/vortex animation phase
+  flare?: number;      // 0 (calm) … 2 (full dash-windup inferno)
+  armRaised?: boolean; // windup pose: claw arm thrown high
 }
 
-export function drawFogPhantomBody(put: Put, opts: FogOpts) {
+export function drawFogPhantomBody(rawPut: Put, opts: FogOpts) {
   const cx = 32;
   const bob = opts.bob ?? 0;
-  const baseCy = 30 + bob;
+  const ph = opts.phase ?? 0;
+  const flash = opts.flash ?? false;
+  const chargeGlow = opts.chargeGlow ?? false;
+  const armRaised = (opts.armRaised ?? false) || (opts.rearUp ?? false);
+  const flare = opts.flare ?? (chargeGlow ? 0.6 : 0);
 
-  const col = {
-    d:   opts.flash ? P.white : P.fogD,
-    m:   opts.flash ? P.white : P.fogM,
-    b:   opts.flash ? P.white : P.fog,
-    l:   opts.flash ? P.white : P.fogL,
-    core:opts.flash ? P.white : P.fogCore,
-    glow:opts.flash ? P.white : P.fogGlow,
-    glowD:opts.flash? P.white : P.fogGlowD,
-    wisp:opts.flash ? P.white : P.fogWisp,
+  // smoke body ramp
+  const sD = flash ? P.white : P.fogD;
+  const s  = flash ? P.white : P.fog;
+  const sM = flash ? P.white : P.fogM;
+  const sL = flash ? P.white : P.fogL;
+  // blue-flame ramp
+  const bfD = flash ? P.white : P.bfireD;
+  const bf  = flash ? P.white : P.bfire;
+  const bfL = flash ? P.white : P.bfireL;
+  const bfC = flash ? P.white : P.bfireC;
+  // stone claws
+  const st  = flash ? P.white : P.stone;
+  const stD = flash ? P.white : P.stoneD;
+  const stL = flash ? P.white : P.stoneL;
+  const out = flash ? P.white : P.outline;
+
+  // Record the SMOKE BODY + claws for a crisp outline; flames stay
+  // unrecorded so they read as soft light.
+  const px = new Set<number>();
+  const put: Put = (x, y, c) => {
+    if (c == null || x < 0 || y < 0 || x >= 64 || y >= 64) return;
+    px.add(y * 64 + x);
+    rawPut(x, y, c);
   };
-  const phase = opts.phase ?? 0;
+  const pf: Put = (x, y, c) => {
+    if (c == null || x < 0 || y < 0 || x >= 64 || y >= 64) return;
+    rawPut(x, y, c);
+  };
 
-  // Shadow (faint, ethereal)
-  for (let dy = -2; dy <= 2; dy++)
-    for (let dx = -14; dx <= 14; dx++)
-      if ((dx * dx) / 196 + (dy * dy) / 5 <= 1) put(cx + dx, 58 + dy, P.shadow);
+  // Ground glow — blue fire pooling where the phantom meets the water
+  for (let dx = -16; dx <= 16; dx++)
+    for (let dy = -1; dy <= 1; dy++)
+      if ((dx * dx) / 256 + (dy * dy) / 2 <= 1) pf(cx + dx, 58 + dy, bfD);
+  pf(cx - 13 + ph * 2, 57, bf);
+  pf(cx + 14 - ph * 3, 57, bf);
 
-  // Misty tendrils — flowing wisps extending outward
-  for (let t = 0; t < 8; t++) {
-    const angle = (t / 8) * Math.PI * 2 + phase * 0.4;
-    const tendrilLen = opts.pockets != null ? 8 + opts.pockets * 2 : 10;
-    for (let i = 0; i < tendrilLen; i++) {
-      const r = 14 + i * 1.5;
-      const x = cx + Math.cos(angle + i * 0.12) * r;
-      const y = baseCy + Math.sin(angle + i * 0.12) * r * 0.5;
-      const fade = Math.max(0, 1 - i / tendrilLen);
-      if (fade > 0.3) put(Math.round(x), Math.round(y), col.wisp);
+  // ---- ANIMATED BLUE FLAME SKIRT (the phantom rises out of it) ----
+  // `flare` (dash windup) surges the skirt into a towering inferno.
+  const heatBoost = flare * 0.1 + (chargeGlow ? 0.06 : 0);
+  for (let x = -13; x <= 13; x++) {
+    const ax = Math.abs(x);
+    const base = 16 + flare * 7 - ax * (1.1 - flare * 0.2);
+    const lick = Math.sin(x * 1.9 + ph * (Math.PI / 2)) * 3
+               + Math.sin(x * 0.7 - ph * (Math.PI / 4)) * 2;
+    const h = Math.round(base + lick);
+    if (h < 3) continue;
+    for (let i = 0; i < h; i++) {
+      const y = 58 - i;
+      const t = i / h;
+      if (t > 0.7 && (x + y + ph) % 3 === 0) continue; // ragged flickering tips
+      const heat = (1 - ax / 14) * (1 - t * 0.8) + heatBoost;
+      pf(cx + x, y, heat > 0.55 ? bfC : heat > 0.38 ? bfL : heat > 0.2 ? bf : bfD);
+    }
+  }
+  // three defined bright tongues riding in front of the skirt
+  for (const [tx2, tallBase, k] of [[-7, 13, 0], [0, 16, 1], [7, 13, 2]] as const) {
+    const tall = tallBase + Math.round(flare * 5);
+    for (let j = 0; j < tall; j++) {
+      const sway = Math.round(Math.sin(j * 0.55 + ph * (Math.PI / 2) + k * 2) * 2);
+      const t = j / tall;
+      pf(cx + tx2 + sway, 57 - j, t > 0.7 ? bf : t > 0.35 ? bfL : bfC);
     }
   }
 
-  // Dripping ectoplasm tendrils hanging below
-  for (let t = 0; t < 5; t++) {
-    const tx = cx - 10 + t * 5 + Math.round(Math.sin(phase * 0.5 + t) * 2);
-    for (let dy = 0; dy < 8 + (phase + t) % 3; dy++) {
-      const fade = 1 - dy / 12;
-      if (fade > 0.2) put(tx, baseCy + 12 + dy, col.d);
+  // ---- TORSO: smoke spiraling INTO the chest vortex (front-facing) ----
+  // Every torso pixel is shaded by which spiral arm it falls on, and the
+  // arms rotate with the phase — the whole chest visibly swirls.
+  const vx = cx, vy = 31 + bob;
+  for (let y = 23 + bob; y <= 46 + bob; y++) {
+    const t = (y - 23 - bob) / 23;                 // 0 shoulders → 1 waist
+    const halfW = Math.round(11 - t * 5 + Math.sin(t * 7 + ph) * 0.8);
+    for (let dx = -halfW; dx <= halfW; dx++) {
+      const edge = Math.abs(dx) / halfW;
+      if (edge > 0.82 && (dx + y + ph) % 3 === 0) continue; // smoky ragged edge
+      const rx = dx, ry = y - vy;
+      const r = Math.sqrt(rx * rx + ry * ry);
+      const a = Math.atan2(ry, rx);
+      const band = (((Math.round((a * 1.91 + r * 0.55 - ph * 0.45) * 2) % 4) + 4) % 4);
+      put(cx + dx, y,
+        edge > 0.86 ? sD : band === 0 ? sL : band === 1 ? s : band === 2 ? sM : sD);
     }
   }
-
-  // Core body — large ethereal mass
-  disc(put, cx, baseCy, 14, col.d);
-  disc(put, cx, baseCy, 12, col.m);
-  disc(put, cx, baseCy, 10, col.b);
-  disc(put, cx, baseCy - 1, 7, col.l);
-  disc(put, cx, baseCy - 2, 4, col.core);
-
-  // Charge glow — body pulses with energy
-  if (opts.chargeGlow) {
-    disc(put, cx, baseCy, 16, col.glowD);
-    disc(put, cx, baseCy, 13, col.glow);
-    disc(put, cx, baseCy, 10, col.b);
-    disc(put, cx, baseCy, 7, col.l);
+  // waist wisps curling off the hips into the fire
+  for (const sgn of [-1, 1] as const) {
+    put(cx + sgn * 7, 45 + bob, sM);
+    put(cx + sgn * 8, 46 + bob, sD);
+    put(cx + sgn * 9, 48 + bob, sD);
+    pf(cx + sgn * 8, 44 + bob, bfD);
   }
 
-  // Attack windup — body contracts upward then expands
-  if (opts.rearUp) {
-    disc(put, cx, baseCy - 3, 10, col.glow);
-    disc(put, cx, baseCy - 3, 8, col.l);
+  // ---- chest vortex: blazing spiral core that ROTATES with the phase ----
+  disc(pf, vx, vy, 6 + Math.round(flare), bfD);          // glow backdrop
+  for (let t2 = 0; t2 <= 1; t2 += 0.02) {
+    const a = t2 * 4.2 * Math.PI + ph * (Math.PI / 2);
+    const r = 0.5 + t2 * (5.5 + flare * 1.5);
+    pf(Math.round(vx + Math.cos(a) * r), Math.round(vy + Math.sin(a) * r * 0.9),
+       t2 < 0.3 ? bfC : t2 < 0.65 ? bfL : bf);
+  }
+  pf(vx, vy, P.white);
+
+  // ---- shoulders: angular smoke masses with curling wisps ----
+  for (const sgn of [-1, 1] as const) {
+    disc(put, cx + sgn * 10, 25 + bob, 4, sM);
+    disc(put, cx + sgn * 9, 24 + bob, 2, sL);            // top highlight
+    put(cx + sgn * 13, 26 + bob, sD);                    // squared outer edge
+    put(cx + sgn * 13, 27 + bob, sD);
+    // smoke curl hooking off the shoulder
+    for (let t2 = 0; t2 < 1; t2 += 0.1) {
+      const a = t2 * 3.5 + ph * 0.3;
+      const r = 3.5 - t2 * 2.5;
+      put(Math.round(cx + sgn * (11 + Math.cos(a) * r)),
+          Math.round(21 + bob + Math.sin(a) * r), t2 < 0.5 ? sL : sM);
+    }
+    // flame streamer whipping off each shoulder
+    pf(cx + sgn * (12 + (ph % 2)), 20 + bob, bfL);
+    pf(cx + sgn * (14 - (ph % 2)), 18 + bob, bf);
+    pf(cx + sgn * 15, 16 + bob, bfD);
   }
 
-  // Face — hollow dark eye sockets
-  // Left eye socket
-  disc(put, cx - 7, baseCy - 4, 4, P.outline);
-  disc(put, cx - 7, baseCy - 4, 3, col.d);
-  // Right eye socket
-  disc(put, cx + 7, baseCy - 4, 4, P.outline);
-  disc(put, cx + 7, baseCy - 4, 3, col.d);
+  // ---- neck + head: front-facing, twin crest horns swept back ----
+  const hyy = 16 + bob;
+  rect(put, cx - 2, hyy + 5, 5, 3, sM);                  // neck
+  put(cx, hyy + 5, sL);
+  disc(put, cx, hyy, 5, sM);                             // skull
+  disc(put, cx, hyy + 1, 4, sL);                         // pale face plate
+  rect(put, cx - 4, hyy - 3, 9, 2, sD);                  // heavy smoke brow
+  put(cx, hyy - 2, sM);                                  // brow part
+  // crest horns sweeping back-up on BOTH sides
+  for (const sgn of [-1, 1] as const) {
+    line(put, cx + sgn * 2, hyy - 4, cx + sgn * 8, hyy - 9, sM);
+    line(put, cx + sgn * 3, hyy - 4, cx + sgn * 9, hyy - 9, s);
+    line(put, cx + sgn * 3, hyy - 3, cx + sgn * 9, hyy - 8, sD);
+    put(cx + sgn * 10, hyy - 10, sM);                    // curled tip
+    put(cx + sgn * 11, hyy - 9, sD);
+    // fire streaming off the crest
+    pf(cx + sgn * 5, hyy - 8 - (ph % 2), bfL);
+    pf(cx + sgn * 8, hyy - 11 + (ph % 2), bf);
+    pf(cx + sgn * 11, hyy - 12, bfD);
+  }
+  // central crest spike
+  put(cx, hyy - 5, sM); put(cx, hyy - 6, sL);
+  pf(cx, hyy - 8 + (ph % 2), bfL);
+  pf(cx + 1, hyy - 10, bf);
+  // eyes — two slanted burning almonds under the brow
+  const eyeC = chargeGlow ? P.white : flash ? P.white : P.bfireC;
+  for (const sgn of [-1, 1] as const) {
+    put(cx + sgn * 2, hyy - 1, eyeC);
+    put(cx + sgn * 3, hyy - 1, flash ? P.white : P.fogGlow);
+    put(cx + sgn * 4, hyy - 2, sD);                      // angry slant
+    if (chargeGlow) pf(cx + sgn * 4, hyy - 1, P.bfireL); // glare bleeding off
+  }
+  // open mouth — dark maw with firelight behind jagged edges
+  rect(put, cx - 2, hyy + 2, 5, 2, out);
+  put(cx - 2, hyy + 2, sM);                              // lip corners
+  put(cx + 2, hyy + 2, sM);
+  pf(cx, hyy + 3, bfD);                                  // glow in the throat
+  pf(cx - 1, hyy + 2, bfD);
+  put(cx - 1, hyy + 4, sL);                              // under-lit chin
+  put(cx, hyy + 4, sL);
+  put(cx + 1, hyy + 4, sL);
 
-  // Glowing pupils
-  disc(put, cx - 7, baseCy - 4, 2, col.glow);
-  put(cx - 7, baseCy - 4, P.white);
-  disc(put, cx + 7, baseCy - 4, 2, col.glow);
-  put(cx + 7, baseCy - 4, P.white);
-
-  // Glow halo around eyes
-  put(cx - 10, baseCy - 4, col.glowD);
-  put(cx - 4, baseCy - 4, col.glowD);
-  put(cx + 4, baseCy - 4, col.glowD);
-  put(cx + 10, baseCy - 4, col.glowD);
-
-  // Mouth — wavering dark slit
-  const mw = 5 + phase % 2;
-  for (let i = -mw; i <= mw; i++)
-    put(cx + i, baseCy + 4, P.outline);
-  for (let i = -mw + 1; i <= mw - 1; i++)
-    put(cx + i, baseCy + 5, col.d);
-
-  // Birth animation — tendrils actively spawning minions
-  if (opts.pockets != null) {
-    const p = opts.pockets;
-    // Tendrils reach out farther at each stage
-    for (let t = 0; t < 4; t++) {
-      const a = (t / 4) * Math.PI * 2 + 0.5;
-      const len = 6 + p * 4;
-      for (let i = 0; i < len; i++) {
-        const r = 16 + i * 1.5;
-        put(Math.round(cx + Math.cos(a) * r), Math.round(baseCy + Math.sin(a) * r * 0.5), col.glow);
+  // ---- BOTH arms: smoke limbs ending in stone-clawed fists ----
+  // armRaised (windup) throws them overhead, talons to the sky.
+  const TALON: ReadonlyArray<ReadonlyArray<readonly [number, number]>> = [
+    [[0, 1], [1, 1], [1, 2], [2, 3], [2, 4], [1, 5]],          // outer hook
+    [[0, 2], [1, 2], [1, 3], [1, 4], [2, 5], [2, 6], [1, 7]],  // long middle talon
+    [[-1, 2], [-1, 3], [0, 4], [0, 5], [-1, 6]],               // inner hook
+  ];
+  for (const sgn of [-1, 1] as const) {
+    const shX = cx + sgn * 11, shY = 26 + bob;
+    const elX = cx + sgn * (armRaised ? 15 : 17);
+    const elY = armRaised ? 18 + bob : 32 + bob;
+    const wrX = cx + sgn * (armRaised ? 18 : 21);
+    const wrY = armRaised ? 11 + bob : 38 + bob;
+    // upper arm (3px of layered smoke)
+    line(put, shX, shY - 1, elX, elY - 1, sL);
+    line(put, shX, shY, elX, elY, s);
+    line(put, shX, shY + 1, elX, elY + 1, sD);
+    // forearm
+    line(put, elX, elY - 1, wrX, wrY - 1, sL);
+    line(put, elX, elY, wrX, wrY, s);
+    line(put, elX, elY + 1, wrX, wrY + 1, sD);
+    // smoke wisp trailing from the elbow
+    put(elX + sgn, elY + 2, sD);
+    pf(elX + sgn * 2, elY + 3, bfD);
+    // stone fist — knuckle plates catch the vortex light
+    disc(put, wrX, wrY + (armRaised ? -1 : 1), 2, st);
+    put(wrX, wrY + (armRaised ? -2 : 0), stL);
+    put(wrX - sgn, wrY + (armRaised ? -1 : 1), stD);
+    // three hooked talons per hand (skyward when raised)
+    const dir = armRaised ? -1 : 1;
+    for (let k = 0; k < TALON.length; k++) {
+      const path = TALON[k];
+      const bx = wrX + sgn * (k * 2 - 2);
+      for (let j = 0; j < path.length; j++) {
+        const [dx2, dy2] = path[j];
+        put(bx + sgn * dx2, wrY + dir * (1 + dy2), j === path.length - 1 ? stL : j < 2 ? stD : st);
       }
     }
-    // At final stages, glow at tips
-    if (p >= 3) {
-      for (let t = 0; t < 4; t++) {
-        const a = (t / 4) * Math.PI * 2 + 0.5;
-        const r = 16 + (6 + p * 4) * 1.5;
-        disc(put, Math.round(cx + Math.cos(a) * r), Math.round(baseCy + Math.sin(a) * r * 0.5), 2, col.glow);
+    // windup: fire crawls up the raised arms to the claws
+    if (flare >= 1 && armRaised) {
+      pf(wrX - sgn, wrY - 3, bfL);
+      pf(wrX + sgn, wrY - 4 + (ph % 2), bf);
+      pf(elX, elY - 2, bf);
+      pf(elX - sgn, elY - 3 + (ph % 2), bfD);
+    }
+  }
+
+  // ---- tall flame tongues climbing both back edges ----
+  for (const [tx2, tallBase, k] of [[-11, 14, 0], [-14, 9, 1], [11, 14, 2], [14, 9, 3]] as const) {
+    const tall = tallBase + Math.round(flare * 4);
+    for (let j = 0; j < tall; j++) {
+      const y = 56 - j;
+      const sway = Math.round(Math.sin(j * 0.5 + ph * (Math.PI / 2) + k) * 2);
+      const t = j / tall;
+      pf(cx + tx2 + sway, y, t > 0.75 ? bfD : t > 0.45 ? bf : t > 0.2 ? bfL : bfC);
+    }
+  }
+  // detached sparks drifting upward (the whole swarm rises during a flare)
+  const sparks: ReadonlyArray<readonly [number, number]> = [[-10, 30], [8, 26], [-5, 20], [12, 33], [2, 12], [-13, 24]];
+  for (let k = 0; k < sparks.length; k++) {
+    if (flare < 1 && (k + ph) % 3 === 0) continue;
+    const [sx, sy] = sparks[k];
+    pf(cx + sx, sy - ((ph * 2 + k * 3) % 6) - Math.round(flare * 4), k % 2 === 0 ? bfL : bf);
+  }
+  // windup only: embers spiraling high around the whole body
+  if (flare >= 1) {
+    for (let k = 0; k < 6; k++) {
+      const ang = (k / 6) * Math.PI * 2 + ph * 0.9;
+      pf(Math.round(cx + Math.cos(ang) * (14 + (k % 2) * 3)),
+         Math.round(30 + bob + Math.sin(ang) * 13), k % 2 === 0 ? bfL : bf);
+    }
+  }
+
+  // ---- birth pockets — spectral bulges torn open on the torso ----
+  if (opts.pockets !== undefined) {
+    const stage = opts.pockets;
+    const pockets: Array<[number, number]> = [[-5, 28 + bob], [0, 24 + bob], [5, 28 + bob]];
+    for (const [dx2, oy] of pockets) {
+      const ox = cx + dx2;
+      if (stage === 0) {
+        disc(put, ox, oy, 3, sL);
+        disc(put, ox, oy, 2, s);
+      } else if (stage === 1) {
+        disc(put, ox, oy, 3, sL);
+        disc(put, ox, oy, 2, out);
+        put(ox, oy, P.bfire);
+      } else if (stage === 2) {
+        disc(put, ox, oy, 3, sL);
+        disc(put, ox, oy, 2, sM);
+        put(ox - 1, oy, P.white);
+        put(ox + 1, oy, P.white);
+      } else if (stage === 3) {
+        disc(put, ox, oy - 1, 4, sD);
+        disc(put, ox, oy - 1, 3, sM);
+        disc(put, ox, oy - 2, 2, s);
+        put(ox - 1, oy - 1, P.white);
+        put(ox + 1, oy - 1, P.white);
+      } else if (stage === 4) {
+        disc(put, ox, oy, 3, out);
+        disc(put, ox, oy, 2, sD);
       }
     }
   }
+
+  // Crisp 1px outline around the smoke body + claws — flames stay soft
+  strokeOutline(px, rawPut, 64);
 }
 
 export function drawFogPhantomDie(put: Put, step: number) {
@@ -338,37 +503,62 @@ export function drawFogPhantomDie(put: Put, step: number) {
   const r = Math.max(0, 14 - step * 3);
   if (r > 0) {
     disc(put, cx, cy, r, P.fogD);
-    disc(put, cx, cy, Math.max(0, r - 2), P.fog);
-    disc(put, cx, cy, Math.max(0, r - 4), P.fogL);
+    disc(put, cx, cy, Math.max(0, r - 1), P.fogM);
+    disc(put, cx, cy, Math.max(0, r - 3), P.bfireL);
   }
-  // Wisps dispersing outward
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2 + step * 0.4;
-    const d = step * 7 + 5;
+  // smoke wisps + blue embers scattering
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 + step * 0.3;
+    const d = step * 5 + 5;
     const x = Math.round(cx + Math.cos(a) * d);
-    const y = Math.round(cy + Math.sin(a) * d * 0.6);
-    const fade = Math.max(0, 1 - step / 5);
-    if (fade > 0) {
-      put(x, y, P.fogM);
-      put(x + 1, y, P.fogD);
-      if (i % 3 === 0) put(x, y - 1, P.fogGlow);
-    }
+    const y = Math.round(cy + Math.sin(a) * d);
+    put(x, y, P.fogM);
+    put(x + 1, y, i % 3 === 0 ? P.bfire : P.fogD);
+    if (i % 4 === 0) put(x, y + 1, P.bfireD);
   }
+  if (step < 2) disc(put, cx, cy, 6, P.bfireC);
 }
 
-export function drawFogPhantom(frame: BossFrame) {
+/** River boss frame set — the shared BossFrame plus extra idle frames (so the
+ *  blue fire never sits still) and a 6-frame play-once dash windup. */
+export type RiverBossFrame = BossFrame | 'idle2' | 'idle3'
+  | 'chargeWind0' | 'chargeWind1' | 'chargeWind2' | 'chargeWind3' | 'chargeWind4' | 'chargeWind5';
+
+export const riverBossFrames: RiverBossFrame[] = [
+  'idle0','idle1','idle2','idle3',
+  'move0','move1','move2','move3',
+  'atk0','atk1',
+  'chargeWind','chargeWind0','chargeWind1','chargeWind2','chargeWind3','chargeWind4','chargeWind5',
+  'hit',
+  'birth0','birth1','birth2','birth3','birth4',
+  'die0','die1','die2','die3','die4'
+];
+
+export function drawFogPhantom(frame: RiverBossFrame) {
   return (put: Put) => {
     switch (frame) {
+      // 4 idle frames cycle the flame flicker + vortex rotation
       case 'idle0':      return drawFogPhantomBody(put, { bob: 0, phase: 0 });
       case 'idle1':      return drawFogPhantomBody(put, { bob: -1, phase: 1 });
+      case 'idle2':      return drawFogPhantomBody(put, { bob: -2, phase: 2 });
+      case 'idle3':      return drawFogPhantomBody(put, { bob: -1, phase: 3 });
       case 'move0':      return drawFogPhantomBody(put, { bob: 0, phase: 0 });
       case 'move1':      return drawFogPhantomBody(put, { bob: -1, phase: 1 });
       case 'move2':      return drawFogPhantomBody(put, { bob: -2, phase: 2 });
       case 'move3':      return drawFogPhantomBody(put, { bob: -1, phase: 3 });
-      case 'atk0':       return drawFogPhantomBody(put, { rearUp: true, bob: -3, phase: 0 });
-      case 'atk1':       return drawFogPhantomBody(put, { bob: 2, phase: 2 });
-      case 'chargeWind': return drawFogPhantomBody(put, { chargeGlow: true, bob: 0, phase: 0 });
-      case 'hit':        return drawFogPhantomBody(put, { flash: true, phase: 0 });
+      case 'atk0':       return drawFogPhantomBody(put, { armRaised: true, flare: 0.8, bob: -2, phase: 0 });
+      case 'atk1':       return drawFogPhantomBody(put, { flare: 1, bob: 2, phase: 2 });
+      // legacy single windup frame (kept for the shared BossFrame set)
+      case 'chargeWind': return drawFogPhantomBody(put, { chargeGlow: true, armRaised: true, flare: 1, phase: 1, bob: -1 });
+      // dash windup: ONE arm raise (cw0→cw1), then locked overhead while
+      // only the flames pulse (cw2-5 cycle the phase at full flare)
+      case 'chargeWind0': return drawFogPhantomBody(put, { chargeGlow: true, flare: 0.6, phase: 0, bob: -1 });
+      case 'chargeWind1': return drawFogPhantomBody(put, { chargeGlow: true, armRaised: true, flare: 1.2, phase: 1, bob: -2 });
+      case 'chargeWind2': return drawFogPhantomBody(put, { chargeGlow: true, armRaised: true, flare: 2, phase: 0, bob: -2 });
+      case 'chargeWind3': return drawFogPhantomBody(put, { chargeGlow: true, armRaised: true, flare: 2, phase: 1, bob: -2 });
+      case 'chargeWind4': return drawFogPhantomBody(put, { chargeGlow: true, armRaised: true, flare: 2, phase: 2, bob: -2 });
+      case 'chargeWind5': return drawFogPhantomBody(put, { chargeGlow: true, armRaised: true, flare: 2, phase: 3, bob: -2 });
+      case 'hit':        return drawFogPhantomBody(put, { flash: true });
       case 'birth0':     return drawFogPhantomBody(put, { pockets: 0, phase: 0 });
       case 'birth1':     return drawFogPhantomBody(put, { pockets: 1, phase: 1 });
       case 'birth2':     return drawFogPhantomBody(put, { pockets: 2, phase: 2 });
