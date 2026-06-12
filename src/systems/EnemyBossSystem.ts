@@ -748,14 +748,27 @@ export class EnemyBossSystem {
     }
 
     if (b.bossKind === 'dragon') {
-      if (time >= scene.nextDragonFireball && onScreen) {
-        // Where the dragon's mouth emits fireballs from. World-pixel offsets
-        // from the boss center — tune for your dragon sprite. X is mirrored
-        // when the dragon faces left.
-        const FIREBALL_OFFSET_X = 40;  // forward of center
-        const FIREBALL_OFFSET_Y = 5;   // negative = above center
-        const headDx = FIREBALL_OFFSET_X * (b.flipX ? -1 : 1);
-        this.spawnDragonFireball(b.x + headDx, b.y + FIREBALL_OFFSET_Y, px, py);
+      // Fireballs are telegraphed: the atk anim plays its windup (head rears,
+      // throat ignites) for ~250ms, then the maw opens — the projectile
+      // leaves the mouth exactly when the open-mouth frame lands.
+      const emitAt = (b as any)._fireballEmitAt ?? 0;
+      if (emitAt > 0) {
+        // Keep the maw aimed at the player for the whole windup → emit
+        // (the chase code's facing-flip is suppressed while the atk plays).
+        b.setFlipX(px < b.x);
+        if (time >= emitAt) {
+          (b as any)._fireballEmitAt = 0;
+          // Where the dragon's mouth emits fireballs from. World-pixel offsets
+          // from the boss center — tuned for the 64px dragon at CFG.bossScale.
+          const FIREBALL_OFFSET_X = 32;  // forward of center
+          const FIREBALL_OFFSET_Y = -14; // negative = above center
+          const headDx = FIREBALL_OFFSET_X * (b.flipX ? -1 : 1);
+          this.spawnDragonFireball(b.x + headDx, b.y + FIREBALL_OFFSET_Y, px, py);
+        }
+      } else if (time >= scene.nextDragonFireball && onScreen) {
+        b.setFlipX(px < b.x);          // face the player before rearing back
+        b.play(`${b.animPrefix}-atk`);
+        (b as any)._fireballEmitAt = time + 250;
         scene.nextDragonFireball = time + CFG.castle.dragonFireballRate;
       }
       if (time >= b.nextBirth) {
@@ -937,9 +950,13 @@ export class EnemyBossSystem {
       moveX /= ml; moveY /= ml;
     }
     b.setVelocity(moveX * b.speed, moveY * b.speed);
-    b.setFlipX(moveX < 0);
+    // While a one-shot attack anim plays (e.g. the dragon's fireball
+    // windup→emit), don't stomp it with the walk anim and don't flip the
+    // facing away from the player — the maw stays aimed until it fires.
+    const inAtk = b.anims.currentAnim?.key === `${b.animPrefix}-atk` && b.anims.isPlaying;
+    if (!inAtk) b.setFlipX(moveX < 0);
     const moveAnim = `${b.animPrefix}-move`;
-    if (b.anims.currentAnim?.key !== moveAnim) b.play(moveAnim);
+    if (!inAtk && b.anims.currentAnim?.key !== moveAnim) b.play(moveAnim);
 
     if (
       Phaser.Math.Distance.Between(b.x, b.y, scene.player.x, scene.player.y) < 36 &&

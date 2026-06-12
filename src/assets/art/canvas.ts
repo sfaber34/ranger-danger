@@ -225,6 +225,12 @@ export const P = {
   queenM:  '#1e3696',
   queenL:  '#5a8ae8',
   queenP:  '#a8c8f0',
+
+  // Castle Dragon — dark purple craggy hide (wing membrane uses the heavy reds)
+  drag:    '#4a3a52',
+  dragD:   '#241b2e',
+  dragM:   '#372a40',
+  dragL:   '#675a72',
   fogGlow: '#64c8ff',
   fogGlowD:'#3090c0',
   fogCore: '#405878',

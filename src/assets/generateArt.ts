@@ -25,7 +25,7 @@ import {
 import { BearFrame, drawBearDir, extractBearFrames } from './art/bear';
 import {
   BossFrame, RamFrame, ForestBossFrame, forestBossFrames, riverBossFrames, infectedBossFrames,
-  phantomQueenFrames,
+  phantomQueenFrames, castleDragonFrames,
   drawFogPhantom, drawBoss, drawRam, drawInfectedBoss, drawForestBoss,
   drawPhantomQueen, drawCastleDragon, drawDesertBoss,
   drawQueenOrb, drawDragonFireball, drawDragonFireExplosion,
@@ -395,8 +395,8 @@ export function generateAllArt(scene: Phaser.Scene) {
   // Castle boss (Phantom Queen) textures
   // Queen gets extra idle frames (flowing hair/gown) on top of the shared set
   for (const f of phantomQueenFrames) add(scene, `cqboss_${f}`, makeCanvas(64, drawPhantomQueen(f)));
-  // Castle boss (Castle Dragon) textures
-  for (const f of bossFrames) add(scene, `cdboss_${f}`, makeCanvas(64, drawCastleDragon(f)));
+  // Castle boss (Castle Dragon) textures — extra idle + windup/emit atk frames
+  for (const f of castleDragonFrames) add(scene, `cdboss_${f}`, makeCanvas(64, drawCastleDragon(f)));
 
   for (const f of bossFrames) add(scene, `dfboss_${f}`, makeCanvas(64, drawDesertBoss(f, 'burrower')));
   for (const f of bossFrames) add(scene, `dsboss_${f}`, makeCanvas(64, drawDesertBoss(f, 'scorpion')));
@@ -694,9 +694,13 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('cqboss-die',        ['cqboss_die0','cqboss_die1','cqboss_die2','cqboss_die3','cqboss_die4'], 6, 0);
 
   // Castle boss (Castle Dragon) animations
-  mk('cdboss-idle',       ['cdboss_idle0','cdboss_idle1'], 2, -1);
-  mk('cdboss-move',       ['cdboss_move0','cdboss_move1','cdboss_move2','cdboss_move3'], 5, -1);
-  mk('cdboss-atk',        ['cdboss_atk0','cdboss_atk1'], 4, 0);
+  // 4-frame breathing idle + prowling walk
+  mk('cdboss-idle',       ['cdboss_idle0','cdboss_idle1','cdboss_idle2','cdboss_idle3'], 5, -1);
+  mk('cdboss-move',       ['cdboss_move0','cdboss_move1','cdboss_move2','cdboss_move3'], 7, -1);
+  // Fireball attack: windup (rear + throat ignites) for 250ms, then the maw
+  // opens and the jet roars — EnemyBossSystem spawns the fireball at 250ms
+  // to line up with the open-mouth frames.
+  mk('cdboss-atk',        ['cdboss_atk0','cdboss_atk2','cdboss_atk1','cdboss_atk3'], 8, 0);
   mk('cdboss-chargewind', ['cdboss_chargeWind','cdboss_idle0'], 6, -1);
   mk('cdboss-hit',        ['cdboss_hit'], 10, 0);
   mk('cdboss-birth',      ['cdboss_birth0','cdboss_birth1','cdboss_birth2','cdboss_birth3','cdboss_birth4'], 4, 0);

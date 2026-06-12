@@ -2036,252 +2036,353 @@ export function drawPhantomQueen(frame: PhantomQueenFrame) {
 export interface CastleDragonOpts {
   bob?: number;
   flash?: boolean;
-  chargeGlow?: boolean;
   pockets?: number;
-  rearUp?: boolean;
-  legStep?: number;
+  phase?: number;     // 0-3 tail sway / flame flicker
+  legStep?: number;   // walk gait (-2..2)
   mouthOpen?: boolean;
-  wingsSpread?: boolean;
+  windup?: number;    // 0-2: head rears back, throat glows, wings raise
+  flame?: boolean;    // maw wide open, fire jet streaming out
 }
 
-export function drawCastleDragonBody(put: Put, opts: CastleDragonOpts) {
+export function drawCastleDragonBody(rawPut: Put, opts: CastleDragonOpts) {
+  const cx = 32;
   const bob = opts.bob ?? 0;
-  const by = bob;           // vertical bob offset
+  const ph = opts.phase ?? 0;
+  const ls = opts.legStep ?? 0;
+  const flash = opts.flash ?? false;
+  const windup = opts.windup ?? 0;
+  const flame = opts.flame ?? false;
+  const mouthOpen = (opts.mouthOpen ?? false) || flame;
 
-  const col = {
-    out:    opts.flash ? P.white : P.outline,
-    d:      opts.flash ? P.white : '#6a1818',
-    m:      opts.flash ? P.white : '#8a2020',
-    b:      opts.flash ? P.white : '#a03030',
-    l:      opts.flash ? P.white : '#b04040',
-    belly:  opts.flash ? P.white : '#b06030',
-    bellyL: opts.flash ? P.white : '#c07040',
-    bellyM: opts.flash ? P.white : '#d08050',
-    horn:   opts.flash ? P.white : '#5a3a18',
-    hornD:  opts.flash ? P.white : '#4a2a10',
-    hornL:  opts.flash ? P.white : '#6a4a20',
-    eye:    opts.flash ? P.white : '#ffa020',
-    eyeL:   opts.flash ? P.white : '#ffd040',
-    fire:   opts.flash ? P.white : '#ff6020',
-    fireL:  opts.flash ? P.white : '#ffa040',
-    fireW:  opts.flash ? P.white : '#ffd060',
-    fireH:  opts.flash ? P.white : '#ffe880',
-    fireD:  opts.flash ? P.white : '#ff2000',
-    wingD:  opts.flash ? P.white : '#4a1010',
-    wing:   opts.flash ? P.white : '#6a2020',
-    wingL:  opts.flash ? P.white : '#8a3030',
-    scale:  opts.flash ? P.white : '#905020',
-    tooth:  opts.flash ? P.white : '#e8e0d0',
-    toothD: opts.flash ? P.white : '#d8d0c0',
-    claw:   opts.flash ? P.white : '#4a2a10',
-    smoke:  opts.flash ? P.white : '#4a4a4a',
-    browD:  opts.flash ? P.white : '#8a1818',
-    nostril:opts.flash ? P.white : '#6a2020',
+  // craggy purple hide
+  const hD = flash ? P.white : P.dragD;
+  const hM = flash ? P.white : P.dragM;
+  const hB = flash ? P.white : P.drag;
+  const hL = flash ? P.white : P.dragL;
+  // blood-red wing membrane
+  const mD = flash ? P.white : P.heavyD;
+  const mB = flash ? P.white : P.heavy;
+  const mL = flash ? P.white : P.heavyL;
+  // bone (horns / claws / belly plates / fangs)
+  const bn  = flash ? P.white : P.wBone;
+  const bnD = flash ? P.white : P.wBoneD;
+  const bnL = flash ? P.white : P.wBoneL;
+  // red dorsal spikes
+  const sp  = flash ? P.white : P.red;
+  const spD = flash ? P.white : P.redD;
+  const spL = flash ? P.white : P.redL;
+  const out = flash ? P.white : P.outline;
+
+  // Record body pixels for the outline; glows/flame stay unrecorded.
+  const px = new Set<number>();
+  const put: Put = (x, y, c) => {
+    if (c == null || x < 0 || y < 0 || x >= 64 || y >= 64) return;
+    px.add(y * 64 + x);
+    rawPut(x, y, c);
+  };
+  const pf: Put = (x, y, c) => {
+    if (c == null || x < 0 || y < 0 || x >= 64 || y >= 64) return;
+    rawPut(x, y, c);
+  };
+  // tiny triangle rasteriser for the wing membrane panels
+  const tri = (x0: number, y0: number, x1: number, y1: number, x2: number, y2: number, c: string) => {
+    const minX = Math.max(0, Math.min(x0, x1, x2)), maxX = Math.min(63, Math.max(x0, x1, x2));
+    const minY = Math.max(0, Math.min(y0, y1, y2)), maxY = Math.min(63, Math.max(y0, y1, y2));
+    const d = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+    if (d === 0) return;
+    for (let y = minY; y <= maxY; y++)
+      for (let x = minX; x <= maxX; x++) {
+        const a = ((x1 - x) * (y2 - y) - (x2 - x) * (y1 - y)) / d;
+        const b2 = ((x2 - x) * (y0 - y) - (x0 - x) * (y2 - y)) / d;
+        const c2 = 1 - a - b2;
+        if (a >= 0 && b2 >= 0 && c2 >= 0) put(x, y, c);
+      }
   };
 
-  // Ground shadow
+  // Drop shadow
   for (let dy = -2; dy <= 2; dy++)
-    for (let dx = -16; dx <= 16; dx++)
-      if ((dx * dx) / 256 + (dy * dy) / 4 <= 1) put(32 + dx, 59 + dy, P.shadow);
+    for (let dx = -24; dx <= 24; dx++)
+      if ((dx * dx) / 576 + (dy * dy) / 5 <= 1) rawPut(cx + dx, 58 + dy, P.shadow);
 
-  // === Tail (curving left, wavy) ===
-  for (let i = 0; i < 22; i++) {
-    const tx = 18 - i;
-    const ty = 38 + by + Math.round(Math.sin(i * 0.4) * 4);
-    const tr = Math.max(1, 3 - Math.floor(i / 6));
-    disc(put, tx, ty, tr, col.m);
-    if (tr > 1) disc(put, tx, ty, tr - 1, col.b);
+  const bodyCy = 38 + bob;
+  // head rears back+up while winding, lunges forward on the flame
+  const hdx = flame ? 2 : -windup * 2;
+  const hdy = flame ? 0 : -windup * 2;
+  const hx = 46 + hdx, hy = 20 + bob + hdy;
+
+  // ---- long tail curling down-left, swaying with the phase ----
+  const sway = Math.round(Math.sin(ph * (Math.PI / 2)) * 2);
+  for (let t = 0; t <= 1; t += 0.07) {
+    const tx2 = Math.round(15 - 11 * t - 2 * Math.sin(Math.PI * t) + sway * t);
+    const ty2 = Math.round(42 + bob * (1 - t) + 11 * Math.pow(t, 1.2));
+    const r = t < 0.4 ? 2 : 1;
+    disc(put, tx2, ty2, r, hB);
+    put(tx2, ty2 + r, bn);                          // pale underside
+    if (Math.round(t * 14) % 3 === 0) {             // red tail spikes
+      put(tx2, ty2 - r - 1, sp);
+      put(tx2, ty2 - r - 2, spD);
+    }
   }
-  // Tail spikes
-  put(0, 36 + by, col.hornD); put(1, 35 + by, col.horn);
-  put(0, 38 + by, col.hornD); put(1, 39 + by, col.horn);
+  // tail tip curls forward
+  put(4 + sway, 54, hM);
+  put(5 + sway, 55, hM);
+  put(6 + sway, 55, spD);
 
-  // === Left wing (behind body) ===
-  const wingSpread = opts.wingsSpread ? 4 : 0;
-  for (let i = 0; i < 22; i++) {
-    const wy = 14 + Math.floor(i * 0.4) - wingSpread + Math.floor(i * wingSpread / 22);
-    const wh = 6 + Math.floor(i * 0.3);
-    rect(put, 4 + i, wy + by, 2, wh, col.wing);
-    if (i % 3 === 0) put(4 + i, wy + by, col.wingL); // membrane veins
+  // ---- far legs (gait swings them under the body) ----
+  const legY = 44 + bob;
+  rect(put, 15 - ls, legY, 3, 54 - legY, hM);
+  rect(put, 34 + ls, legY, 3, 54 - legY, hM);
+  put(18 - ls, 53, bnD); put(19 - ls, 53, bnD);     // far claws point forward
+  put(37 + ls, 53, bnD); put(38 + ls, 53, bnD);
+
+  // ---- the great wing rising off the back (membrane = blood red) ----
+  const wRaise = windup > 0 || flame ? 3 : 0;
+  const wrX2 = 20, wrY2 = 8 - wRaise + (ph % 2 === 1 ? 1 : 0);   // wrist settles with the breath
+  const shoX = 32, shoY = 28 + bob;
+  const tip1x = 4, tip1y = 14 - wRaise;
+  const tip2x = 7, tip2y = 22 - (wRaise >> 1);
+  const tip3x = 14, tip3y = 28;
+  // membrane panels first
+  tri(wrX2, wrY2, tip1x, tip1y, tip2x, tip2y, mB);
+  tri(wrX2, wrY2, tip2x, tip2y, tip3x, tip3y, mB);
+  tri(wrX2, wrY2, tip3x, tip3y, shoX, shoY, mD);
+  // membrane shading — dark folds near the bones, bright veins fanning out
+  line(put, wrX2, wrY2 + 2, tip2x + 2, tip2y - 1, mD);
+  line(put, wrX2 - 1, wrY2 + 3, tip3x, tip3y - 2, mD);
+  line(put, wrX2 - 2, wrY2 + 4, Math.round((tip1x + tip2x) / 2), Math.round((tip1y + tip2y) / 2), mL);
+  line(put, wrX2 - 2, wrY2 + 5, Math.round((tip2x + tip3x) / 2), Math.round((tip2y + tip3y) / 2), mL);
+  // wing arm bone + finger spars over the membrane
+  line(put, shoX, shoY, wrX2, wrY2, hM);
+  line(put, shoX + 1, shoY, wrX2 + 1, wrY2, hD);
+  line(put, wrX2, wrY2, tip1x, tip1y, hM);
+  line(put, wrX2, wrY2, tip2x, tip2y, hM);
+  line(put, wrX2, wrY2, tip3x, tip3y, hM);
+  // wrist knuckle + bone thumb-claw hooking up
+  disc(put, wrX2, wrY2, 1, hB);
+  put(wrX2 + 1, wrY2 - 2, bn);
+  put(wrX2 + 2, wrY2 - 3, bnL);
+  // ragged trailing edge bites
+  put(tip1x + 1, tip1y + 1, out);
+  put(tip2x + 1, tip2y + 1, out);
+
+  // ---- body: craggy barrel + haunch + shoulder ----
+  ellipse(put, 28, bodyCy, 13, 8, hB);
+  disc(put, 19, bodyCy + 2, 6, hB);                 // haunch
+  disc(put, 37, bodyCy - 2, 6, hB);                 // shoulder
+  // cracked-hide texture
+  for (let y = -8; y <= 8; y++)
+    for (let x = -14; x <= 14; x++) {
+      if ((x * x) / 196 + (y * y) / 64 > 1) continue;
+      if ((x * 3 + y * 7 + 64) % 9 === 0) put(28 + x, bodyCy + y, hD);
+      else if ((x * 5 + y * 3 + 64) % 13 === 0) put(28 + x, bodyCy + y, hM);
+      else if (y < -4 && (x * 7 + y + 64) % 11 === 0) put(28 + x, bodyCy + y, hL);
+    }
+  // pale segmented belly plates
+  for (let x = 19; x <= 39; x++) {
+    put(x, bodyCy + 7, x % 3 === 0 ? bnD : bn);
+    if (x % 2 === 0) put(x, bodyCy + 6, bnD);
   }
-  // Wing bone
-  line(put, 14, 20 + by - Math.floor(wingSpread / 2), 4, 14 + by - wingSpread, col.wingD);
+  // red spikes studding the haunch + shoulder
+  put(18, bodyCy - 3, sp); put(19, bodyCy - 4, spD);
+  put(24, bodyCy - 6, sp); put(25, bodyCy - 7, spD);
+  put(36, bodyCy - 7, sp);
 
-  // === Right wing (behind body) ===
-  for (let i = 0; i < 18; i++) {
-    const wy = 14 + Math.floor(i * 0.4) - wingSpread + Math.floor(i * wingSpread / 18);
-    const wh = 5 + Math.floor(i * 0.2);
-    rect(put, 38 + i, wy + by, 2, wh, col.wing);
-    if (i % 3 === 0) put(38 + i, wy + by, col.wingL);
-  }
-  line(put, 38, 20 + by - Math.floor(wingSpread / 2), 54, 14 + by - wingSpread, col.wingD);
-
-  // === Legs ===
-  const ls = opts.legStep ?? 0;
-  rect(put, 24, 44 + by + (ls > 0 ? -1 : 0), 6, 12, col.m);
-  rect(put, 36, 44 + by + (ls < 0 ? -1 : 0), 6, 12, col.m);
-  // Claws
-  for (let i = 0; i < 3; i++) {
-    put(24 + i * 2, 55 + by + (ls > 0 ? -1 : 0), col.claw);
-    put(36 + i * 2, 55 + by + (ls < 0 ? -1 : 0), col.claw);
+  // ---- near legs with bone talons (front leg sits under the shoulder) ----
+  rect(put, 19 + ls, legY, 4, 55 - legY, hB);
+  rect(put, 38 - ls, legY, 4, 55 - legY, hB);
+  put(19 + ls, legY + 4, hL);                       // shin light
+  put(38 - ls, legY + 4, hL);
+  for (const lx of [19 + ls, 38 - ls]) {            // splayed talons, forward
+    put(lx + 3, 54, bn); put(lx + 4, 54, bnL);
+    put(lx + 1, 54, bn);
+    put(lx - 1, 54, bnD);                           // dew claw
   }
 
-  // === Body (large round) ===
-  disc(put, 32, 34 + by, 14, col.m);
-  disc(put, 32, 33 + by, 12, col.b);
-  // Belly scales (lighter center)
-  disc(put, 32, 36 + by, 8, col.belly);
-  disc(put, 32, 36 + by, 6, col.bellyL);
-  disc(put, 32, 36 + by, 4, col.bellyM);
-  // Scale detail
-  for (let y = 30; y < 42; y += 3)
-    for (let x = 26; x < 38; x += 4)
-      put(x, y + by, col.scale);
-
-  // === Neck (thick, angled right) ===
-  rect(put, 34, 18 + by, 10, 14, col.b);
-  rect(put, 35, 19 + by, 8, 12, col.l);
-  // Neck scales
-  for (let y = 20; y < 30; y += 2) put(36, y + by, col.m);
-
-  // === Head (detailed, facing right) ===
-  rect(put, 36, 12 + by, 18, 12, col.b);
-  rect(put, 38, 13 + by, 16, 10, col.l);
-  // Snout
-  rect(put, 50, 15 + by, 8, 6, col.l);
-  rect(put, 52, 16 + by, 6, 4, '#c05050');
-  // Nostrils
-  put(57, 17 + by, col.nostril); put(57, 19 + by, col.nostril);
-  // Jaw
-  rect(put, 40, 22 + by, 16, 3, col.m);
-  rect(put, 42, 22 + by, 12, 2, col.b);
-  // Teeth
-  for (let x = 42; x < 54; x += 3) {
-    put(x, 22 + by, col.tooth); put(x, 23 + by, col.toothD);
+  // ---- neck: thick, plated, climbing to the skull ----
+  for (let t = 0; t <= 1; t += 0.2) {
+    const nx = Math.round(39 + (hx - 5 - 39) * t);
+    const ny = Math.round(32 + bob + (hy + 2 - 32 - bob) * t);
+    disc(put, nx, ny, 4 - Math.round(t), hB);
+    put(nx - 2, ny + 2, hM);
   }
-  // Brow ridge
-  rect(put, 38, 12 + by, 14, 2, col.browD);
+  // bone throat plates up the front of the neck
+  for (let t = 0; t <= 1; t += 0.25) {
+    const nx = Math.round(41 + (hx - 2 - 41) * t);
+    const ny = Math.round(35 + bob + (hy + 4 - 35 - bob) * t);
+    put(nx, ny, bn);
+    put(nx + 1, ny, bnD);
+  }
 
-  // === Horns ===
-  rect(put, 40, 6 + by, 3, 8, col.hornD);
-  rect(put, 41, 4 + by, 2, 4, col.horn);
-  rect(put, 48, 6 + by, 3, 8, col.hornD);
-  rect(put, 49, 4 + by, 2, 4, col.horn);
-  put(41, 3 + by, col.hornL); put(49, 3 + by, col.hornL);
+  // ---- head: blocky skull, swept-back horns, fanged maw ----
+  rect(put, hx - 4, hy - 3, 8, 6, hB);
+  put(hx - 3, hy - 3, hL);                          // skull light
+  put(hx + 1, hy - 3, hL);
+  put(hx - 4, hy + 2, hM);
+  // muzzle
+  rect(put, hx + 3, hy - 1, 7, 3, hB);
+  rect(put, hx + 3, hy - 1, 7, 1, hL);
+  put(hx + 9, hy, hD);                              // nostril
+  // eye — burning red under a heavy brow
+  rect(put, hx - 2, hy - 2, 4, 1, hD);              // brow shadow
+  put(hx - 1, hy - 1, windup > 0 || flame ? spL : sp);
+  put(hx, hy - 1, flash ? P.white : P.redD);
+  if (windup > 1 || flame) pf(hx - 2, hy - 1, P.spark); // glare
+  // horns swept back off the skull
+  line(put, hx - 3, hy - 3, hx - 10, hy - 7, bn);
+  line(put, hx - 3, hy - 4, hx - 10, hy - 8, bnD);
+  put(hx - 11, hy - 8, bnL);
+  line(put, hx - 1, hy - 4, hx - 7, hy - 9, bn);
+  put(hx - 8, hy - 10, bnL);
+  put(hx + 1, hy - 4, bn);                          // brow spike
+  put(hx + 1, hy - 5, bnL);
+  // maw
+  if (mouthOpen) {
+    // upper fangs hanging from the muzzle
+    for (let x = hx + 3; x <= hx + 9; x += 2) put(x, hy + 2, bnL);
+    // dark gape with fire light inside
+    rect(put, hx + 3, hy + 3, 7, 2, out);
+    pf(hx + 5, hy + 3, flame ? P.sparkL : P.spark);
+    pf(hx + 7, hy + 4, flame ? P.spark : P.redD);
+    // dropped lower jaw with up-fangs
+    rect(put, hx + 2, hy + 5, 7, 2, hM);
+    for (let x = hx + 3; x <= hx + 8; x += 2) put(x, hy + 4, bnL);
+    put(hx + 1, hy + 5, hD);                        // jaw hinge
+  } else {
+    // closed: interlocking fang row along the lip line
+    rect(put, hx + 3, hy + 2, 7, 2, hM);
+    for (let x = hx + 3; x <= hx + 9; x += 2) put(x, hy + 2, bnL);
+    put(hx + 2, hy + 2, hD);
+  }
 
-  // === Eye (glowing orange, menacing) ===
-  rect(put, 44, 14 + by, 4, 3, col.out);
-  put(45, 14 + by, col.eye);
-  put(46, 14 + by, col.eyeL);
-  put(45, 15 + by, col.eye);
+  // ---- red dorsal spikes along the neck + spine ----
+  for (const [sx2, sy2, tall] of [
+    [43, 27, 2], [40, 29, 3], [36, 27, 3], [31, 29, 2], [26, 30, 2],
+  ] as const) {
+    for (let j = 0; j < tall; j++)
+      put(sx2, sy2 + bob - j, j === tall - 1 ? spD : sp);
+    put(sx2 + 1, sy2 + bob, spD);
+  }
 
-  // === Mouth open with fire (attack frames) ===
-  if (opts.mouthOpen) {
-    // Wider open jaw
-    rect(put, 50, 21 + by, 8, 4, col.m);
-    rect(put, 52, 22 + by, 6, 2, col.b);
-    // Fire breath (expanding cone to the right)
-    for (let i = 0; i < 6; i++) {
-      const spread = Math.floor(i * 0.6);
-      for (let s = -spread; s <= spread; s++) {
-        const fx = 58 + i;
-        const fy = 19 + by + s;
-        if (fx < 64 && fy >= 0 && fy < 64) {
-          const colors = [col.fireD, col.fire, col.fireL, col.fireW, col.fireH];
-          put(fx, fy, colors[Math.min(Math.abs(s), 4)]);
-        }
+  // ---- throat-fire glow (windup) and the flame jet (emit) ----
+  if (windup > 0 && !flame) {
+    pf(hx - 5, hy + 4, P.spark);
+    pf(hx - 6, hy + 6, windup > 1 ? P.sparkL : P.redD);
+    if (windup > 1) {
+      pf(hx - 4, hy + 5, P.sparkL);
+      pf(hx - 7, hy + 8, P.spark);
+      pf(hx + 4, hy + 3, P.spark);                  // light leaking through the teeth
+    }
+  }
+  if (flame) {
+    // fire jet roaring out of the open maw
+    const mx2 = hx + 10, my2 = hy + 3;
+    for (let j = 0; j < 9; j++) {
+      const spread = 1 + (j >> 2);
+      for (let dy = -spread; dy <= spread; dy++) {
+        if (j > 3 && (j + dy + ph) % 3 === 0) continue; // flicker
+        const yy = my2 + dy + Math.round(Math.sin(j * 0.8 + ph * 1.5));
+        pf(mx2 + j, yy, Math.abs(dy) === spread ? P.redL : dy === 0 ? P.sparkL : P.spark);
       }
     }
-  } else {
-    // Smoke from nostrils when not breathing
-    put(58, 17 + by, col.smoke);
-    put(59, 16 + by, col.smoke);
-    put(58, 19 + by, col.smoke);
+    pf(hx - 5, hy + 4, P.sparkL);                   // throat ablaze
+    pf(hx - 6, hy + 6, P.spark);
   }
 
-  // === Back spines along body top ===
-  for (let x = 26; x < 38; x += 3) {
-    put(x, 24 + by, col.d);
-    put(x, 23 + by, col.l);
-  }
-
-  // Charge glow — fire aura building
-  if (opts.chargeGlow) {
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * Math.PI * 2;
-      const r = 18;
-      const gx = Math.round(32 + Math.cos(a) * r);
-      const gy = Math.round(34 + by + Math.sin(a) * r * 0.6);
-      disc(put, gx, gy, 2, col.fire);
-      put(gx, gy, col.fireL);
-    }
-    disc(put, 56, 18 + by, 3, col.fireL);
-  }
-
-  // Rear up pose (attack windup) — wings spread wider
-  if (opts.rearUp) {
-    for (let i = 0; i < 5; i++) {
-      put(4 - i, 10 + by + i, col.wingL);
-      put(56 + i, 10 + by + i, col.wingL);
-    }
-  }
-
-  // Birth animation — roaring/summoning
-  if (opts.pockets != null) {
-    const p = opts.pockets;
-    for (let t = 0; t < 6; t++) {
-      const a = (t / 6) * Math.PI * 2;
-      const r = 8 + p * 3;
-      const fx = Math.round(32 + Math.cos(a) * r);
-      const fy = Math.round(34 + by + Math.sin(a) * r * 0.5);
-      put(fx, fy, col.fire);
-      if (p >= 2) put(fx + 1, fy, col.fireL);
-      if (p >= 4) disc(put, fx, fy, 2, col.fireL);
+  // ---- birth pockets — egg-boils on the flank ----
+  if (opts.pockets !== undefined) {
+    const stage = opts.pockets;
+    const pockets: Array<[number, number]> = [[22, bodyCy - 3], [28, bodyCy - 5], [34, bodyCy - 3]];
+    for (const [ox, oy] of pockets) {
+      if (stage === 0) {
+        disc(put, ox, oy, 3, hL);
+        disc(put, ox, oy, 2, hB);
+      } else if (stage === 1) {
+        disc(put, ox, oy, 3, hD);
+        disc(put, ox, oy, 2, out);
+        put(ox, oy, P.redD);
+      } else if (stage === 2) {
+        disc(put, ox, oy, 3, hD);
+        disc(put, ox, oy, 2, P.red);
+        put(ox - 1, oy, P.white);
+        put(ox + 1, oy, P.white);
+      } else if (stage === 3) {
+        disc(put, ox, oy - 1, 4, hD);
+        disc(put, ox, oy - 1, 3, P.red);
+        disc(put, ox, oy - 2, 2, P.redL);
+        put(ox - 1, oy - 1, P.white);
+        put(ox + 1, oy - 1, P.white);
+      } else if (stage === 4) {
+        disc(put, ox, oy, 3, out);
+        disc(put, ox, oy, 2, hD);
+      }
     }
   }
+
+  // Crisp 1px silhouette outline — glows/flame stay soft
+  strokeOutline(px, rawPut, 64);
 }
 
 export function drawCastleDragonDie(put: Put, step: number) {
-  const cx = 32, cy = 34;
-  const r = Math.max(0, 14 - step * 3);
+  const cx = 32, cy = 36;
+  const r = Math.max(0, 22 - step * 5);
   if (r > 0) {
-    disc(put, cx, cy, r, '#8a2020');
-    disc(put, cx, cy, Math.max(0, r - 2), '#a03030');
-    disc(put, cx, cy, Math.max(0, r - 4), '#b04040');
+    disc(put, cx, cy, r, P.dragD);
+    disc(put, cx, cy, Math.max(0, r - 1), P.drag);
+    disc(put, cx, cy, Math.max(0, r - 3), P.heavyL);
   }
-  // Flames dying out — chunks dispersing
+  // hide chunks, horn shards + dying embers scattering
   for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2 + step * 0.4;
-    const d = step * 5 + 5;
+    const a = (i / 12) * Math.PI * 2 + step * 0.3;
+    const d = step * 6 + 6;
     const x = Math.round(cx + Math.cos(a) * d);
-    const y = Math.round(cy + Math.sin(a) * d * 0.6);
-    put(x, y, '#8a2020');
-    put(x + 1, y, i % 3 === 0 ? '#5a3a18' : '#6a1818');
-    if (i % 2 === 0) put(x, y - 1, step < 3 ? '#ff6020' : '#c07040');
+    const y = Math.round(cy + Math.sin(a) * d);
+    put(x, y, P.dragD);
+    put(x + 1, y, i % 3 === 0 ? P.wBone : P.heavy);
+    if (i % 4 === 0) put(x, y + 1, P.spark);
   }
-  // Central flame dying
-  if (step < 2) disc(put, cx, cy, 4, '#ff8020');
-  if (step < 1) disc(put, cx, cy, 6, '#ffaa40');
+  if (step < 2) disc(put, cx, cy, 6, P.sparkL);
 }
 
-export function drawCastleDragon(frame: BossFrame) {
+/** Dragon frame set — shared BossFrame plus extra idle frames and the two
+ *  extra attack frames that split the fireball into windup → emit. */
+export type CastleDragonFrame = BossFrame | 'idle2' | 'idle3' | 'atk2' | 'atk3';
+
+export const castleDragonFrames: CastleDragonFrame[] = [
+  'idle0','idle1','idle2','idle3',
+  'move0','move1','move2','move3',
+  'atk0','atk1','atk2','atk3',
+  'chargeWind','hit',
+  'birth0','birth1','birth2','birth3','birth4',
+  'die0','die1','die2','die3','die4'
+];
+
+export function drawCastleDragon(frame: CastleDragonFrame) {
   return (put: Put) => {
     switch (frame) {
-      case 'idle0':      return drawCastleDragonBody(put, { bob: 0 });
-      case 'idle1':      return drawCastleDragonBody(put, { bob: 1 });
-      case 'move0':      return drawCastleDragonBody(put, { bob: 0, legStep: 1 });
-      case 'move1':      return drawCastleDragonBody(put, { bob: 1, legStep: 0 });
-      case 'move2':      return drawCastleDragonBody(put, { bob: 0, legStep: -1 });
-      case 'move3':      return drawCastleDragonBody(put, { bob: 1, legStep: 0 });
-      case 'atk0':       return drawCastleDragonBody(put, { rearUp: true, mouthOpen: true, bob: -2 });
-      case 'atk1':       return drawCastleDragonBody(put, { bob: 1, mouthOpen: true });
-      case 'chargeWind': return drawCastleDragonBody(put, { chargeGlow: true, wingsSpread: true, bob: 0 });
+      // breathing idle — tail sways, wing settles
+      case 'idle0':      return drawCastleDragonBody(put, { bob: 0, phase: 0 });
+      case 'idle1':      return drawCastleDragonBody(put, { bob: 1, phase: 1 });
+      case 'idle2':      return drawCastleDragonBody(put, { bob: 1, phase: 2 });
+      case 'idle3':      return drawCastleDragonBody(put, { bob: 0, phase: 3 });
+      // prowling walk
+      case 'move0':      return drawCastleDragonBody(put, { bob: 1, legStep: 2, phase: 0 });
+      case 'move1':      return drawCastleDragonBody(put, { bob: 0, legStep: 0, phase: 1 });
+      case 'move2':      return drawCastleDragonBody(put, { bob: 1, legStep: -2, phase: 2 });
+      case 'move3':      return drawCastleDragonBody(put, { bob: 0, legStep: 0, phase: 3 });
+      // fireball: windup (head rears, throat ignites, wings rise)...
+      case 'atk0':       return drawCastleDragonBody(put, { windup: 1, bob: 0, phase: 0 });
+      case 'atk2':       return drawCastleDragonBody(put, { windup: 2, bob: -1, phase: 1 });
+      // ...then the emit — maw wide open, fire jet roaring
+      case 'atk1':       return drawCastleDragonBody(put, { flame: true, bob: 1, phase: 1 });
+      case 'atk3':       return drawCastleDragonBody(put, { flame: true, bob: 1, phase: 3 });
+      // legacy shared frame — castle bosses never dash; just the full windup pose
+      case 'chargeWind': return drawCastleDragonBody(put, { windup: 2, bob: 0, phase: 2 });
       case 'hit':        return drawCastleDragonBody(put, { flash: true });
-      case 'birth0':     return drawCastleDragonBody(put, { pockets: 0, mouthOpen: true });
-      case 'birth1':     return drawCastleDragonBody(put, { pockets: 1, mouthOpen: true });
-      case 'birth2':     return drawCastleDragonBody(put, { pockets: 2, mouthOpen: true });
-      case 'birth3':     return drawCastleDragonBody(put, { pockets: 3, mouthOpen: true });
-      case 'birth4':     return drawCastleDragonBody(put, { pockets: 4, mouthOpen: true });
+      case 'birth0':     return drawCastleDragonBody(put, { pockets: 0, mouthOpen: true, phase: 0 });
+      case 'birth1':     return drawCastleDragonBody(put, { pockets: 1, mouthOpen: true, phase: 1 });
+      case 'birth2':     return drawCastleDragonBody(put, { pockets: 2, mouthOpen: true, phase: 2 });
+      case 'birth3':     return drawCastleDragonBody(put, { pockets: 3, mouthOpen: true, phase: 3 });
+      case 'birth4':     return drawCastleDragonBody(put, { pockets: 4, mouthOpen: true, phase: 0 });
       case 'die0':       return drawCastleDragonDie(put, 0);
       case 'die1':       return drawCastleDragonDie(put, 1);
       case 'die2':       return drawCastleDragonDie(put, 2);
