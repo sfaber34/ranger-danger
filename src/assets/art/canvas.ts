@@ -186,6 +186,22 @@ export const P = {
   hornM:   '#c0b8a0',
   hornL:   '#ece8d8',
 
+  // Ancient Ram demonic recolor — charcoal hide + ember accents
+  dram:    '#332e2b',   // dark charcoal-brown hide
+  dramD:   '#1c1816',
+  dramM:   '#272320',
+  dramL:   '#46403a',
+  dmane:   '#221e1b',   // near-black shaggy fleece
+  dmaneD:  '#141110',
+  dmaneL:  '#36302b',
+  dhorn:   '#3b3734',   // soot-grey horn
+  dhornD:  '#232020',
+  dhornM:  '#2e2a28',
+  dhornL:  '#544e48',
+  ember:   '#ff3a14',   // demonic glow
+  emberD:  '#8a1408',
+  emberL:  '#ff9a30',
+
   // Fog Phantom (river boss)
   fog:     '#324060',
   fogD:    '#1a2840',

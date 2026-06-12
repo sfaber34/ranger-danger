@@ -407,23 +407,29 @@ export function drawRamBody(rawPut: Put, opts: RamOpts) {
   const headDown = opts.headDown ?? 0;
   const ls = opts.legStep ?? 0;
 
+  // Demonic palette: charcoal hide, near-black fleece, soot horns, ember glow
   const col = {
     out: opts.flash ? P.white : P.outline,
-    d:   opts.flash ? P.white : P.ramD,
-    m:   opts.flash ? P.white : P.ramM,
-    b:   opts.flash ? P.white : P.ram,
-    l:   opts.flash ? P.white : P.ramL
+    d:   opts.flash ? P.white : P.dramD,
+    m:   opts.flash ? P.white : P.dramM,
+    b:   opts.flash ? P.white : P.dram,
+    l:   opts.flash ? P.white : P.dramL
   };
   const wc = {
-    d: opts.flash ? P.white : P.woolD,
-    b: opts.flash ? P.white : P.wool,
-    l: opts.flash ? P.white : P.woolL
+    d: opts.flash ? P.white : P.dmaneD,
+    b: opts.flash ? P.white : P.dmane,
+    l: opts.flash ? P.white : P.dmaneL
   };
   const hc = {
-    d: opts.flash ? P.white : P.hornD,
-    m: opts.flash ? P.white : P.hornM,
-    b: opts.flash ? P.white : P.horn,
-    l: opts.flash ? P.white : P.hornL
+    d: opts.flash ? P.white : P.dhornD,
+    m: opts.flash ? P.white : P.dhornM,
+    b: opts.flash ? P.white : P.dhorn,
+    l: opts.flash ? P.white : P.dhornL
+  };
+  const ec = {
+    d: opts.flash ? P.white : P.emberD,
+    b: opts.flash ? P.white : P.ember,
+    l: opts.flash ? P.white : P.emberL
   };
   const fc = (c: string) => opts.flash ? P.white : c;
 
@@ -458,8 +464,14 @@ export function drawRamBody(rawPut: Put, opts: RamOpts) {
     rect(put, x, topY, 4, 6, near ? col.b : col.d);                                  // thigh
     rect(put, lx, topY + 6, 3, Math.max(0, hoofY - topY - 6), near ? col.m : col.d); // shin
     if (near) rect(put, lx + 2, topY + 6, 1, Math.max(0, hoofY - topY - 6), col.l);
+    // molten crack running down the shin, brightening toward the hoof
+    for (let yy = topY + 7; yy < hoofY - 1; yy++)
+      put(lx + (yy % 2), yy, yy >= hoofY - 4 ? ec.b : ec.d);
+    // fetlock glow band above the dark hoof
+    rect(put, lx, hoofY - 1, 3, 1, ec.d);
+    put(lx + 1, hoofY - 1, ec.b);
     rect(put, lx, hoofY, 3, 2, col.out);                                             // hoof
-    put(lx + 1, hoofY, opts.flash ? P.white : P.stoneD);                             // split
+    put(lx + 1, hoofY, ec.b);                                                        // burning split
   };
 
   // far-side legs first — the body overlaps them
@@ -499,18 +511,29 @@ export function drawRamBody(rawPut: Put, opts: RamOpts) {
       if ((x * 3 + y * 7 + 64) % 17 === 0) put(26 + x, bodyCy + y, wc.l);
       else if ((x * 5 + y * 3 + 64) % 9 === 0) put(26 + x, bodyCy + y, wc.d);
     }
-  // bone spurs breaking through the fleece along the spine
+  // soot-black spurs breaking through the fleece, tips smouldering
   for (const [sx, sy] of [[17, -11], [24, -13], [31, -13], [38, -12]] as const) {
-    put(sx, bodyCy + sy, fc(P.wBoneD));
-    put(sx, bodyCy + sy - 1, fc(P.wBone));
-    put(sx, bodyCy + sy - 2, fc(P.wBoneL));
+    put(sx, bodyCy + sy, hc.d);
+    put(sx, bodyCy + sy - 1, hc.b);
+    put(sx, bodyCy + sy - 2, ec.d);
   }
-  // old gash raked across the flank — pale scar tissue over a dark wound
-  for (let i = 0; i < 5; i++) {
-    put(20 + i, bodyCy - 1 + i, wc.d);
-    put(21 + i, bodyCy - 1 + i, fc(P.wBone));
+  // demonic runes seared into the hide (per the reference art):
+  // spiral on the haunch...
+  for (let t = 0; t <= 1; t += 0.03) {
+    const a = t * 10.5;            // ~1.7 turns
+    const r = 0.5 + t * 4;
+    put(15 + Math.round(Math.cos(a) * r), bodyCy + 1 + Math.round(Math.sin(a) * r), t < 0.75 ? ec.b : ec.d);
   }
-  put(23, bodyCy + 1, fc(P.redD));
+  // ...circle-and-dot on the barrel with a tail streaking down...
+  ring(put, 27, bodyCy - 2, 3, ec.d);
+  put(27, bodyCy - 2, ec.b);
+  put(27, bodyCy + 2, ec.d);
+  put(26, bodyCy + 4, ec.d);
+  put(26, bodyCy + 5, ec.b);
+  // ...and a hooked flick on the shoulder hump
+  put(34, bodyCy - 7, ec.d);
+  put(35, bodyCy - 8, ec.b);
+  put(36, bodyCy - 7, ec.d);
   // shaded belly with long matted clumps dangling off it
   ellipse(put, 26, bodyCy + 7, 13, 3, wc.d);
   for (let x = 14; x <= 39; x += 3) {
@@ -544,14 +567,17 @@ export function drawRamBody(rawPut: Put, opts: RamOpts) {
     const r = 8 - 4.8 * t;
     disc(put, Math.round(42 + Math.cos(a) * r), Math.round(headY + Math.sin(a) * r), 1, t < 0.4 ? hc.m : hc.d);
   }
+  // faint sigils on the far curl
+  put(38, headY - 6, ec.d);
+  put(36, headY + 2, ec.d);
 
   // --- ear (torn and notched; swivels up on the idle flick) ---
   if (opts.earFlick) {
     rect(put, 43, headY - 7, 2, 3, col.d);
-    put(43, headY - 6, fc('#8a5a5a'));
+    put(43, headY - 6, fc('#4a2018'));
   } else {
     rect(put, 43, headY - 4, 3, 2, col.d);
-    put(44, headY - 4, fc('#8a5a5a'));
+    put(44, headY - 4, fc('#4a2018'));
     put(44, headY - 5, col.d);            // ragged tip
   }
 
@@ -564,10 +590,13 @@ export function drawRamBody(rawPut: Put, opts: RamOpts) {
   rect(put, 49, headY - 4, 5, 1, col.d);  // brow juts out, casting the eye in shadow
   put(53, headY - 3, col.d);
   put(48, headY - 3, col.m);
-  // scar raked down the face
-  put(53, headY - 2, fc(P.wBone));
-  put(54, headY - 1, fc(P.wBone));
-  put(55, headY, fc(P.wBone));
+  // demonic mark seared down the brow (reference: red streak above the eye)
+  put(50, headY - 5, ec.d);
+  put(51, headY - 6, ec.b);
+  put(52, headY - 5, ec.d);
+  put(53, headY - 2, ec.d);
+  put(54, headY - 1, ec.b);
+  put(55, headY, ec.d);
   // muzzle slopes down and forward, snout wrinkled mid-snarl
   rect(put, 53, headY + 1, 4, 4, col.b);
   rect(put, 55, headY + 3, 3, 4, col.m);
@@ -575,23 +604,23 @@ export function drawRamBody(rawPut: Put, opts: RamOpts) {
   put(55, headY + 4, col.d);              // snarl wrinkle
   put(56, headY + 3, col.d);
   put(58, headY + 6, col.out);            // flared nostril
-  put(57, headY + 5, fc(P.redD));         // nostril rim flushed red
+  put(57, headY + 5, ec.d);               // nostril rim glowing
   // snarling jaw — lips pulled back over bared teeth
   rect(put, 55, headY + 8, 4, 1, P.white);  // teeth
   rect(put, 55, headY + 9, 4, 1, col.out);  // open jaw shadow
   put(54, headY + 8, col.d);                // lip curl
   put(54, headY + 7, col.m);
-  // eye — burning red, sunk deep under the brow
-  put(51, headY - 1, fc('#ff2020'));
-  put(52, headY - 1, fc('#ff4040'));
-  put(51, headY, fc('#aa0000'));
+  // eye — burning ember with a white-hot core, sunk deep under the brow
+  put(51, headY - 1, ec.b);
+  put(52, headY - 1, ec.l);               // hot core
+  put(51, headY, ec.d);
   put(52, headY, col.out);                // pupil
-  put(50, headY - 1, fc('#7a1410'));      // ember bleed at the socket
-  put(53, headY - 1, fc('#7a1410'));
+  put(50, headY - 1, ec.d);               // ember bleed at the socket
+  put(53, headY - 1, ec.d);
   if (opts.chargeGlow) {                  // eye flares while winding up
-    put(50, headY, '#ff6020');
-    put(53, headY, '#ff6020');
-    rawPut(49, headY - 1, P.spark);       // heat shimmer off the socket
+    put(50, headY, P.ember);
+    put(53, headY, P.ember);
+    rawPut(49, headY - 1, P.emberL);      // heat shimmer off the socket
   }
 
   // --- the signature horn: massive, battle-worn curling spiral ---
@@ -611,6 +640,13 @@ export function drawRamBody(rawPut: Put, opts: RamOpts) {
     const [hx, hy] = hornPt(t, 1.6);
     put(hx, hy, hc.d);
   }
+  // ember sigils branded into each horn segment (reference: red marks
+  // running the length of the curl)
+  let sig = 0;
+  for (let t = 0.06; t < 0.88; t += 0.09, sig++) {
+    const [hx, hy] = hornPt(t, 0.4);
+    put(hx, hy, sig % 2 === 0 ? ec.b : ec.d);
+  }
   // deep cracks gouged across the curl
   for (const t of [0.18, 0.42, 0.63]) {
     const [hx, hy] = hornPt(t);
@@ -618,12 +654,12 @@ export function drawRamBody(rawPut: Put, opts: RamOpts) {
     const [ox, oy] = hornPt(t, 1.4);
     put(ox, oy, col.out);
   }
-  // jagged snapped-off tip with the exposed core
+  // jagged snapped-off tip with a molten core
   {
     const [bx, by] = hornPt(0.93);
     put(bx, by, hc.d);
     put(bx + 1, by - 1, col.out);
-    put(bx, by - 1, fc(P.wBone));   // raw marrow
+    put(bx, by - 1, ec.b);          // molten marrow
     put(bx + 1, by, hc.m);
   }
   // dull edge light — worn, not polished
@@ -634,9 +670,9 @@ export function drawRamBody(rawPut: Put, opts: RamOpts) {
   if (opts.chargeGlow) { // horn crackles with heat
     for (const t of [0, 0.3, 0.55, 0.8]) {
       const [hx, hy] = hornPt(t, 2);
-      rawPut(hx, hy, P.sparkL);
+      rawPut(hx, hy, P.emberL);
     }
-    rawPut(hornCx, hornCy - 13, P.spark);
+    rawPut(hornCx, hornCy - 13, P.ember);
   }
 
   // --- birth pockets along the back ---
@@ -652,17 +688,17 @@ export function drawRamBody(rawPut: Put, opts: RamOpts) {
       } else if (stage === 1) {
         disc(put, ox, oy, 3, wc.d);
         disc(put, ox, oy, 2, col.out);
-        put(ox, oy, P.redD);
+        put(ox, oy, P.emberD);
       } else if (stage === 2) {
         disc(put, ox, oy, 3, wc.d);
-        disc(put, ox, oy, 2, P.red);
+        disc(put, ox, oy, 2, P.ember);
         put(ox - 1, oy, P.white);
         put(ox + 1, oy, P.white);
         put(ox, oy + 1, col.out);
       } else if (stage === 3) {
         disc(put, ox, oy - 1, 4, wc.d);
-        disc(put, ox, oy - 1, 3, P.red);
-        disc(put, ox, oy - 2, 2, P.redL);
+        disc(put, ox, oy - 1, 3, P.ember);
+        disc(put, ox, oy - 2, 2, P.emberL);
         put(ox - 1, oy - 1, P.white);
         put(ox + 1, oy - 1, P.white);
         put(ox, oy, col.out);
@@ -673,14 +709,14 @@ export function drawRamBody(rawPut: Put, opts: RamOpts) {
     }
   }
 
-  // --- snort puff (unrecorded — soft mist with an ember in it) ---
+  // --- snort puff (unrecorded — sooty smoke with embers in it) ---
   if (opts.breath) {
-    rawPut(60, headY + 5, P.stoneL);
-    rawPut(61, headY + 6, P.white);
-    rawPut(60, headY + 7, P.stoneL);
-    rawPut(62, headY + 4, P.stoneL);
-    rawPut(59, headY + 6, P.stoneL);
-    rawPut(62, headY + 6, P.spark);   // ember carried on the breath
+    rawPut(60, headY + 5, P.stoneM);
+    rawPut(61, headY + 6, P.emberL);
+    rawPut(60, headY + 7, P.stoneM);
+    rawPut(62, headY + 4, P.stoneM);
+    rawPut(59, headY + 6, P.stoneM);
+    rawPut(62, headY + 6, P.ember);   // ember carried on the breath
   }
 
   // Crisp 1px silhouette outline (matches the ranger + meadow enemies)
@@ -732,22 +768,22 @@ export function drawRamDie(put: Put, step: number) {
   const cx = 32, cy = 36;
   const r = Math.max(0, 24 - step * 5);
   if (r > 0) {
-    disc(put, cx, cy, r, P.woolD);
-    disc(put, cx, cy, Math.max(0, r - 1), P.wool);
-    disc(put, cx, cy, Math.max(0, r - 3), P.woolL);
+    disc(put, cx, cy, r, P.dmaneD);
+    disc(put, cx, cy, Math.max(0, r - 1), P.dmane);
+    disc(put, cx, cy, Math.max(0, r - 3), P.ember); // burning core
   }
-  // Horn + wool chunks flying out
+  // Horn shards + sooty fleece chunks flying out, trailing embers
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2 + step * 0.3;
     const d = step * 6 + 6;
     const x = Math.round(cx + Math.cos(a) * d);
     const y = Math.round(cy + Math.sin(a) * d);
-    put(x, y, P.woolD);
-    put(x + 1, y, i % 3 === 0 ? P.horn : P.ramD);
-    if (i % 4 === 0) put(x, y + 1, P.ramBelly);
+    put(x, y, P.dmaneD);
+    put(x + 1, y, i % 3 === 0 ? P.dhorn : P.dramD);
+    if (i % 4 === 0) put(x, y + 1, P.emberD);
   }
   // Central flash
-  if (step < 2) disc(put, cx, cy, 6, P.sparkL);
+  if (step < 2) disc(put, cx, cy, 6, P.emberL);
 }
 
 // ==================================================================
