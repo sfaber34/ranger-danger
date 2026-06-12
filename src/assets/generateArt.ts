@@ -24,7 +24,7 @@ import {
 } from './art/canvas';
 import { BearFrame, drawBearDir, extractBearFrames } from './art/bear';
 import {
-  BossFrame, RamFrame, ForestBossFrame, forestBossFrames, riverBossFrames,
+  BossFrame, RamFrame, ForestBossFrame, forestBossFrames, riverBossFrames, infectedBossFrames,
   drawFogPhantom, drawBoss, drawRam, drawInfectedBoss, drawForestBoss,
   drawPhantomQueen, drawCastleDragon, drawDesertBoss,
   drawQueenOrb, drawDragonFireball, drawDragonFireExplosion,
@@ -381,7 +381,8 @@ export function generateAllArt(scene: Phaser.Scene) {
   // Ram gets extra in-between frames on top of the shared boss set
   const ramFrames: RamFrame[] = [...bossFrames, 'idle2', 'idle3', 'move4', 'move5', 'atk2', 'atk3'];
   for (const f of ramFrames) add(scene, `ram_${f}`, makeCanvas(64, drawRam(f)));
-  for (const f of bossFrames) add(scene, `iboss_${f}`, makeCanvas(64, drawInfectedBoss(f)));
+  // Infected boss gets extra idle + windup frames on top of the shared set
+  for (const f of infectedBossFrames) add(scene, `iboss_${f}`, makeCanvas(64, drawInfectedBoss(f)));
 
   // Forest boss (Ent) textures
   for (const f of forestBossFrames) add(scene, `fboss_${f}`, makeCanvas(64, drawForestBoss(f)));
@@ -630,10 +631,17 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('ram-die',        ['ram_die0','ram_die1','ram_die2','ram_die3','ram_die4'], 6, 0);
 
   // Infected boss animations
-  mk('iboss-idle',       ['iboss_idle0','iboss_idle1'], 2, -1);
-  mk('iboss-move',       ['iboss_move0','iboss_move1','iboss_move2','iboss_move3'], 5, -1);
+  // 4-frame idle/move so the tentacles writhe + lesser eyes blink constantly
+  mk('iboss-idle',       ['iboss_idle0','iboss_idle1','iboss_idle2','iboss_idle3'], 6, -1);
+  mk('iboss-move',       ['iboss_move0','iboss_move1','iboss_move2','iboss_move3'], 8, -1);
   mk('iboss-atk',        ['iboss_atk0','iboss_atk1'], 4, 0);
-  mk('iboss-chargewind', ['iboss_chargeWind','iboss_idle0'], 6, -1);
+  // Dash windup: plays ONCE (repeat 0) — tentacles whip skyward a single
+  // time (cw0→cw1), then stay raised while the frenzy pulses (cw2-5).
+  mk('iboss-chargewind', [
+    'iboss_chargeWind0','iboss_chargeWind1',
+    'iboss_chargeWind2','iboss_chargeWind3','iboss_chargeWind4','iboss_chargeWind5',
+    'iboss_chargeWind2','iboss_chargeWind3','iboss_chargeWind4','iboss_chargeWind5',
+  ], 8, 0);
   mk('iboss-hit',        ['iboss_hit'], 10, 0);
   mk('iboss-birth',      ['iboss_birth0','iboss_birth1','iboss_birth2','iboss_birth3','iboss_birth4'], 4, 0);
   mk('iboss-die',        ['iboss_die0','iboss_die1','iboss_die2','iboss_die3','iboss_die4'], 6, 0);

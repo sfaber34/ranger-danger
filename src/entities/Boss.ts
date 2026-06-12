@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { Biome } from '../levels';
+import { CFG } from '../config';
 import { applyEntityVisual } from '../assets/spriteOverrides';
 import { Shadow } from './Shadow';
 import { measureOpaqueBounds } from './spriteBounds';
@@ -79,7 +80,17 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(9);
-    applyEntityVisual(this, folder, 'move', 0.5, 44, 44, 42, 52);
+    // Visual scale comes from the shared CFG.bossScale knob; the physics
+    // body is shrunk by the inverse ratio so the world-space hitbox stays
+    // ~22px and bosses keep fitting through 1-tile wall gaps.
+    const bodyComp = 0.5 / CFG.bossScale;
+    const bw = Math.round(44 * bodyComp);
+    applyEntityVisual(
+      this, folder, 'move', CFG.bossScale,
+      bw, bw,
+      Math.round((128 - bw) / 2),     // recentre horizontally
+      Math.round(96 - bw),            // keep the box anchored at the feet
+    );
     this.play(`${prefix}-idle`);
 
     // Measure where the visible boss ends so the HP bar sits just below the

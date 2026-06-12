@@ -979,144 +979,223 @@ export function drawRamDie(put: Put, step: number) {
 // ==================================================================
 //  INFECTED BOSS — The Blighted One (purple/orange/yellow)
 // ==================================================================
-export function drawInfectedBossBody(put: Put, opts: BossOpts) {
-  const cx = 32;
-  const baseCy = 34 + (opts.bob ?? 0) + (opts.rearUp ? -2 : 0);
+export interface InfectedOpts {
+  bob?: number;
+  flash?: boolean;
+  chargeGlow?: boolean;
+  pockets?: number;
+  phase?: number;       // 0-3 tentacle writhe phase
+  flare?: number;       // 0 (calm) … 2 (full dash-windup frenzy)
+  tentaclesUp?: boolean; // windup pose: tentacles whipped skyward
+}
 
-  const col = {
-    out: opts.flash ? P.white : P.outline,
-    d:   opts.flash ? P.white : P.infectD,
-    m:   opts.flash ? P.white : P.infectM,
-    b:   opts.flash ? P.white : P.infect,
-    l:   opts.flash ? P.white : P.infectL
+export function drawInfectedBossBody(rawPut: Put, opts: InfectedOpts) {
+  const cx = 32;
+  const bob = opts.bob ?? 0;
+  const ph = opts.phase ?? 0;
+  const flash = opts.flash ?? false;
+  const chargeGlow = opts.chargeGlow ?? false;
+  const up = opts.tentaclesUp ?? false;
+  const flare = opts.flare ?? (chargeGlow ? 0.6 : 0);
+
+  // putrid purple flesh
+  const fl  = flash ? P.white : P.infect;
+  const flD = flash ? P.white : P.infectD;
+  const flM = flash ? P.white : P.infectM;
+  const flL = flash ? P.white : P.infectL;
+  // burning orange (eyes, suckers, pustules)
+  const o   = flash ? P.white : P.infectH;
+  const oD  = flash ? P.white : P.infectHD;
+  const oM  = flash ? P.white : P.infectHM;
+  const oL  = flash ? P.white : P.infectHL;
+  const out = flash ? P.white : P.outline;
+
+  // Record flesh pixels for a crisp outline; glows stay unrecorded.
+  const px = new Set<number>();
+  const put: Put = (x, y, c) => {
+    if (c == null || x < 0 || y < 0 || x >= 64 || y >= 64) return;
+    px.add(y * 64 + x);
+    rawPut(x, y, c);
+  };
+  const pf: Put = (x, y, c) => {
+    if (c == null || x < 0 || y < 0 || x >= 64 || y >= 64) return;
+    rawPut(x, y, c);
   };
 
-  // drop shadow
-  for (let dy = -2; dy <= 2; dy++)
-    for (let dx = -26; dx <= 26; dx++)
-      if ((dx * dx) / 676 + (dy * dy) / 5 <= 1) put(cx + dx, 59 + dy, P.shadow);
+  // Slime pool shadow it drags itself across
+  for (let dx = -17; dx <= 17; dx++)
+    for (let dy = -1; dy <= 1; dy++)
+      if ((dx * dx) / 289 + (dy * dy) / 2 <= 1) rawPut(cx + dx, 57 + dy, flash ? P.white : P.infectD);
+  pf(cx - 14 + ph * 2, 56, flM);
+  pf(cx + 15 - ph * 3, 56, flM);
 
-  // stubby legs (4)
-  const legStep = opts.legStep ?? 0;
-  rect(put, cx - 22, baseCy + 12 + legStep, 4, 6, col.d);
-  rect(put, cx - 14, baseCy + 17 - legStep, 4, 5, col.d);
-  rect(put, cx + 10, baseCy + 17 - legStep, 4, 5, col.d);
-  rect(put, cx + 18, baseCy + 12 + legStep, 4, 6, col.d);
-  put(cx - 22, baseCy + 17 + legStep, P.outline);
-  put(cx - 14, baseCy + 21 - legStep, P.outline);
-  put(cx + 13, baseCy + 21 - legStep, P.outline);
-  put(cx + 21, baseCy + 17 + legStep, P.outline);
+  // ---- tentacle renderer ----
+  // Crawls segment by segment; writhes with the phase. `raise` whips the
+  // tentacle skyward (windup), otherwise it slithers down and outward.
+  const mantleBot = 36 + bob;
+  const tent = (bx: number, dir: number, len: number, k: number, raise: boolean, thick: number) => {
+    let x = cx + bx, y = mantleBot - 2;
+    for (let j = 0; j < len; j++) {
+      const t = j / len;
+      if (raise) {
+        y -= 1;
+        x = cx + bx + Math.round(dir * 4 * Math.sin(t * 2.0) + Math.sin(j * 0.8 + ph * 1.57 + k) * 1.5);
+      } else {
+        y += 1;
+        x = cx + bx + Math.round(dir * t * 6 + Math.sin(j * 0.6 + ph * 1.57 + k) * (2.2 - t * 1.5));
+      }
+      if (y < 2 || y > 57) break;
+      const w = t < 0.3 ? thick : t < 0.7 ? Math.max(1, thick - 1) : Math.max(0, thick - 2);
+      for (let dx = -w; dx <= w; dx++)
+        put(x + dx, y, Math.abs(dx) === w && w > 0 ? flD : t < 0.5 && dx === 0 ? flM : fl);
+      put(x - w, y - 1, j % 2 === 0 ? flL : fl); // slick top highlight
+      // orange suckers dotted along the flesh
+      if (j % 3 === 1 && w >= 1) put(x, y, j % 6 === 1 ? oL : o);
+      // curling tip
+      if (j === len - 1) {
+        put(x + (raise ? -1 : 1), y + (raise ? 1 : -1), flM);
+        put(x, y + (raise ? 1 : -1), flD);
+      }
+    }
+  };
 
-  // main bulbous body
-  disc(put, cx, baseCy, 24, col.out);
-  disc(put, cx, baseCy, 23, col.d);
-  disc(put, cx, baseCy, 22, col.b);
+  // back row of the tentacle skirt (behind the mantle)
+  tent(-11, -1, 19, 0, up, 2);
+  tent(-4, -0.4, 21, 1, false, 2);
+  tent(4, 0.4, 21, 2, false, 2);
+  tent(11, 1, 19, 3, up, 2);
 
-  // upper back (darker, textured)
-  for (let y = -22; y <= -3; y++)
-    for (let x = -22; x <= 22; x++)
-      if (x * x + y * y <= 484) put(cx + x, baseCy + y, col.d);
-  for (let y = -20; y <= -5; y++)
-    for (let x = -20; x <= 20; x++)
-      if (x * x + y * y <= 400) put(cx + x, baseCy + y, col.b);
-  // highlight arc upper-left
-  for (let y = -20; y <= -10; y++)
-    for (let x = -18; x <= -2; x++)
-      if (x * x + y * y <= 324) put(cx + x, baseCy + y, col.m);
-  for (let y = -18; y <= -14; y++)
-    for (let x = -10; x <= -4; x++)
-      if (x * x + y * y <= 256) put(cx + x, baseCy + y, col.l);
-
-  // orange/yellow infected underbelly
-  const bellyCol  = opts.flash ? P.white : '#d08020';
-  const bellyColM = opts.flash ? P.white : '#a06018';
-  const bellyColD = opts.flash ? P.white : '#6a3808';
-  for (let y = 4; y <= 22; y++)
-    for (let x = -20; x <= 20; x++)
-      if (x * x + y * y <= 476) put(cx + x, baseCy + y, bellyCol);
-  for (let y = 10; y <= 22; y++)
-    for (let x = -17; x <= 17; x++)
-      if (x * x + y * y <= 400) put(cx + x, baseCy + y, bellyColM);
-  // segmentation lines
-  for (let x = -17; x <= 17; x++) {
-    if (Math.abs(x) < 16) put(cx + x, baseCy + 8, bellyColD);
-    if (Math.abs(x) < 14) put(cx + x, baseCy + 14, bellyColD);
-    if (Math.abs(x) < 10) put(cx + x, baseCy + 19, bellyColD);
+  // ---- the mantle: bulbous dome of mottled flesh (fills the canvas) ----
+  const my = 24 + bob;
+  ellipse(put, cx, my, 15, 13, flD);
+  ellipse(put, cx, my, 14, 12, fl);
+  // mottled diseased texture
+  for (let y = -12; y <= 12; y++)
+    for (let x = -14; x <= 14; x++) {
+      if ((x * x) / 196 + (y * y) / 144 > 1) continue;
+      if ((x * 3 + y * 7 + 64) % 11 === 0) put(cx + x, my + y, flM);
+      else if ((x * 5 + y * 3 + 64) % 13 === 0) put(cx + x, my + y, flD);
+    }
+  // sickly sheen upper-left
+  ellipse(put, cx - 6, my - 6, 6, 4, flL);
+  // throbbing veins radiating from the eye
+  for (const [vx2, vy2, ex, ey] of [[-3, -2, -11, -8], [3, -3, 10, -9], [-4, 2, -12, 6], [4, 3, 11, 7]] as const) {
+    line(put, cx + vx2, my + vy2, cx + ex, my + ey, flD);
+  }
+  // orange pustule clusters — they brighten as it winds up
+  for (const [bx2, by2] of [[-10, -3], [9, -6], [-5, 9], [11, 4]] as const) {
+    put(cx + bx2, my + by2, flare >= 1 ? oL : o);
+    put(cx + bx2 + 1, my + by2, oD);
+    put(cx + bx2, my + by2 - 1, oM);
+    if (flare >= 1) pf(cx + bx2 - 1, my + by2 - 1, oL); // festering glow
   }
 
-  // glowing green pustule spines along top
-  const spinePositions: Array<[number, number]> = [
-    [-16, -16], [-10, -19], [-4, -21], [2, -21], [8, -20], [14, -17]
-  ];
-  for (const [sx, sy] of spinePositions) {
-    put(cx + sx, baseCy + sy + 1, '#40e060');
-    put(cx + sx, baseCy + sy, '#40e060');
-    put(cx + sx, baseCy + sy - 1, col.out);
+  // ---- the EYE: one huge burning orb with a slit pupil ----
+  const ey = my - 2;
+  disc(put, cx, ey, 6, oD);
+  disc(put, cx, ey, 5, o);
+  disc(put, cx, ey, 4, chargeGlow ? oL : oM);
+  rect(put, cx, ey - 3, 1, 7, out);            // vertical slit pupil
+  put(cx - 3, ey - 2, P.white);                // wet glint
+  put(cx - 2, ey - 3, P.white);
+  if (chargeGlow) {                            // blazing glare
+    pf(cx - 7, ey, P.infectHL);
+    pf(cx + 7, ey, P.infectHL);
+    pf(cx, ey - 7, P.infectHL);
+  }
+  // lesser eyes scattered across the dome, blinking out of sync
+  const lesser: ReadonlyArray<readonly [number, number]> = [[-10, -7], [11, -4], [-11, 3], [7, -10]];
+  for (let k = 0; k < lesser.length; k++) {
+    const [lx2, ly2] = lesser[k];
+    if ((k + ph) % 4 === 0) {                  // this one is mid-blink
+      put(cx + lx2, my + ly2, flD);
+      put(cx + lx2 + 1, my + ly2, flD);
+    } else {
+      put(cx + lx2, my + ly2, oL);
+      put(cx + lx2 + 1, my + ly2, o);
+      put(cx + lx2, my + ly2 + 1, oD);
+    }
   }
 
-  // eye cluster — glowing yellow eyes
-  const eyes: Array<[number, number]> = [
-    [-12, -4], [-6, -8], [0, -10], [6, -8], [12, -4]
-  ];
-  for (const [ex, ey] of eyes) {
-    const glow = opts.chargeGlow ? P.sparkL : '#e0ff40';
-    put(cx + ex - 1, baseCy + ey, P.outline);
-    put(cx + ex,     baseCy + ey, glow);
-    put(cx + ex + 1, baseCy + ey, opts.chargeGlow ? P.spark : '#ffff80');
-    put(cx + ex,     baseCy + ey + 1, P.infectD);
+  // ---- the maw: hooked beak parting a glowing gullet ----
+  const by = my + 10;
+  rect(put, cx - 3, by, 7, 2, out);
+  put(cx - 4, by, flD);                        // lip folds
+  put(cx + 4, by, flD);
+  pf(cx, by + 1, o);                           // orange light in the throat
+  pf(cx - 1, by, oD);
+  put(cx, by - 1, flash ? P.white : P.wBoneL); // hooked beak tip
+  put(cx - 1, by + 2, flash ? P.white : P.wBone);
+  put(cx + 1, by + 2, flash ? P.white : P.wBone);
+
+  // front row of the skirt + the two big arm-tentacles (over the mantle)
+  tent(-7, -0.6, 17, 4, false, 2);
+  tent(0, 0, 16, 5, false, 2);
+  tent(7, 0.6, 17, 6, false, 2);
+  tent(-15, -1, 20, 7, up, 3);
+  tent(15, 1, 20, 8, up, 3);
+
+  // slime dripping off the writhing mass
+  pf(cx - 7, 48 + ((ph * 2) % 6), flM);
+  pf(cx + 9, 45 + ((ph * 3 + 2) % 8), flM);
+  pf(cx - 11, 51 + (ph % 4), flD);
+
+  // windup frenzy: orange embers orbiting the whole horror
+  if (flare >= 1) {
+    for (let k = 0; k < 6; k++) {
+      const ang = (k / 6) * Math.PI * 2 + ph * 0.9;
+      pf(Math.round(cx + Math.cos(ang) * (15 + (k % 2) * 3)),
+         Math.round(28 + bob + Math.sin(ang) * 14), k % 2 === 0 ? oL : o);
+    }
+    pf(cx - 3 + ph, 10 + bob, oL); // heat shimmer above
   }
 
-  // mouth — green ooze drip
-  rect(put, cx - 5, baseCy + 1, 10, 1, P.outline);
-  put(cx - 6, baseCy + 1, '#40e060');
-  put(cx + 5, baseCy + 1, '#40e060');
-  put(cx - 3, baseCy + 2, '#40e060');
-  put(cx + 2, baseCy + 2, '#40e060');
-
-  // birth pockets
+  // ---- birth pockets — boils splitting open on the mantle ----
   if (opts.pockets !== undefined) {
     const stage = opts.pockets;
-    const pockets: Array<[number, number]> = [
-      [-10, -13], [-2, -15], [6, -14]
-    ];
-    for (const [px, py] of pockets) {
-      const ox = cx + px, oy = baseCy + py;
+    const pockets: Array<[number, number]> = [[-6, my - 6], [0, my - 9], [6, my - 6]];
+    for (const [dx2, oy] of pockets) {
+      const ox = cx + dx2;
       if (stage === 0) {
-        disc(put, ox, oy, 3, col.l);
-        disc(put, ox, oy, 2, col.b);
+        disc(put, ox, oy, 3, flL);
+        disc(put, ox, oy, 2, fl);
       } else if (stage === 1) {
-        disc(put, ox, oy, 3, col.d);
-        disc(put, ox, oy, 2, P.outline);
-        put(ox, oy, '#40e060');
+        disc(put, ox, oy, 3, flD);
+        disc(put, ox, oy, 2, out);
+        put(ox, oy, P.infectHD);
       } else if (stage === 2) {
-        disc(put, ox, oy, 3, col.d);
-        disc(put, ox, oy, 2, P.infect);
-        put(ox - 1, oy, '#e0ff40');
-        put(ox + 1, oy, '#e0ff40');
-        put(ox, oy + 1, P.outline);
+        disc(put, ox, oy, 3, flD);
+        disc(put, ox, oy, 2, P.infectH);
+        put(ox - 1, oy, P.white);
+        put(ox + 1, oy, P.white);
+        put(ox, oy + 1, out);
       } else if (stage === 3) {
-        disc(put, ox, oy - 1, 4, col.d);
-        disc(put, ox, oy - 1, 3, P.infect);
-        disc(put, ox, oy - 2, 2, P.infectL);
-        put(ox - 1, oy - 1, '#e0ff40');
-        put(ox + 1, oy - 1, '#e0ff40');
-        put(ox, oy, P.outline);
+        disc(put, ox, oy - 1, 4, flD);
+        disc(put, ox, oy - 1, 3, P.infectH);
+        disc(put, ox, oy - 2, 2, P.infectHL);
+        put(ox - 1, oy - 1, P.white);
+        put(ox + 1, oy - 1, P.white);
+        put(ox, oy, out);
       } else if (stage === 4) {
-        disc(put, ox, oy, 3, P.outline);
-        disc(put, ox, oy, 2, col.d);
+        disc(put, ox, oy, 3, out);
+        disc(put, ox, oy, 2, flD);
       }
     }
   }
+
+  // Crisp 1px outline around the flesh — glows stay soft
+  strokeOutline(px, rawPut, 64);
 }
 
 export function drawInfectedBossDie(put: Put, step: number) {
-  const cx = 32, cy = 36;
-  const r = Math.max(0, 24 - step * 5);
+  const cx = 32, cy = 30;
+  const r = Math.max(0, 20 - step * 4);
   if (r > 0) {
     disc(put, cx, cy, r, P.infectD);
     disc(put, cx, cy, Math.max(0, r - 1), P.infect);
     disc(put, cx, cy, Math.max(0, r - 3), P.infectL);
   }
+  // tentacle chunks + burst pustules flying out
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2 + step * 0.3;
     const d = step * 6 + 6;
@@ -1129,24 +1208,51 @@ export function drawInfectedBossDie(put: Put, step: number) {
   if (step < 2) disc(put, cx, cy, 6, P.sparkL);
 }
 
-export function drawInfectedBoss(frame: BossFrame) {
+/** Infected boss frame set — the shared BossFrame plus extra idle frames (the
+ *  tentacles never stop writhing) and a 6-frame play-once dash windup. */
+export type InfectedBossFrame = BossFrame | 'idle2' | 'idle3'
+  | 'chargeWind0' | 'chargeWind1' | 'chargeWind2' | 'chargeWind3' | 'chargeWind4' | 'chargeWind5';
+
+export const infectedBossFrames: InfectedBossFrame[] = [
+  'idle0','idle1','idle2','idle3',
+  'move0','move1','move2','move3',
+  'atk0','atk1',
+  'chargeWind','chargeWind0','chargeWind1','chargeWind2','chargeWind3','chargeWind4','chargeWind5',
+  'hit',
+  'birth0','birth1','birth2','birth3','birth4',
+  'die0','die1','die2','die3','die4'
+];
+
+export function drawInfectedBoss(frame: InfectedBossFrame) {
   return (put: Put) => {
     switch (frame) {
-      case 'idle0':      return drawInfectedBossBody(put, { bob: 0 });
-      case 'idle1':      return drawInfectedBossBody(put, { bob: 1 });
-      case 'move0':      return drawInfectedBossBody(put, { bob: 0, legStep: 1 });
-      case 'move1':      return drawInfectedBossBody(put, { bob: 1, legStep: 0 });
-      case 'move2':      return drawInfectedBossBody(put, { bob: 0, legStep: -1 });
-      case 'move3':      return drawInfectedBossBody(put, { bob: 1, legStep: 0 });
-      case 'atk0':       return drawInfectedBossBody(put, { rearUp: true, bob: -1 });
-      case 'atk1':       return drawInfectedBossBody(put, { bob: 2 });
-      case 'chargeWind': return drawInfectedBossBody(put, { chargeGlow: true, bob: 0 });
+      // 4 idle frames keep the tentacles writhing + lesser eyes blinking
+      case 'idle0':      return drawInfectedBossBody(put, { bob: 0, phase: 0 });
+      case 'idle1':      return drawInfectedBossBody(put, { bob: -1, phase: 1 });
+      case 'idle2':      return drawInfectedBossBody(put, { bob: -2, phase: 2 });
+      case 'idle3':      return drawInfectedBossBody(put, { bob: -1, phase: 3 });
+      case 'move0':      return drawInfectedBossBody(put, { bob: 0, phase: 0 });
+      case 'move1':      return drawInfectedBossBody(put, { bob: -1, phase: 1 });
+      case 'move2':      return drawInfectedBossBody(put, { bob: -2, phase: 2 });
+      case 'move3':      return drawInfectedBossBody(put, { bob: -1, phase: 3 });
+      case 'atk0':       return drawInfectedBossBody(put, { tentaclesUp: true, flare: 0.8, bob: -2, phase: 0 });
+      case 'atk1':       return drawInfectedBossBody(put, { flare: 1, bob: 2, phase: 2 });
+      // legacy single windup frame (kept for the shared BossFrame set)
+      case 'chargeWind': return drawInfectedBossBody(put, { chargeGlow: true, tentaclesUp: true, flare: 1, phase: 1, bob: -1 });
+      // dash windup: ONE tentacle raise (cw0→cw1), then they stay whipped
+      // skyward while the frenzy pulses (cw2-5 cycle the writhe phase)
+      case 'chargeWind0': return drawInfectedBossBody(put, { chargeGlow: true, flare: 0.6, phase: 0, bob: -1 });
+      case 'chargeWind1': return drawInfectedBossBody(put, { chargeGlow: true, tentaclesUp: true, flare: 1.2, phase: 1, bob: -2 });
+      case 'chargeWind2': return drawInfectedBossBody(put, { chargeGlow: true, tentaclesUp: true, flare: 2, phase: 0, bob: -2 });
+      case 'chargeWind3': return drawInfectedBossBody(put, { chargeGlow: true, tentaclesUp: true, flare: 2, phase: 1, bob: -2 });
+      case 'chargeWind4': return drawInfectedBossBody(put, { chargeGlow: true, tentaclesUp: true, flare: 2, phase: 2, bob: -2 });
+      case 'chargeWind5': return drawInfectedBossBody(put, { chargeGlow: true, tentaclesUp: true, flare: 2, phase: 3, bob: -2 });
       case 'hit':        return drawInfectedBossBody(put, { flash: true });
-      case 'birth0':     return drawInfectedBossBody(put, { pockets: 0 });
-      case 'birth1':     return drawInfectedBossBody(put, { pockets: 1 });
-      case 'birth2':     return drawInfectedBossBody(put, { pockets: 2 });
-      case 'birth3':     return drawInfectedBossBody(put, { pockets: 3 });
-      case 'birth4':     return drawInfectedBossBody(put, { pockets: 4 });
+      case 'birth0':     return drawInfectedBossBody(put, { pockets: 0, phase: 0 });
+      case 'birth1':     return drawInfectedBossBody(put, { pockets: 1, phase: 1 });
+      case 'birth2':     return drawInfectedBossBody(put, { pockets: 2, phase: 2 });
+      case 'birth3':     return drawInfectedBossBody(put, { pockets: 3, phase: 3 });
+      case 'birth4':     return drawInfectedBossBody(put, { pockets: 4, phase: 0 });
       case 'die0':       return drawInfectedBossDie(put, 0);
       case 'die1':       return drawInfectedBossDie(put, 1);
       case 'die2':       return drawInfectedBossDie(put, 2);

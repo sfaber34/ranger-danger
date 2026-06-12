@@ -7,6 +7,12 @@ export const CFG = {
   spawnDist: 18,     // tiles from player where enemies spawn
   chunkSize: 16,     // ground chunk size in tiles
 
+  // Uniform world-space scale for every boss sprite (enemies render at 0.5).
+  // One knob so "big = boss" reads consistently across all biomes — bosses
+  // differ by silhouette, not size. The physics body in Boss.ts is
+  // compensated so the hitbox still fits through 1-tile gaps.
+  bossScale: 0.7,
+
   player: {
     hp: 100,
     speed: 150,
