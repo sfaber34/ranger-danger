@@ -99,6 +99,8 @@ export function generateAllArt(scene: Phaser.Scene) {
   // Meadow enemies use the extended frame set (6-frame move, 4-frame atk)
   const e6Frames: EFrame6[] = ['move0','move1','move2','move3','move4','move5','atk0','atk1','atk2','atk3','hit','die0','die1','die2','die3'];
   for (const f of e6Frames) add(scene, `esnk_${f}`, makeCanvas(32, drawEnemySnake(f)));
+  // Tongue-flick variant of move0 — scheduled sparsely by the esnk-move loop
+  add(scene, 'esnk_move0t', makeCanvas(32, drawEnemySnake('move0', true)));
   for (const f of e6Frames) add(scene, `erat_${f}`, makeCanvas(32, drawEnemyRat(f)));
   for (const f of e6Frames) add(scene, `eder_${f}`, makeCanvas(32, drawEnemyDeer(f)));
   for (const f of eFrames) add(scene, `eib_${f}`, makeCanvas(32, drawEnemyInfectedBasic(f)));
@@ -450,7 +452,12 @@ export function registerAnimations(scene: Phaser.Scene) {
 
   // Meadow enemies: 6-frame move cycles + 4-frame attacks. Frame rates are
   // scaled up so cycle durations stay close to the old 4/2-frame timings.
-  mk('esnk-move', ['esnk_move0','esnk_move1','esnk_move2','esnk_move3','esnk_move4','esnk_move5'], 12, -1);
+  // Snake move loop spans 4 slither cycles with the tongue-flick variant
+  // frame appearing only once — one ~80ms flick every ~2s.
+  const snkTail = ['esnk_move1','esnk_move2','esnk_move3','esnk_move4','esnk_move5'];
+  const snkLoop = ['esnk_move0t', ...snkTail];
+  for (let i = 0; i < 3; i++) snkLoop.push('esnk_move0', ...snkTail);
+  mk('esnk-move', snkLoop, 12, -1);
   mk('esnk-atk',  ['esnk_atk0','esnk_atk1','esnk_atk2','esnk_atk3'], 10, -1);
   mk('esnk-hit',  ['esnk_hit'], 10, 0);
   mk('esnk-die',  ['esnk_die0','esnk_die1','esnk_die2','esnk_die3'], 10, 0);

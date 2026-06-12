@@ -169,7 +169,7 @@ export function drawEnemyHeavy(f: EFrame) {
 // ==================================================================
 //  SNAKE (32x32) — slithering viper, meadow basic enemy
 // ==================================================================
-export function drawEnemySnake(f: EFrame6) {
+export function drawEnemySnake(f: EFrame6, tongue = false) {
   return (rawPut: Put) => {
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
@@ -254,14 +254,13 @@ export function drawEnemySnake(f: EFrame6) {
       put(hx - 1, hy, P.white);                   // upper fang
       put(hx - 1, hy + 2, P.white);               // lower fang
       if (ai === 2) put(hx - 2, hy + 3, '#80e060'); // venom drip at full extension
-    } else if (phase % 3 !== 2) {
-      // forked tongue flicker
+    } else if (tongue) {
+      // forked tongue — only drawn on the dedicated esnk_move0t variant
+      // frame, which the move loop schedules once every 4 slither cycles
       put(hx - 1, hy, '#dd3333');
       put(hx - 2, hy, '#dd3333');
-      if (phase % 3 === 0) {
-        put(hx - 3, hy - 1, '#dd3333');
-        put(hx - 3, hy + 1, '#dd3333');
-      }
+      put(hx - 3, hy - 1, '#dd3333');
+      put(hx - 3, hy + 1, '#dd3333');
     }
 
     strokeOutline(px, mput);
