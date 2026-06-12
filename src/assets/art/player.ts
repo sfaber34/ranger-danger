@@ -16,6 +16,20 @@ export type PFrame =
   'move0' | 'move1' | 'move2' | 'move3' | 'move4' | 'move5' |
   'shoot0' | 'shoot1' | 'hit';
 
+// Body-bob tables (positive = torso/head sink 1 logical px, feet planted).
+// Shared by drawPlayer and playerFrameBob so the bow can ride the bob.
+const IDLE_BOB = [0, 1, 1, 0] as const;
+const MOVE_BOB = [1, 0, 0, 1, 0, 0] as const;
+
+/** Vertical body bob baked into a player texture frame, in world px (1 logical
+ *  px = 2 physical px × 0.5 sprite scale = 1 world px). GameScene adds this to
+ *  the bow/nock offsets so the arms ride the torso instead of floating. */
+export function playerFrameBob(textureKey: string): number {
+  const m = textureKey.match(/^p_(idle|move)_(?:up_|down_)?(\d)$/);
+  if (!m) return 0;
+  return (m[1] === 'idle' ? IDLE_BOB[+m[2]] : MOVE_BOB[+m[2]]) ?? 0;
+}
+
 export function drawPlayer(frame: PFrame, pose: PPose = 'level') {
   return (rawPut: Put) => {
     const cx = 16;
@@ -37,8 +51,8 @@ export function drawPlayer(frame: PFrame, pose: PPose = 'level') {
     const idleIdx = frame.startsWith('idle') ? +frame[4] : frame.startsWith('shoot') ? 0 : -1;
     const moveIdx = frame.startsWith('move') ? +frame[4] : -1;
     // positive bob = torso/head sink 1px (feet stay planted)
-    const bob = idleIdx >= 0 ? [0, 1, 1, 0][idleIdx]
-              : moveIdx >= 0 ? [1, 0, 0, 1, 0, 0][moveIdx] : 0;
+    const bob = idleIdx >= 0 ? IDLE_BOB[idleIdx]
+              : moveIdx >= 0 ? MOVE_BOB[moveIdx] : 0;
     const blink = idleIdx === 2;
     // run cycle: legs scissor along x; the swinging (airborne) leg lifts
     const strideL = moveIdx >= 0 ? [2, 1, -1, -2, -1, 1][moveIdx] : 0;
@@ -122,9 +136,9 @@ export function drawPlayer(frame: PFrame, pose: PPose = 'level') {
     const eyeC = blink ? P.skinD : P.outline;
     put(headCx, headCy + eyeDy, eyeC);
     put(headCx + 2, headCy + eyeDy, eyeC);
-    put(headCx + 1, headCy + 2 + eyeDy, P.skinD); // mouth
-    put(headCx - 1, headCy + 3, P.skinD);         // chin shadow
-    put(headCx + 1, headCy + 3, P.skinD);
+    // mouth — defined 2px line (no chin stubble)
+    put(headCx, headCy + 2 + eyeDy, P.woodD);
+    put(headCx + 1, headCy + 2 + eyeDy, P.woodD);
 
     // ----- crisp 1px outline around the silhouette -----
     const NB: ReadonlyArray<readonly [number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]];

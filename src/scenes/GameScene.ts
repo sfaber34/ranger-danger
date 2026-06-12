@@ -30,6 +30,7 @@ import { RunStats } from '../state/RunStats';
 import { PlayerUpgradeState } from '../state/PlayerUpgradeState';
 import { SFX } from '../audio/sfx';
 import { generateAllArt, registerAnimations } from '../assets/generateArt';
+import { playerFrameBob } from '../assets/art/player';
 import { Difficulty, Biome, LEVELS } from '../levels';
 import { computeViewport, viewportWorldSize } from '../viewport';
 
@@ -1083,6 +1084,11 @@ export class GameScene extends Phaser.Scene {
     const bow = this.player.bow;
     const nock = this.player.nockedArrow;
 
+    // The body textures bake in a ±1px breathing/run bob — read it off the
+    // current frame so the bow/arms ride the torso instead of floating at a
+    // fixed height while the body moves under them.
+    const bowBob = playerFrameBob(this.player.anims.currentFrame?.textureKey ?? '');
+
     // Find most threatening enemy — prioritizes shortest path distance, not euclidean
     const target = this.combat.findMostThreateningEnemy(this.player.x, this.player.y, CFG.player.range * this.playerUpgrades.multiplier('atkRange'));
 
@@ -1110,7 +1116,7 @@ export class GameScene extends Phaser.Scene {
       // Anchor at shoulder height when aiming up, hip height when aiming down
       const bowAnchorY = aimPose === 'up' ? 0 : aimPose === 'down' ? 4 : 2;
       this._bowOffsetX = Math.cos(aimAngle) * offset;
-      this._bowOffsetY = bowAnchorY + Math.sin(aimAngle) * offset;
+      this._bowOffsetY = bowAnchorY + bowBob + Math.sin(aimAngle) * offset;
       bow.setPosition(this.player.x + this._bowOffsetX, this.player.y + this._bowOffsetY);
 
       // Body faces the target; if horizontal movement opposes the facing,
@@ -1156,7 +1162,7 @@ export class GameScene extends Phaser.Scene {
       bow.setRotation(this.player.facingRight ? 0 : Math.PI);
       bow.setFlipY(!this.player.facingRight);
       this._bowOffsetX = idleDir * 10;
-      this._bowOffsetY = 2;
+      this._bowOffsetY = 2 + bowBob;
       bow.setPosition(this.player.x + this._bowOffsetX, this.player.y + this._bowOffsetY);
       this.player.bowBehind = false;
     }

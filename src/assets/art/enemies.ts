@@ -269,7 +269,7 @@ export function drawEnemySnake(f: EFrame6) {
 }
 
 // ==================================================================
-//  RAT SWARM (32x32) — cluster of 3 rats, meadow runner pack
+//  RAT (32x32) — single oversized meadow rat, low-slung scurrying runner
 // ==================================================================
 export function drawEnemyRat(f: EFrame6) {
   return (rawPut: Put) => {
@@ -297,12 +297,12 @@ export function drawEnemyRat(f: EFrame6) {
     };
 
     const flash = f === 'hit';
-    const bodyA = flash ? P.white : P.rat;
-    const bodyB = flash ? P.white : P.ratD;
-    const bodyC = flash ? P.white : P.ratL;
+    const body = flash ? P.white : P.rat;
+    const bodyD = flash ? P.white : P.ratD;
+    const bodyL = flash ? P.white : P.ratL;
     const tail = flash ? P.white : P.ratTail;
-    const bellyC = flash ? P.white : '#a89888';
-    const earC = flash ? P.white : '#e8a0a0';
+    const belly = flash ? P.white : '#a89888';
+    const pink = flash ? P.white : '#e8a0a0';
     const whisker = flash ? P.white : '#c8c8c8';
 
     // 6-phase scurry; attacks map onto a biting lunge
@@ -310,56 +310,70 @@ export function drawEnemyRat(f: EFrame6) {
     const ai = f.startsWith('atk') ? +f[3] : -1;
     const ph = mi >= 0 ? mi : ai >= 0 ? [0, 2, 4, 2][ai] : 0;
     const lunge = ai >= 0 ? [0, 1, 2, 1][ai] : 0;
+    const bob = mi >= 0 ? Math.round(Math.sin(ph * (Math.PI / 3)) * 1.2) : 0;
+    const cy = 20 + bob;          // body centreline
+    const hx = -lunge;            // head thrusts toward prey
+    const hdy = ai >= 0 ? 1 : 0;  // head dips when biting
 
-    // Three rats, staggered so the pack boils rather than hops in sync
-    const rats = [
-      { x: 10, y: 19, k: 0, c: bodyA },
-      { x: 17, y: 16, k: 2, c: bodyB },
-      { x: 14, y: 22, k: 4, c: bodyC },
-    ];
+    // ground shadow (unrecorded — stays outside the outline)
+    for (let dy = 0; dy <= 1; dy++)
+      for (let dx = -7; dx <= 7; dx++)
+        if ((dx * dx) / 49 + (dy * dy) / 1.2 <= 1) mput(16 + dx, 27 + dy, P.shadow);
 
-    for (const r of rats) {
-      const bob = Math.round(Math.sin((ph + r.k) * (Math.PI / 3)) * 1.2);
-      const x = r.x - lunge, y = r.y + bob;
+    // --- tail: long thin whip, nearly as long as the body ---
+    for (let s = 0; s < 7; s++) {
+      const ty = cy + 3 - Math.round(Math.sin(ph * (Math.PI / 3) + s * 0.8) * 1.2) - (s >= 5 ? 1 : 0);
+      put(22 + s, ty, s < 5 ? tail : bodyD);
+    }
 
-      // soft ground shading under each rat (unrecorded — no outline)
-      rect(mput, x, y + 5, 7, 1, P.shadow);
+    // --- legs: thin scurrying legs with a visible gap under the belly ---
+    const legs: ReadonlyArray<readonly [number, number]> = [[10, 0], [13, 3], [17, 1], [20, 4]];
+    for (const [lx, k] of legs) {
+      const ang = (ph + k) * (Math.PI / 3);
+      const dx = mi >= 0 ? Math.round(Math.sin(ang) * 1.5) : 0;
+      const lift = mi >= 0 ? Math.max(0, Math.round(Math.cos(ang))) : 0;
+      rect(put, lx + dx, cy + 3, 1, 4 - bob - lift, bodyD); // bottom row lands on the 26px ground line
+      put(lx + dx - 1, 26 - lift, bodyD); // toes splayed forward
+    }
 
-      // tail — whips in an S behind the body
-      for (let s = 0; s < 4; s++) {
-        const ty = y + 1 - Math.round(Math.sin((ph + r.k) * (Math.PI / 3) + s * 0.9) * 1.2);
-        put(x + 7 + s, ty, tail);
+    // --- body: classic rat silhouette — arched hump over the haunch,
+    //     dipping to a narrower shoulder, low to the ground ---
+    disc(put, 18, cy, 4, body);          // haunch/rump (apex of the arch)
+    disc(put, 12, cy + 1, 3, body);      // shoulder (lower — makes the neck dip)
+    rect(put, 11, cy - 1, 8, 4, body);   // fill between
+    // dark fur saddle along the back — reads as the hump
+    rect(put, 15, cy - 4, 5, 1, bodyD);
+    put(14, cy - 3, bodyD);
+    put(20, cy - 3, bodyD);
+    put(13, cy - 2, bodyD);
+    put(21, cy - 2, bodyD);
+    // flank highlight + pale underside (three-tone, not a blob)
+    disc(put, 18, cy + 1, 2, bodyL);
+    rect(put, 11, cy + 3, 8, 1, belly);
+
+    // --- head: small skull tapering to a pointed snout ---
+    rect(put, 7 + hx, cy + hdy, 4, 4, body);
+    rect(put, 5 + hx, cy + 2 + hdy, 2, 2, body);    // snout taper
+    put(4 + hx, cy + 3 + hdy, pink);                // nose tip
+    put(6 + hx, cy + 3 + hdy, bodyD);               // jaw shading
+    // ears — oversized, the key rat read
+    rect(put, 10 + hx, cy - 3 + hdy, 2, 3, bodyD);  // far ear
+    put(10 + hx, cy - 2 + hdy, flash ? P.white : '#c08080');
+    rect(put, 8 + hx, cy - 3 + hdy, 2, 3, body);    // near ear
+    put(8 + hx, cy - 2 + hdy, pink);
+    // eye — beady red
+    put(7 + hx, cy + 1 + hdy, flash ? P.white : '#ff2222');
+    // whiskers
+    put(3 + hx, cy + 2 + hdy, whisker);
+    put(3 + hx, cy + 4 + hdy, whisker);
+
+    // --- attack: bared incisors + motion streaks at full lunge ---
+    if (ai >= 0) {
+      put(5 + hx, cy + 4 + hdy, P.white);
+      if (ai === 2) {
+        put(2, cy + 2, bodyD);
+        put(1, cy + 3, bodyD);
       }
-
-      // body — rounded back, haunch highlight, lighter belly
-      rect(put, x, y, 7, 4, r.c);
-      rect(put, x + 1, y - 1, 5, 1, r.c);
-      rect(put, x + 4, y - 1, 2, 1, flash ? P.white : '#9a8a7a'); // haunch
-      rect(put, x + 1, y + 3, 5, 1, bellyC);
-
-      // legs — front/back pairs alternate with the scurry
-      const lo = (ph + r.k) % 2;
-      put(x + 1, y + 4, bodyB);
-      put(x + 2, y + 4 - lo, bodyB);
-      put(x + 5, y + 4 - (1 - lo), bodyB);
-      put(x + 6, y + 4, bodyB);
-
-      // head — wedge with snout
-      rect(put, x - 2, y, 3, 3, r.c);
-      put(x - 3, y + 1, r.c); // snout
-      // ears (outer + pink inner)
-      put(x - 1, y - 1, r.c);
-      put(x, y - 1, r.c);
-      put(x - 1, y - 2, earC);
-      // eye — red glint
-      put(x - 2, y + 1, flash ? P.white : '#ff2222');
-      // nose
-      put(x - 4, y + 1, earC);
-      // whiskers
-      put(x - 4, y, whisker);
-      put(x - 4, y + 2, whisker);
-      // bared teeth mid-lunge
-      if (ai === 1 || ai === 2) put(x - 3, y + 2, P.white);
     }
 
     strokeOutline(px, mput);
