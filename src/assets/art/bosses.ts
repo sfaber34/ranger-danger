@@ -1673,227 +1673,354 @@ export interface PhantomQueenOpts {
   flash?: boolean;
   chargeGlow?: boolean;
   pockets?: number;
-  rearUp?: boolean;
-  orbPhase?: number;
-  mouthOpen?: boolean;
+  phase?: number;             // 0-3 hair/gown flow phase
+  cast?: 'raise' | 'release'; // orb-cast gesture (atk0 / atk1)
 }
 
-export function drawPhantomQueenBody(put: Put, opts: PhantomQueenOpts) {
+export function drawPhantomQueenBody(rawPut: Put, opts: PhantomQueenOpts) {
   const cx = 32;
   const bob = opts.bob ?? 0;
-  const baseCy = 30 + bob;
-  const phase = opts.orbPhase ?? 0;
+  const ph = opts.phase ?? 0;
+  const flash = opts.flash ?? false;
+  const chargeGlow = opts.chargeGlow ?? false;
+  const cast = opts.cast;
 
-  const col = {
-    out:  opts.flash ? P.white : P.outline,
-    d:    opts.flash ? P.white : '#3a5a7a',
-    m:    opts.flash ? P.white : '#4a6a8a',
-    b:    opts.flash ? P.white : '#6a8aaa',
-    l:    opts.flash ? P.white : '#8abadd',
-    glow: opts.flash ? P.white : '#aad0ff',
-    hair: opts.flash ? P.white : '#5a7a9a',
-    hairL:opts.flash ? P.white : '#8aaac8',
-    crown:opts.flash ? P.white : '#8abadd',
-    crownL:opts.flash? P.white : '#aad0ff',
-    jewel:opts.flash ? P.white : '#4060ff',
-    eye:  opts.flash ? P.white : '#ffffff',
-    wisp: opts.flash ? P.white : '#6a8aaa',
+  // ghost-blue ramp
+  const qD = flash ? P.white : P.queenD;
+  const q  = flash ? P.white : P.queen;
+  const qM = flash ? P.white : P.queenM;
+  const qL = flash ? P.white : P.queenL;
+  const skin = flash ? P.white : P.queenP;   // pale spectral skin
+  const skinL = flash ? P.white : '#d8ecff'; // cheek/shoulder highlight
+  const lipD = flash ? P.white : '#34308e';  // full dark-blue lips
+  const lipL = flash ? P.white : '#8a86d8';
+  // regalia
+  const sv  = flash ? P.white : P.silver;
+  const svD = flash ? P.white : P.silverD;
+  const svL = flash ? P.white : P.silverL;
+  const gem = flash ? P.white : P.fogGlow;
+  const out = flash ? P.white : P.outline;
+
+  // Record the body for a crisp outline; spectral glows stay unrecorded.
+  const px = new Set<number>();
+  const put: Put = (x, y, c) => {
+    if (c == null || x < 0 || y < 0 || x >= 64 || y >= 64) return;
+    px.add(y * 64 + x);
+    rawPut(x, y, c);
+  };
+  const pf: Put = (x, y, c) => {
+    if (c == null || x < 0 || y < 0 || x >= 64 || y >= 64) return;
+    rawPut(x, y, c);
   };
 
-  // Ground shadow
-  for (let dy = -2; dy <= 2; dy++)
-    for (let dx = -12; dx <= 12; dx++)
-      if ((dx * dx) / 144 + (dy * dy) / 5 <= 1) put(cx + dx, 60 + dy, P.shadow);
+  // Flowing strand renderer — hair and gown share it. Each strand drifts
+  // along (dxStep, dyStep) while a phase-driven wave ripples down it.
+  const strand = (x0: number, y0: number, dxStep: number, dyStep: number,
+                  len: number, k: number, cMain: string, cHi: string) => {
+    for (let j = 0; j < len; j++) {
+      const t = j / len;
+      const x = x0 + Math.round(dxStep * j + Math.sin(j * 0.5 + ph * (Math.PI / 2) + k) * (1 + t * 2.2));
+      const y = y0 + Math.round(dyStep * j);
+      if (t > 0.78 && (x + y + ph) % 3 === 0) continue; // wispy ragged tips
+      put(x, y, cMain);
+      put(x, y - 1, cHi);
+      if (t < 0.6) put(x, y + 1, qD);
+    }
+  };
 
-  // Flowing dress — tapers to wisps at bottom
-  // Upper dress (torso region)
-  for (let y = baseCy + 2; y < baseCy + 24; y++) {
-    const t = (y - (baseCy + 2)) / 22;
-    const hw = Math.round(6 + t * 10);
-    for (let dx = -hw; dx <= hw; dx++) {
-      const edge = Math.abs(dx) / hw;
-      // Wispy bottom: skip some pixels for taper effect
-      if (t > 0.7 && ((dx + y) % 3 === 0 || Math.abs(dx) > hw - 2)) continue;
-      if (t > 0.85 && (dx + y) % 2 === 0) continue;
-      let c: string;
-      if (edge < 0.3) c = col.l;
-      else if (edge < 0.6) c = col.b;
-      else if (edge < 0.85) c = col.m;
-      else c = col.d;
-      put(cx + dx, y, c);
+  // ---- WILD HAIR: a mane streaming back-left, rippling with the phase ----
+  // (drawn first so the face/crown sit on top of it)
+  strand(cx + 2, 10 + bob, -1.3, 0.9, 15, 0, q, qL);
+  strand(cx + 1, 13 + bob, -1.5, 0.7, 16, 1.4, qM, q);
+  strand(cx, 16 + bob, -1.4, 0.9, 14, 2.8, q, qL);
+  strand(cx - 1, 20 + bob, -1.2, 1.0, 12, 4.2, qM, q);
+  strand(cx + 3, 8 + bob, -1.0, 1.2, 12, 5.6, qD, qM);
+  // loose wisps curling off the mane (unrecorded — half-faded)
+  pf(cx - 17, 18 + bob + (ph % 2), qM);
+  pf(cx - 19, 23 + bob - (ph % 2), qD);
+  pf(cx - 16, 29 + bob + (ph % 2), qD);
+
+  // ---- GOWN: the lower body dissolves into flowing mist tendrils ----
+  const waistY = 35 + bob;
+  // gown core fanning out from the waist
+  for (let y = waistY; y <= 52 + bob; y++) {
+    const t = (y - waistY) / 17;
+    const halfW = Math.round(4 + t * 7);
+    const sway = Math.round(Math.sin(t * 4 + ph * (Math.PI / 2)) * 2 - t * 3); // drifts left
+    for (let dx = -halfW; dx <= halfW; dx++) {
+      const edge = Math.abs(dx) / halfW;
+      if (edge > 0.7 && (dx + y + ph) % 3 === 0) continue;
+      const band = (((dx * 3 + y * 2) % 7) + 7) % 7;
+      put(cx + 1 + sway + dx, y, edge > 0.85 ? qD : band < 2 ? qL : band < 4 ? q : qM);
     }
   }
-  // Wispy tendrils at dress bottom
-  for (let t = 0; t < 5; t++) {
-    const tx = cx - 8 + t * 4 + Math.round(Math.sin(phase * 0.5 + t) * 2);
-    for (let dy = 0; dy < 6 + (phase + t) % 3; dy++) {
-      if ((dy + t) % 2 === 0) put(tx, baseCy + 24 + dy, col.d);
-    }
+  // long trailing tendrils whipping off the hem
+  strand(cx - 4, 48 + bob, -1.1, 0.55, 14, 1, q, qL);
+  strand(cx + 2, 50 + bob, -0.7, 0.45, 13, 3, qM, q);
+  strand(cx + 6, 47 + bob, 0.5, 0.6, 10, 5, qM, q);
+  // stray mist wisps drifting off the train
+  pf(cx - 15, 53 + bob - (ph % 3), qD);
+  pf(cx - 10, 56 + bob - (ph % 2), qM);
+  pf(cx + 11, 54 + bob + (ph % 2), qD);
+
+  // ---- BODICE: fitted, silver-trimmed ----
+  const ty = 22 + bob;
+  // torso core
+  rect(put, cx - 1, ty, 7, 6, q);
+  rect(put, cx - 2, ty + 6, 9, 4, q);
+  rect(put, cx - 2, ty + 10, 8, 3, qM);     // hip wrap into the gown
+  // bust arcs with highlight
+  disc(put, cx + 1, ty + 3, 2, qL);
+  disc(put, cx + 4, ty + 3, 2, qL);
+  put(cx + 1, ty + 2, skin);
+  put(cx + 4, ty + 2, skin);
+  // silver bodice trim — centre seam + under-bust curve + hip V
+  for (let y = ty + 1; y <= ty + 11; y++) put(cx + 2, y, y % 3 === 0 ? sv : svD);
+  put(cx, ty + 5, svD); put(cx + 1, ty + 5, sv);
+  put(cx + 3, ty + 5, sv); put(cx + 4, ty + 5, svD);
+  put(cx, ty + 10, svD); put(cx + 4, ty + 10, svD);
+  put(cx + 1, ty + 11, sv); put(cx + 3, ty + 11, sv);
+  // chest gem + belt gem, glowing
+  put(cx + 2, ty + 4, gem);
+  pf(cx + 2, ty + 3, flash ? P.white : '#b8e4ff');
+  put(cx + 2, ty + 12, gem);
+  put(cx + 1, ty + 12, svD); put(cx + 3, ty + 12, svD);
+  if (chargeGlow || cast) {                 // regalia flares when casting
+    pf(cx + 5, ty + 4, gem);
+    pf(cx - 1, ty + 4, gem);
+    pf(cx + 2, ty + 14, gem);
   }
 
-  // Upper body / torso
-  ellipse(put, cx, baseCy, 8, 6, col.d);
-  ellipse(put, cx, baseCy, 7, 5, col.m);
-  ellipse(put, cx, baseCy - 1, 5, 4, col.b);
+  // ---- PAULDRON: angular silver plate on the leading shoulder ----
+  rect(put, cx + 6, ty - 1, 5, 2, sv);
+  rect(put, cx + 7, ty + 1, 4, 2, svD);
+  put(cx + 11, ty, svL);                    // upswept point
+  put(cx + 12, ty - 1, svL);
+  put(cx + 8, ty, gem);                     // shoulder gem
 
-  // Neck
-  rect(put, cx - 1, baseCy - 7, 3, 3, col.b);
-
-  // Head
-  disc(put, cx, baseCy - 12, 7, col.d);
-  disc(put, cx, baseCy - 12, 6, col.m);
-  disc(put, cx, baseCy - 12, 5, col.b);
-  disc(put, cx, baseCy - 13, 3, col.l);
-
-  // Flowing hair — long strands down the sides
-  for (let side = -1; side <= 1; side += 2) {
-    for (let y = baseCy - 16; y < baseCy + 8; y++) {
-      const sway = Math.round(Math.sin((y + phase) * 0.3) * 1.5);
-      const baseX = cx + side * 7 + sway;
-      put(baseX, y, col.hair);
-      put(baseX + side, y, col.hairL);
-      if (y < baseCy - 8) put(baseX - side, y, col.hair);
-    }
-  }
-
-  // Crown
-  const crownY = baseCy - 19;
-  for (let dx = -5; dx <= 5; dx++) put(cx + dx, crownY + 2, col.crown);
-  for (let dx = -4; dx <= 4; dx++) put(cx + dx, crownY + 1, col.crownL);
-  // Crown points
-  put(cx - 4, crownY, col.crown); put(cx - 3, crownY - 1, col.crownL);
-  put(cx, crownY, col.crown); put(cx, crownY - 1, col.crownL);
-  put(cx + 4, crownY, col.crown); put(cx + 3, crownY - 1, col.crownL);
-  // Jewels
-  put(cx - 2, crownY + 1, col.jewel);
-  put(cx + 2, crownY + 1, col.jewel);
-  put(cx, crownY + 2, col.jewel);
-
-  // Eyes — hollow glowing white
-  put(cx - 3, baseCy - 13, col.out);
-  put(cx - 2, baseCy - 13, col.eye);
-  put(cx - 1, baseCy - 13, col.out);
-  put(cx + 1, baseCy - 13, col.out);
-  put(cx + 2, baseCy - 13, col.eye);
-  put(cx + 3, baseCy - 13, col.out);
-  // Eye glow
-  put(cx - 2, baseCy - 14, col.glow);
-  put(cx + 2, baseCy - 14, col.glow);
-
-  // Mouth — wailing
-  const mw = opts.mouthOpen ? 4 : 2;
-  const mh = opts.mouthOpen ? 3 : 1;
-  for (let dx = -mw; dx <= mw; dx++)
-    for (let dy = 0; dy < mh; dy++)
-      put(cx + dx, baseCy - 9 + dy, col.out);
-  if (opts.mouthOpen) {
-    for (let dx = -mw + 1; dx <= mw - 1; dx++)
-      put(cx + dx, baseCy - 8, col.d);
-  }
-
-  // Arms (raised in attack, down normally)
-  if (opts.rearUp || opts.mouthOpen) {
-    // Arms raised
-    for (let dy = -6; dy <= 0; dy++) {
-      put(cx - 9 - dy, baseCy + dy, col.b);
-      put(cx + 9 + dy, baseCy + dy, col.b);
-    }
-  } else {
-    // Arms at sides
-    for (let dy = -2; dy <= 6; dy++) {
-      put(cx - 8, baseCy + dy, col.b);
-      put(cx + 8, baseCy + dy, col.b);
-    }
-  }
-
-  // Orbiting ghost orbs (3 orbs at different positions based on phase)
-  for (let i = 0; i < 3; i++) {
-    const angle = (i / 3) * Math.PI * 2 + phase * 0.8;
-    const orbR = opts.rearUp ? 8 : 16;
-    const orbX = Math.round(cx + Math.cos(angle) * orbR);
-    const orbY = Math.round(baseCy - 4 + Math.sin(angle) * orbR * 0.5);
-    disc(put, orbX, orbY, 2, col.glow);
-    put(orbX, orbY, col.eye);
-  }
-
-  // Charge glow — body pulses bright
-  if (opts.chargeGlow) {
-    disc(put, cx, baseCy, 16, col.glow);
-    disc(put, cx, baseCy, 12, col.l);
-    disc(put, cx, baseCy - 12, 8, col.glow);
-  }
-
-  // Birth animation — summoning spirits
-  if (opts.pockets != null) {
-    const p = opts.pockets;
-    for (let t = 0; t < 4; t++) {
-      const a = (t / 4) * Math.PI * 2 + 0.3;
-      const len = 5 + p * 3;
-      for (let i = 0; i < len; i++) {
-        const r = 14 + i * 1.5;
-        const px = Math.round(cx + Math.cos(a) * r);
-        const py = Math.round(baseCy + Math.sin(a) * r * 0.5);
-        if (i % 2 === 0) put(px, py, col.glow);
-        else put(px, py, col.wisp);
+  // ---- ARMS: graceful and pale, jewelled, ending in elegant claws ----
+  // leading (right) arm — hangs reaching, rises overhead to cast
+  {
+    const raisedArm = cast === 'raise';
+    const released = cast === 'release';
+    const shX2 = cx + 9, shY2 = ty + 2;
+    const elX = raisedArm ? cx + 13 : released ? cx + 14 : cx + 13;
+    const elY = raisedArm ? ty - 3 : released ? ty + 4 : ty + 6;
+    const wrX = raisedArm ? cx + 15 : released ? cx + 19 : cx + 17;
+    const wrY = raisedArm ? ty - 8 : released ? ty + 3 : ty + 10;
+    // upper arm — rounded shoulder light, skin core, soft shadow
+    line(put, shX2, shY2 - 1, elX, elY - 1, skinL);
+    line(put, shX2, shY2, elX, elY, skin);
+    line(put, shX2, shY2 + 1, elX, elY + 1, qM);
+    // silver armlet around the bicep
+    const amX = Math.round((shX2 + elX) / 2), amY = Math.round((shY2 + elY) / 2);
+    put(amX, amY - 1, svL);
+    put(amX, amY, sv);
+    put(amX, amY + 1, svD);
+    // pointed elbow
+    put(elX, elY, skinL);
+    // forearm tapering to a fine wrist (2px)
+    line(put, elX, elY, wrX, wrY, skin);
+    line(put, elX, elY + 1, wrX, wrY + 1, qM);
+    // silver bracelet at the wrist
+    put(wrX - 1, wrY, sv);
+    put(wrX - 1, wrY + 1, svD);
+    // slim palm + four long curved fingers with bright nail tips
+    put(wrX + 1, wrY, skin);
+    const fdir = raisedArm ? -1 : 1;
+    for (let k = 0; k < 4; k++) {
+      const len = 5 - (k === 0 || k === 3 ? 1 : 0);
+      for (let j = 1; j <= len; j++) {
+        const curve = j > 2 ? 1 : 0; // fingers arc inward
+        put(wrX + k - 1 + curve, wrY + fdir * j,
+            j === len ? svL : j === 1 ? qM : skin); // knuckle shade → nail glint
       }
     }
-    if (p >= 3) {
-      for (let t = 0; t < 4; t++) {
-        const a = (t / 4) * Math.PI * 2 + 0.3;
-        const r = 14 + (5 + p * 3) * 1.5;
-        disc(put, Math.round(cx + Math.cos(a) * r), Math.round(baseCy + Math.sin(a) * r * 0.5), 2, col.glow);
+    // orb gathering above the raised hand / streaking off the release
+    if (raisedArm) {
+      disc(pf, wrX + 1, wrY - 6, 2, gem);
+      pf(wrX + 1, wrY - 6, P.white);
+      pf(wrX - 1, wrY - 4 + (ph % 2), flash ? P.white : '#b8e4ff');
+    } else if (released) {
+      pf(wrX + 3, wrY + 1, gem);
+      pf(wrX + 5, wrY, flash ? P.white : '#b8e4ff');
+      pf(wrX + 7, wrY - 1, gem);
+    }
+  }
+  // trailing (left) arm — half-lost in the hair, same elegance
+  line(put, cx - 2, ty + 3, cx - 6, ty + 9, skinL);
+  line(put, cx - 2, ty + 4, cx - 6, ty + 10, skin);
+  line(put, cx - 2, ty + 5, cx - 6, ty + 11, qM);
+  put(cx - 4, ty + 7, sv);                     // armlet glint through the hair
+  put(cx - 6, ty + 11, svD);                   // bracelet
+  for (let k = 0; k < 3; k++)
+    for (let j = 1; j <= 4; j++)
+      put(cx - 7 + k + (j > 2 ? -1 : 0), ty + 11 + j, j === 4 ? svL : j === 1 ? qM : skin);
+
+  // ---- HEAD: regal three-quarter face framed by the mane ----
+  const hyy = 14 + bob;
+  // hair mass behind and above the head
+  disc(put, cx + 3, hyy - 1, 6, q);
+  disc(put, cx + 2, hyy - 2, 5, qM);
+  // face — smooth pale oval tapering to a pointed chin
+  disc(put, cx + 4, hyy, 4, skin);
+  put(cx + 4, hyy + 4, skin);                // pointed chin
+  put(cx + 3, hyy + 4, qM);                  // jaw shadow
+  put(cx + 1, hyy + 2, qM);                  // jaw contour both sides
+  put(cx + 7, hyy + 2, qM);
+  // hair parts around the face — a strand falls past each temple
+  rect(put, cx, hyy - 3, 1, 5, q);
+  put(cx + 8, hyy - 2, q);
+  put(cx + 8, hyy - 1, qM);
+  put(cx + 4, hyy - 4, qD);                  // centre part
+  // arched brows
+  put(cx + 2, hyy - 2, qD); put(cx + 3, hyy - 2, qD);
+  put(cx + 5, hyy - 2, qD); put(cx + 6, hyy - 2, qD);
+  // half-lidded glowing eyes with dark lash corners
+  put(cx + 2, hyy - 1, chargeGlow ? P.white : gem);
+  put(cx + 3, hyy - 1, qD);
+  put(cx + 5, hyy - 1, chargeGlow ? P.white : gem);
+  put(cx + 6, hyy - 1, qD);
+  // delicate nose — bridge light over a tiny shadow
+  put(cx + 4, hyy, skinL);
+  put(cx + 4, hyy + 1, qM);
+  // full pouting lips
+  put(cx + 3, hyy + 2, lipL);
+  put(cx + 4, hyy + 2, lipD);
+  put(cx + 5, hyy + 2, lipL);
+  put(cx + 4, hyy + 3, lipL);                // lower-lip sheen
+  // cheekbone highlights + a beauty mark
+  put(cx + 2, hyy + 1, skinL);
+  put(cx + 6, hyy + 1, skinL);
+  put(cx + 6, hyy + 2, qD);
+  // ear with a dangling gem earring
+  put(cx + 1, hyy, skin);
+  put(cx + 1, hyy + 1, gem);
+  // slender neck with collarbones into the décolleté
+  rect(put, cx + 3, hyy + 5, 2, 3, skin);
+  put(cx + 4, hyy + 6, qM);                  // neck shadow
+  put(cx + 2, hyy + 8, qM);                  // collarbones
+  put(cx + 5, hyy + 8, qM);
+  rect(put, cx + 2, hyy + 8, 4, 1, skin);    // open chest above the bodice
+  put(cx + 3, hyy + 8, skinL);
+
+  // ---- CROWN: spiked silver tiara seated on the mane ----
+  const cy2 = hyy - 6;
+  rect(put, cx, cy2, 9, 2, sv);              // band
+  put(cx, cy2 + 1, svD);
+  put(cx + 8, cy2 + 1, svD);
+  // five spikes, tall centre
+  for (const [sx2, tall] of [[0, 2], [2, 3], [4, 5], [6, 3], [8, 2]] as const) {
+    for (let j = 1; j <= tall; j++)
+      put(cx + sx2, cy2 - j, j === tall ? svL : sv);
+  }
+  // gems set between the spikes
+  put(cx + 1, cy2, gem);
+  put(cx + 4, cy2 - 1, gem);
+  put(cx + 7, cy2, gem);
+  if (chargeGlow) pf(cx + 4, cy2 - 6, P.white); // crown flare
+
+  // spectral motes drifting around her
+  const motes: ReadonlyArray<readonly [number, number]> = [[-12, 14], [10, 20], [-8, 40], [13, 36], [-14, 30]];
+  for (let k = 0; k < motes.length; k++) {
+    if ((k + ph) % 3 === 0) continue;
+    const [mx, myy] = motes[k];
+    pf(cx + mx, myy + bob - ((ph + k) % 4), k % 2 === 0 ? gem : qL);
+  }
+
+  // ---- birth pockets — spectral bulges swelling in the gown ----
+  if (opts.pockets !== undefined) {
+    const stage = opts.pockets;
+    const pockets: Array<[number, number]> = [[-4, 42 + bob], [1, 46 + bob], [6, 42 + bob]];
+    for (const [dx2, oy] of pockets) {
+      const ox = cx + dx2;
+      if (stage === 0) {
+        disc(put, ox, oy, 3, qL);
+        disc(put, ox, oy, 2, q);
+      } else if (stage === 1) {
+        disc(put, ox, oy, 3, qL);
+        disc(put, ox, oy, 2, out);
+        put(ox, oy, P.fogGlow);
+      } else if (stage === 2) {
+        disc(put, ox, oy, 3, qL);
+        disc(put, ox, oy, 2, qM);
+        put(ox - 1, oy, P.white);
+        put(ox + 1, oy, P.white);
+      } else if (stage === 3) {
+        disc(put, ox, oy - 1, 4, qD);
+        disc(put, ox, oy - 1, 3, qM);
+        disc(put, ox, oy - 2, 2, q);
+        put(ox - 1, oy - 1, P.white);
+        put(ox + 1, oy - 1, P.white);
+      } else if (stage === 4) {
+        disc(put, ox, oy, 3, out);
+        disc(put, ox, oy, 2, qD);
       }
     }
   }
+
+  // Crisp 1px outline — the glows and stray wisps stay soft
+  strokeOutline(px, rawPut, 64);
 }
 
 export function drawPhantomQueenDie(put: Put, step: number) {
   const cx = 32, cy = 30;
-  // Dissolve from bottom up
-  const cutoff = 60 - step * 10;
-  const r = Math.max(0, 12 - step * 2);
+  const r = Math.max(0, 16 - step * 3);
   if (r > 0) {
-    // Draw remaining body above cutoff
-    for (let dy = -r; dy <= r; dy++) {
-      if (cy + dy > cutoff) continue;
-      for (let dx = -r; dx <= r; dx++) {
-        if (dx * dx + dy * dy > r * r) continue;
-        const dist = Math.sqrt(dx * dx + dy * dy) / r;
-        put(cx + dx, cy + dy, dist < 0.5 ? '#8abadd' : '#4a6a8a');
-      }
-    }
+    disc(put, cx, cy, r, P.queenD);
+    disc(put, cx, cy, Math.max(0, r - 1), P.queen);
+    disc(put, cx, cy, Math.max(0, r - 3), P.queenL);
   }
-  // Dispersing wisps
+  // gown shreds + crown shards scattering
   for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2 + step * 0.5;
-    const d = step * 6 + 4;
+    const a = (i / 12) * Math.PI * 2 + step * 0.3;
+    const d = step * 5 + 5;
     const x = Math.round(cx + Math.cos(a) * d);
-    const y = Math.round(cy + Math.sin(a) * d * 0.6);
-    put(x, y, '#6a8aaa');
-    put(x + 1, y, '#aad0ff');
-    if (i % 3 === 0) put(x, y - 1, '#ffffff');
+    const y = Math.round(cy + Math.sin(a) * d);
+    put(x, y, P.queenM);
+    put(x + 1, y, i % 3 === 0 ? P.silver : P.queenD);
+    if (i % 4 === 0) put(x, y + 1, P.fogGlow);
   }
-  if (step < 2) disc(put, cx, cy, 4, '#aad0ff');
+  if (step < 2) disc(put, cx, cy, 6, P.white);
 }
 
-export function drawPhantomQueen(frame: BossFrame) {
+/** Queen frame set — shared BossFrame plus two extra idle frames so her hair
+ *  and gown flow constantly. No windup frames: castle bosses never dash. */
+export type PhantomQueenFrame = BossFrame | 'idle2' | 'idle3';
+
+export const phantomQueenFrames: PhantomQueenFrame[] = [
+  'idle0','idle1','idle2','idle3',
+  'move0','move1','move2','move3',
+  'atk0','atk1',
+  'chargeWind','hit',
+  'birth0','birth1','birth2','birth3','birth4',
+  'die0','die1','die2','die3','die4'
+];
+
+export function drawPhantomQueen(frame: PhantomQueenFrame) {
   return (put: Put) => {
     switch (frame) {
-      case 'idle0':      return drawPhantomQueenBody(put, { bob: 0, orbPhase: 0 });
-      case 'idle1':      return drawPhantomQueenBody(put, { bob: -1, orbPhase: 1 });
-      case 'move0':      return drawPhantomQueenBody(put, { bob: 0, orbPhase: 0 });
-      case 'move1':      return drawPhantomQueenBody(put, { bob: -1, orbPhase: 1 });
-      case 'move2':      return drawPhantomQueenBody(put, { bob: -2, orbPhase: 2 });
-      case 'move3':      return drawPhantomQueenBody(put, { bob: -1, orbPhase: 3 });
-      case 'atk0':       return drawPhantomQueenBody(put, { rearUp: true, mouthOpen: true, bob: -2, orbPhase: 0 });
-      case 'atk1':       return drawPhantomQueenBody(put, { bob: 1, mouthOpen: true, orbPhase: 2 });
-      case 'chargeWind': return drawPhantomQueenBody(put, { chargeGlow: true, bob: 0, orbPhase: 0 });
-      case 'hit':        return drawPhantomQueenBody(put, { flash: true, orbPhase: 0 });
-      case 'birth0':     return drawPhantomQueenBody(put, { pockets: 0, orbPhase: 0 });
-      case 'birth1':     return drawPhantomQueenBody(put, { pockets: 1, orbPhase: 1 });
-      case 'birth2':     return drawPhantomQueenBody(put, { pockets: 2, orbPhase: 2 });
-      case 'birth3':     return drawPhantomQueenBody(put, { pockets: 3, orbPhase: 3 });
-      case 'birth4':     return drawPhantomQueenBody(put, { pockets: 4, orbPhase: 0 });
+      // 4 idle frames keep the hair + gown rippling
+      case 'idle0':      return drawPhantomQueenBody(put, { bob: 0, phase: 0 });
+      case 'idle1':      return drawPhantomQueenBody(put, { bob: -1, phase: 1 });
+      case 'idle2':      return drawPhantomQueenBody(put, { bob: -2, phase: 2 });
+      case 'idle3':      return drawPhantomQueenBody(put, { bob: -1, phase: 3 });
+      case 'move0':      return drawPhantomQueenBody(put, { bob: 0, phase: 0 });
+      case 'move1':      return drawPhantomQueenBody(put, { bob: -1, phase: 1 });
+      case 'move2':      return drawPhantomQueenBody(put, { bob: -2, phase: 2 });
+      case 'move3':      return drawPhantomQueenBody(put, { bob: -1, phase: 3 });
+      // orb cast: hand sweeps overhead gathering the orb, then hurls it
+      case 'atk0':       return drawPhantomQueenBody(put, { cast: 'raise', bob: -1, phase: 1 });
+      case 'atk1':       return drawPhantomQueenBody(put, { cast: 'release', bob: 1, phase: 3 });
+      // legacy frame from the shared set — castle bosses never dash, so this
+      // is just a glowing stance (kept registered for safety)
+      case 'chargeWind': return drawPhantomQueenBody(put, { chargeGlow: true, bob: -1, phase: 1 });
+      case 'hit':        return drawPhantomQueenBody(put, { flash: true });
+      case 'birth0':     return drawPhantomQueenBody(put, { pockets: 0, phase: 0 });
+      case 'birth1':     return drawPhantomQueenBody(put, { pockets: 1, phase: 1 });
+      case 'birth2':     return drawPhantomQueenBody(put, { pockets: 2, phase: 2 });
+      case 'birth3':     return drawPhantomQueenBody(put, { pockets: 3, phase: 3 });
+      case 'birth4':     return drawPhantomQueenBody(put, { pockets: 4, phase: 0 });
       case 'die0':       return drawPhantomQueenDie(put, 0);
       case 'die1':       return drawPhantomQueenDie(put, 1);
       case 'die2':       return drawPhantomQueenDie(put, 2);

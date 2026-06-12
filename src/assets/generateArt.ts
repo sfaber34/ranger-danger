@@ -25,6 +25,7 @@ import {
 import { BearFrame, drawBearDir, extractBearFrames } from './art/bear';
 import {
   BossFrame, RamFrame, ForestBossFrame, forestBossFrames, riverBossFrames, infectedBossFrames,
+  phantomQueenFrames,
   drawFogPhantom, drawBoss, drawRam, drawInfectedBoss, drawForestBoss,
   drawPhantomQueen, drawCastleDragon, drawDesertBoss,
   drawQueenOrb, drawDragonFireball, drawDragonFireExplosion,
@@ -392,7 +393,8 @@ export function generateAllArt(scene: Phaser.Scene) {
   for (const f of riverBossFrames) add(scene, `rboss_${f}`, makeCanvas(64, drawFogPhantom(f)));
 
   // Castle boss (Phantom Queen) textures
-  for (const f of bossFrames) add(scene, `cqboss_${f}`, makeCanvas(64, drawPhantomQueen(f)));
+  // Queen gets extra idle frames (flowing hair/gown) on top of the shared set
+  for (const f of phantomQueenFrames) add(scene, `cqboss_${f}`, makeCanvas(64, drawPhantomQueen(f)));
   // Castle boss (Castle Dragon) textures
   for (const f of bossFrames) add(scene, `cdboss_${f}`, makeCanvas(64, drawCastleDragon(f)));
 
@@ -682,8 +684,9 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('rboss-die',        ['rboss_die0','rboss_die1','rboss_die2','rboss_die3','rboss_die4'], 6, 0);
 
   // Castle boss (Phantom Queen) animations
-  mk('cqboss-idle',       ['cqboss_idle0','cqboss_idle1'], 2, -1);
-  mk('cqboss-move',       ['cqboss_move0','cqboss_move1','cqboss_move2','cqboss_move3'], 5, -1);
+  // 4-frame idle/move so the hair + gown never stop flowing
+  mk('cqboss-idle',       ['cqboss_idle0','cqboss_idle1','cqboss_idle2','cqboss_idle3'], 6, -1);
+  mk('cqboss-move',       ['cqboss_move0','cqboss_move1','cqboss_move2','cqboss_move3'], 8, -1);
   mk('cqboss-atk',        ['cqboss_atk0','cqboss_atk1'], 4, 0);
   mk('cqboss-chargewind', ['cqboss_chargeWind','cqboss_idle0'], 6, -1);
   mk('cqboss-hit',        ['cqboss_hit'], 10, 0);

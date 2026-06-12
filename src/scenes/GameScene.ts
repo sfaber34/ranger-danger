@@ -84,14 +84,18 @@ function isBgmBiome(biome: Biome): biome is BgmBiome {
   return BGM_BIOMES.includes(biome as BgmBiome);
 }
 
-/** Dev flag (?boss=1): every level jumps its wave sequence straight to the
- *  boss wave. Gated like the debug gallery — dev builds / localhost only. */
-export function isBossStartRequested(): boolean {
-  if (new URLSearchParams(window.location.search).get('boss') !== '1') return false;
+/** Dev flag (?boss=N): jump the wave sequence straight to a boss.
+ *  N=1 → first boss, N=2 → final boss (the 2nd boss on castle/desert
+ *  levels). On single-boss levels both values load the one boss. Returns
+ *  0 when absent/invalid. Gated like the debug gallery — dev/localhost. */
+export function requestedBossStart(): number {
+  const v = new URLSearchParams(window.location.search).get('boss');
+  if (v !== '1' && v !== '2') return 0;
   const hostname = window.location.hostname;
-  return import.meta.env.DEV
+  const allowed = import.meta.env.DEV
     || hostname === 'localhost'
     || hostname === '127.0.0.1';
+  return allowed ? Number(v) : 0;
 }
 
 function randomRectZone(x: number, y: number, width: number, height: number): Phaser.Types.GameObjects.Particles.ParticleEmitterRandomZoneConfig {
@@ -702,16 +706,33 @@ export class GameScene extends Phaser.Scene {
     this.countdownMsg = '';
     this.countdownColor = '#7cc4ff';
 
-    // Dev flag (?boss=1): skip the lead-in waves and go straight to the boss.
-    // Castle/desert jump to their phase-0 mid-boss wave; endless to the first
-    // boss cycle (its SpawnSystem branch fast-forwards its own counters).
-    if (isBossStartRequested()) {
-      const bossWave = this.difficulty === 'endless' ? 3
-        : this.biome === 'castle' ? 1
-        : this.biome === 'desert' ? 2
-        : this.levelWaveCount - 1;
-      const spawned = this.difficulty === 'endless' ? 0 : this.levelWaveSize;
-      this.waveState.jumpToBossWave(bossWave, spawned);
+    // Dev flag (?boss=N): skip the lead-in waves and go straight to a boss.
+    // N=1 → first boss, N=2 → final boss on the 2-boss castle/desert levels
+    // (single-boss levels and endless ignore N and load their one boss).
+    // For the 2nd castle/desert boss we also advance the boss-phase past the
+    // mid-boss so SpawnSystem's boss-wave test matches.
+    const bossStart = requestedBossStart();
+    if (bossStart > 0) {
+      if (this.difficulty === 'endless') {
+        this.waveState.jumpToBossWave(3, 0); // SpawnSystem fast-forwards its own counters
+      } else if (this.biome === 'castle') {
+        if (bossStart >= 2) {
+          this.bossState.enterPostQueenWaves();       // castlePhase → 2 (dragon)
+          this.waveState.jumpToBossWave(3, this.levelWaveSize);
+        } else {
+          this.waveState.jumpToBossWave(1, this.levelWaveSize); // queen
+        }
+      } else if (this.biome === 'desert') {
+        if (bossStart >= 2) {
+          this.bossState.enterPostDesertMidBossWaves(); // desertPhase → 2 (final)
+          this.waveState.jumpToBossWave(5, this.levelWaveSize);
+        } else {
+          this.waveState.jumpToBossWave(2, this.levelWaveSize); // mid-boss
+        }
+      } else {
+        // single-boss biomes — both ?boss=1 and ?boss=2 load the one boss
+        this.waveState.jumpToBossWave(this.levelWaveCount - 1, this.levelWaveSize);
+      }
     }
 
     // Biome atmosphere effects

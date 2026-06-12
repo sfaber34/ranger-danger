@@ -218,6 +218,13 @@ export const P = {
   bfireD:  '#18246e',
   bfireL:  '#5aa0ff',
   bfireC:  '#d8eeff',
+
+  // Phantom Queen ghost-blue ramp + spectral skin
+  queen:   '#2a4ab8',
+  queenD:  '#16246e',
+  queenM:  '#1e3696',
+  queenL:  '#5a8ae8',
+  queenP:  '#a8c8f0',
   fogGlow: '#64c8ff',
   fogGlowD:'#3090c0',
   fogCore: '#405878',
