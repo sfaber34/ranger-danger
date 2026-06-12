@@ -156,6 +156,15 @@ export const P = {
   spiderM: '#1a1a1a',
   spiderL: '#4a4a4a',
   spiderEye: '#ff2020',
+  // blighted toad (olive warty grump)
+  toad:   '#7a6e38',
+  toadD:  '#4a4220',
+  toadM:  '#625830',
+  toadL:  '#96884c',
+  toadW:  '#a87838',   // warts
+  toadWL: '#c89858',   // wart highlight
+  toadB:  '#c0a070',   // belly/chin tan
+
   // tarantula browns (spider redesign)
   spdr:   '#6a4a34',   // abdomen brown
   spdrD:  '#3e2a1e',   // dark mottling / shadow

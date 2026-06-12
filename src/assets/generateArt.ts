@@ -104,8 +104,10 @@ export function generateAllArt(scene: Phaser.Scene) {
   add(scene, 'esnk_move0t', makeCanvas(32, drawEnemySnake('move0', true)));
   for (const f of e6Frames) add(scene, `erat_${f}`, makeCanvas(32, drawEnemyRat(f)));
   for (const f of e6Frames) add(scene, `eder_${f}`, makeCanvas(32, drawEnemyDeer(f)));
-  for (const f of eFrames) add(scene, `eib_${f}`, makeCanvas(32, drawEnemyInfectedBasic(f)));
-  for (const f of eFrames) add(scene, `eih_${f}`, makeCanvas(32, drawEnemyInfectedHeavy(f)));
+  // Infected basic uses the extended frame set (6-frame lumber, 4-frame bite)
+  for (const f of e6Frames) add(scene, `eib_${f}`, makeCanvas(32, drawEnemyInfectedBasic(f)));
+  // Infected heavy uses the extended frame set (6-frame lumber, 4-frame swipe)
+  for (const f of e6Frames) add(scene, `eih_${f}`, makeCanvas(32, drawEnemyInfectedHeavy(f)));
   // Blighted Toad — uses its own frame set (idle + hop + atk + hit + die)
   const toadFrames: ToadFrame[] = ['idle', 'hop0', 'hop1', 'hop2', 'hop3', 'atk0', 'atk1', 'hit', 'die0', 'die1', 'die2', 'die3'];
   for (const f of toadFrames) add(scene, `etd_${f}`, makeCanvas(32, drawEnemyToad(f)));
@@ -478,13 +480,15 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('eder-hit',  ['eder_hit'], 8, 0);
   mk('eder-die',  ['eder_die0','eder_die1','eder_die2','eder_die3'], 8, 0);
 
-  mk('eib-move', ['eib_move0','eib_move1','eib_move2','eib_move3'], 8, -1);
-  mk('eib-atk',  ['eib_atk0','eib_atk1'], 8, -1);
+  // 6-frame three-legged lumber + 4-frame gape-lunge-bite
+  mk('eib-move', ['eib_move0','eib_move1','eib_move2','eib_move3','eib_move4','eib_move5'], 10, -1);
+  mk('eib-atk',  ['eib_atk0','eib_atk1','eib_atk2','eib_atk3'], 10, -1);
   mk('eib-hit',  ['eib_hit'], 10, 0);
   mk('eib-die',  ['eib_die0','eib_die1','eib_die2','eib_die3'], 10, 0);
 
-  mk('eih-move', ['eih_move0','eih_move1','eih_move2','eih_move3'], 6, -1);
-  mk('eih-atk',  ['eih_atk0','eih_atk1'], 6, -1);
+  // 6-frame upright lumber + 4-frame claw swipe
+  mk('eih-move', ['eih_move0','eih_move1','eih_move2','eih_move3','eih_move4','eih_move5'], 9, -1);
+  mk('eih-atk',  ['eih_atk0','eih_atk1','eih_atk2','eih_atk3'], 8, -1);
   mk('eih-hit',  ['eih_hit'], 8, 0);
   mk('eih-die',  ['eih_die0','eih_die1','eih_die2','eih_die3'], 8, 0);
 

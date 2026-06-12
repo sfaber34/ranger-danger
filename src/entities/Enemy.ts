@@ -135,7 +135,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.play('eib-move');
         break;
       case 'infected_heavy':
-        applyEntityVisual(this, 'infected_heavy', 'move', 0.5, 32, 32, 16, 20);
+        // 0.5 → 0.6: renders 20% larger than infected_basic so the heavy
+        // visibly outranks it (hitbox scales with it, still under a tile).
+        applyEntityVisual(this, 'infected_heavy', 'move', 0.6, 32, 32, 16, 20);
         this.play('eih-move');
         break;
       case 'infected_runner':

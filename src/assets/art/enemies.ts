@@ -527,146 +527,366 @@ export function drawEnemyDeer(f: EFrame6) {
 // ==================================================================
 //  INFECTED BASIC (32x32) — purple infected variant of basic enemy
 // ==================================================================
-export function drawEnemyInfectedBasic(f: EFrame) {
-  return (put: Put) => {
+export function drawEnemyInfectedBasic(f: EFrame6) {
+  return (rawPut: Put) => {
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 8 - step * 2;
       if (r <= 0) return;
-      disc(put, 16, 18, r, P.infect);
-      disc(put, 16, 18, Math.max(0, r - 1), P.infectL);
+      disc(rawPut, 16, 18, r, P.infect);
+      disc(rawPut, 16, 18, Math.max(0, r - 1), P.infectL);
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2 + step * 0.4;
         const d = step * 3 + 3;
-        const px = Math.round(16 + Math.cos(a) * d);
-        const py = Math.round(18 + Math.sin(a) * d);
-        put(px, py, P.infectD);
-        put(px + 1, py, P.infect);
+        const x = Math.round(16 + Math.cos(a) * d);
+        const y = Math.round(18 + Math.sin(a) * d);
+        rawPut(x, y, P.infectD);
+        rawPut(x + 1, y, i % 2 === 0 ? P.infectH : P.infect);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
-    const body = flash ? P.white : P.infect;
-    const bodyD = flash ? P.white : P.infectD;
-    const bodyM = flash ? P.white : P.infectM;
-    const bodyL = flash ? P.white : P.infectL;
+    const fl  = flash ? P.white : P.infect;    // purple flesh
+    const flD = flash ? P.white : P.infectD;
+    const flM = flash ? P.white : P.infectM;
+    const flL = flash ? P.white : P.infectL;
+    const boil  = flash ? P.white : P.infectH;  // orange pustules
+    const boilL = flash ? P.white : P.infectHL;
+    const spike = flash ? P.white : P.bronze;   // bone-orange back spikes
+    const spikeL = flash ? P.white : P.bronzeL;
+    const fang = flash ? P.white : P.arrow;     // golden-bone fangs
 
-    for (let dy = -1; dy <= 1; dy++)
-      for (let dx = -6; dx <= 6; dx++)
-        if ((dx * dx) / 36 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+    // 6-phase lumber; attack = maw opens → gapes WIDE → lunge + bite shut
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : 0;
+    const bob = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 1.2) : ai === 1 ? 1 : 0;
+    const ox = ai >= 0 ? [1, 0, -2, -1][ai] : 0;       // lunge thrust (toward prey)
+    const gape = ai === 0 ? 2 : ai === 1 ? 6 : 0;      // mouth opening height
+    const clamp = ai === 2;                            // jaws slam shut mid-lunge
 
-    let footY = 0;
-    if (f === 'move1') footY = -1;
-    if (f === 'move3') footY = 1;
-    rect(put, 11, 25 + footY, 3, 2, bodyD);
-    rect(put, 18, 25 - footY, 3, 2, bodyD);
-    put(10, 26 + footY, P.outline);
-    put(21, 26 - footY, P.outline);
-    put(13, 27 + footY, P.outline);
-    put(18, 27 - footY, P.outline);
+    // ground shadow (unrecorded)
+    for (let dy = 0; dy <= 1; dy++)
+      for (let dx = -10; dx <= 10; dx++)
+        if ((dx * dx) / 100 + (dy * dy) / 1.2 <= 1) mput(16 + dx + ox, 27 + dy, P.shadow);
 
-    disc(put, 16, 17, 8, bodyD);
-    disc(put, 16, 17, 7, body);
-    disc(put, 16, 16, 5, bodyL);
-    // pustules instead of spines
-    put(10, 12, '#40e060'); put(11, 11, bodyD);
-    put(13, 10, '#40e060'); put(14, 9, bodyD);
-    put(18, 9, '#40e060'); put(19, 10, bodyD);
-    put(21, 11, '#40e060'); put(22, 12, bodyD);
+    // ---- three stumpy legs: two front, one back ----
+    // [x, width, phaseOffset, far]
+    const legs: ReadonlyArray<readonly [number, number, number, boolean]> = [
+      [6, 4, 0, false],            // near front
+      [11, 3, Math.PI, true],      // far front
+      [20, 5, Math.PI / 2, false], // single back leg
+    ];
+    for (const [lx, w, off, far] of legs) {
+      let dx = 0, lift = 0;
+      if (mi >= 0) {
+        const ang = (ph / 6) * Math.PI * 2 + off;
+        dx = Math.round(Math.sin(ang) * 1.5);
+        lift = Math.max(0, Math.round(Math.cos(ang)));
+      }
+      const x = lx + dx + ox;
+      rect(put, x, 20, w, 6 - lift, far ? flD : fl);
+      rect(put, x, 20, 1, 5 - lift, far ? flM : flL);  // lit edge
+      // toe folds
+      put(x + 1, 25 - lift, flash ? P.white : P.outline);
+      if (w >= 4) put(x + w - 2, 25 - lift, flash ? P.white : P.outline);
+      if (!far) put(x + w - 1, 23 - lift, flD);        // ankle fold
+    }
+    // boil on the back leg
+    put(22 + ox, 22, boil);
+    put(23 + ox, 22, flD);
 
-    // glowing yellow-green eyes
-    put(12, 16, '#e0ff40'); put(13, 16, '#e0ff40');
-    put(19, 16, '#e0ff40'); put(20, 16, '#e0ff40');
-    put(12, 16, P.outline); put(20, 16, P.outline);
-    rect(put, 11, 15, 3, 1, bodyM);
-    rect(put, 18, 15, 3, 1, bodyM);
+    // ---- body: lumpy tumorous mass (overlapping lobes) ----
+    const B = ox; // body shift
+    disc(put, 18 + B, 14 + bob, 9, fl);
+    disc(put, 12 + B, 11 + bob, 6, fl);
+    disc(put, 23 + B, 11 + bob, 6, fl);
+    disc(put, 10 + B, 17 + bob, 5, fl);
+    disc(put, 24 + B, 17 + bob, 6, fl);
+    // mottled sick flesh
+    for (let yy = 4; yy <= 23; yy++)
+      for (let xx = 4; xx <= 29; xx++) {
+        const X = xx + B, Y = yy + bob;
+        if (!px.has(Y * 32 + X)) continue;
+        if ((xx * 3 + yy * 7) % 11 === 0) put(X, Y, flM);
+        else if ((xx * 5 + yy * 3) % 13 === 0) put(X, Y, flD);
+      }
+    // sheen along the upper-back lobes
+    put(20 + B, 6 + bob, flL); put(23 + B, 7 + bob, flL);
+    put(14 + B, 7 + bob, flL); put(25 + B, 9 + bob, flL);
+    // deep crease folds between the lobes
+    put(16 + B, 12 + bob, flD); put(17 + B, 13 + bob, flD);
+    put(21 + B, 16 + bob, flD); put(20 + B, 17 + bob, flD);
 
-    if (f === 'atk0') {
-      rect(put, 13, 19, 6, 2, P.outline);
-      put(14, 20, '#40e060'); put(17, 20, '#40e060');
-    } else if (f === 'atk1') {
-      rect(put, 13, 18, 6, 4, P.outline);
-      put(14, 19, '#40e060'); put(17, 19, '#40e060');
-      put(15, 21, '#40e060'); put(16, 21, '#40e060');
-    } else {
-      rect(put, 14, 19, 4, 1, P.outline);
-      put(14, 20, '#40e060'); put(17, 20, '#40e060');
+    // ---- bone spikes along the back ridge ----
+    for (const [sx2, sy2, tall] of [[11, 6, 2], [15, 4, 3], [20, 4, 3], [25, 7, 2]] as const) {
+      for (let j = 0; j < tall; j++) {
+        put(sx2 + B, sy2 + bob - j, j === tall - 1 ? spikeL : spike);
+        if (j === 0) put(sx2 + 1 + B, sy2 + bob, flash ? P.white : P.bronzeD);
+      }
     }
 
-    put(7, 18, bodyD); put(8, 19, bodyD); put(8, 18, body);
-    put(25, 18, bodyD); put(24, 19, bodyD); put(24, 18, body);
+    // ---- weeping pustules (drips animate with the walk phase) ----
+    // the big boil
+    disc(put, 19 + B, 11 + bob, 2, boil);
+    put(18 + B, 10 + bob, boilL);
+    put(19 + B, 10 + bob, P.white);                    // wet glint
+    ring(put, 19 + B, 11 + bob, 3, flD);               // swollen rim
+    // medium boils
+    disc(put, 13 + B, 9 + bob, 1, boil); put(13 + B, 8 + bob, boilL);
+    disc(put, 24 + B, 15 + bob, 1, boil); put(24 + B, 14 + bob, boilL);
+    disc(put, 11 + B, 15 + bob, 1, flash ? P.white : '#e088a8'); // pink one
+    put(11 + B, 14 + bob, P.white);
+    // small boil pips
+    put(16 + B, 18 + bob, boil);
+    put(22 + B, 19 + bob, boil);
+    put(9 + B, 11 + bob, boil);
+    // orange ooze trailing down from the weepers
+    put(19 + B, 14 + bob, boil);
+    put(19 + B, 15 + bob + (ph % 2), flash ? P.white : P.infectHM);
+    put(24 + B, 17 + bob + ((ph + 1) % 2), flash ? P.white : P.infectHM);
+
+    // ---- furious eye sunk in a brow fold ----
+    const ey = 9 + bob;
+    rect(put, 6 + B, ey - 1, 5, 1, flD);               // heavy brow fold
+    put(5 + B, ey, flD);
+    put(7 + B, ey, flash ? P.white : '#ff5020');       // burning iris
+    put(8 + B, ey, flash ? P.white : '#8a1408');
+    if (ai === 1) put(6 + B, ey, P.white);             // eye flares at full gape
+
+    // ---- the MAW ----
+    const mx = 4 + B;
+    if (gape > 0) {
+      // open: dark gullet between two rows of long bone fangs
+      const top = 15 - (gape >> 1) + bob;
+      rect(put, mx - 1, top, 9, gape, flash ? P.white : '#3a0a14');
+      put(mx + 2, top + (gape >> 1), flash ? P.white : '#6a1020'); // throat
+      put(mx + 4, top + (gape >> 1), flash ? P.white : P.redD);
+      for (let k = 0; k < 4; k++) {
+        const fx2 = mx + k * 2;
+        const flen = gape >= 6 ? 2 : 1;
+        for (let j = 0; j < flen; j++) put(fx2, top + j, fang);              // upper fangs
+        for (let j = 0; j < flen; j++) put(fx2 + 1, top + gape - 1 - j, fang); // lower fangs
+      }
+      if (gape >= 6) put(mx - 1, top + gape, boil);    // drool at the corner
+    } else if (clamp) {
+      // jaws slammed shut — interlocked fangs + impact burst
+      line(put, mx - 1, 16 + bob, mx + 7, 17 + bob, flD);
+      for (let k = 0; k < 4; k++) {
+        put(mx + k * 2, 15 + bob, fang);
+        put(mx + 1 + k * 2, 17 + bob, fang);
+      }
+      mput(mx - 2, 13 + bob, P.white);                 // the clack
+      mput(mx - 2, 16 + bob, P.white);
+      mput(mx - 2, 19 + bob, P.white);
+    } else {
+      // closed: wide lip seam with fang tips poking through
+      line(put, mx - 1, 16 + bob, mx + 8, 17 + bob, flD);
+      for (let k = 0; k < 4; k++) {
+        put(mx + k * 2, 15 + bob, fang);
+        put(mx + 1 + k * 2, 17 + bob, fang);
+      }
+    }
+
+    strokeOutline(px, mput);
   };
 }
 
 // ==================================================================
 //  INFECTED HEAVY (32x32) — orange infected armored brute
 // ==================================================================
-export function drawEnemyInfectedHeavy(f: EFrame) {
-  return (put: Put) => {
+export function drawEnemyInfectedHeavy(f: EFrame6) {
+  return (rawPut: Put) => {
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 10 - step * 2;
       if (r <= 0) return;
-      disc(put, 16, 18, r, P.infectH);
-      disc(put, 16, 18, Math.max(0, r - 1), P.infectHL);
+      disc(rawPut, 16, 18, r, P.infectH);
+      disc(rawPut, 16, 18, Math.max(0, r - 1), P.infectHL);
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2 + step * 0.3;
         const d = step * 3 + 4;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), P.infectHD);
+        rawPut(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), P.infectHD);
+        rawPut(Math.round(16 + Math.cos(a) * d) + 1, Math.round(18 + Math.sin(a) * d), i % 2 === 0 ? P.infectR : P.wBone);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
-    const body = flash ? P.white : P.infectH;
-    const bodyD = flash ? P.white : P.infectHD;
-    const bodyM = flash ? P.white : P.infectHM;
-    const bodyL = flash ? P.white : P.infectHL;
+    const fl  = flash ? P.white : P.infectH;    // orange flesh
+    const flD = flash ? P.white : P.infectHD;
+    const flM = flash ? P.white : P.infectHM;
+    const flL = flash ? P.white : P.infectHL;
+    const boil  = flash ? P.white : P.infectR;  // yellow-green boils
+    const boilL = flash ? P.white : P.infectRL;
+    const bn  = flash ? P.white : P.wBone;      // spikes / claws / fangs
+    const bnL = flash ? P.white : P.wBoneL;
+    const ooze = flash ? P.white : '#d8d040';
 
-    for (let dy = -1; dy <= 1; dy++)
-      for (let dx = -8; dx <= 8; dx++)
-        if ((dx * dx) / 64 + (dy * dy) / 1.5 <= 1) put(16 + dx, 29 + dy, P.shadow);
+    // 6-phase upright lumber; attack = near-camera claw swipe
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : 0;
+    const bob = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 1.3) : 0;
+    const ox = ai >= 0 ? [1, 0, -2, -1][ai] : 0;       // lunge into the swipe
+    const rear = ai >= 0 ? [1, 2, 0, 0][ai] : 0;       // rocks back on the windup
+    const roar = ai === 1 || ai === 2 ? 2 : 0;         // maw gapes wider mid-swipe
 
-    let footY = 0;
-    if (f === 'move1') footY = -1;
-    if (f === 'move3') footY = 1;
-    rect(put, 9, 26 + footY, 5, 3, bodyD);
-    rect(put, 18, 26 - footY, 5, 3, bodyD);
-    rect(put, 9, 28 + footY, 5, 1, P.outline);
-    rect(put, 18, 28 - footY, 5, 1, P.outline);
+    // ground shadow (unrecorded)
+    for (let dy = 0; dy <= 1; dy++)
+      for (let dx = -10; dx <= 10; dx++)
+        if ((dx * dx) / 100 + (dy * dy) / 1.2 <= 1) mput(15 + dx + ox, 28 + dy, P.shadow);
 
-    disc(put, 16, 17, 10, bodyD);
-    disc(put, 16, 17, 9, body);
-    disc(put, 16, 16, 7, bodyL);
-    // infected plates with green ooze
-    rect(put, 10, 18, 12, 1, bodyD);
-    rect(put, 10, 21, 12, 1, bodyD);
-    rect(put, 14, 13, 4, 1, bodyD);
-    put(11, 18, '#40e060'); put(15, 18, '#40e060'); put(20, 18, '#40e060');
-    put(11, 21, '#40e060'); put(15, 21, '#40e060'); put(20, 21, '#40e060');
+    // ---- two sturdy legs (it stands TALL — nothing like the basic's blob) ----
+    const stride = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 2) : 0;
+    const liftN = mi >= 0 ? Math.max(0, Math.round(Math.cos((ph / 6) * Math.PI * 2) * 1.2)) : 0;
+    const liftF = mi >= 0 ? Math.max(0, Math.round(-Math.cos((ph / 6) * Math.PI * 2) * 1.2)) : 0;
+    const B = ox;
+    // far leg
+    rect(put, 15 - stride + B, 19 + bob, 3, 8 - liftF - bob, flD);
+    put(14 - stride + B, 26 - liftF, bn);              // bone toe claws
+    put(16 - stride + B, 26 - liftF, bn);
+    // near leg — knee accent, lit front edge
+    rect(put, 10 + stride + B, 19 + bob, 4, 8 - liftN - bob, fl);
+    rect(put, 10 + stride + B, 19 + bob, 1, 7 - liftN - bob, flL);
+    put(11 + stride + B, 22 + bob, flD);               // knee crease
+    put(9 + stride + B, 26 - liftN, bn);               // splayed toe claws
+    put(11 + stride + B, 26 - liftN, bn);
+    put(13 + stride + B, 26 - liftN, bnL);
 
-    // horns with green tips
-    put(9, 8, '#40e060'); put(10, 9, bodyD); put(11, 10, body);
-    put(23, 8, '#40e060'); put(22, 9, bodyD); put(21, 10, body);
+    // ---- UPRIGHT torso: broad shoulders tapering to the hips ----
+    // (rocking back on the windup shifts the upper body rearward)
+    for (let y = 10; y <= 19; y++) {
+      const t = (y - 10) / 9;
+      const halfW = Math.round(7 - t * 3);             // shoulders 14 wide → hips 8
+      const cxT = 13 + Math.round(t) + Math.round(rear * (1 - t)) + B;
+      rect(put, cxT - halfW, y + bob, halfW * 2 + 1, 1, fl);
+      put(cxT - halfW, y + bob, flL);                  // lit chest edge
+      put(cxT + halfW, y + bob, flD);                  // shaded back edge
+    }
+    // muscle definition — pec line, ab creases, lat shading
+    put(10 + rear + B, 13 + bob, flD);
+    put(11 + rear + B, 13 + bob, flD);
+    put(12 + B, 15 + bob, flD);
+    put(13 + B, 17 + bob, flD);
+    rect(put, 17 + B, 12 + bob, 2, 5, flM);            // lat/back shading
+    // light mottling (sparser than the basic — muscle, not tumor)
+    for (let yy = 10; yy <= 19; yy++)
+      for (let xx = 7; xx <= 20; xx++) {
+        const X = xx + B, Y = yy + bob;
+        if (!px.has(Y * 32 + X)) continue;
+        if ((xx * 5 + yy * 3) % 17 === 0) put(X, Y, flM);
+      }
 
-    // glowing yellow-green eyes
-    put(11, 14, '#e0ff40'); put(12, 14, '#e0ff40');
-    put(20, 14, '#e0ff40'); put(21, 14, '#e0ff40');
-    put(11, 15, bodyD); put(21, 15, bodyD);
-
-    if (f === 'atk0' || f === 'atk1') {
-      rect(put, 12, 18, 9, 3, P.outline);
-      put(12, 20, '#40e060'); put(14, 20, '#40e060'); put(17, 20, '#40e060'); put(19, 20, '#40e060');
-      if (f === 'atk1') put(16, 21, P.infect);
-    } else {
-      rect(put, 13, 19, 7, 1, P.outline);
-      put(13, 20, '#40e060');
-      put(19, 20, '#40e060');
+    // ---- bone spikes down the back edge ----
+    for (const [sx2, sy2, tall] of [[14, 8, 3], [17, 9, 2], [19, 12, 2], [20, 15, 2]] as const) {
+      for (let j = 0; j < tall; j++)
+        put(sx2 + rear + B, sy2 + bob - j, j === tall - 1 ? bnL : bn);
     }
 
-    rect(put, 5, 15, 3, 3, bodyD);
-    rect(put, 24, 15, 3, 3, bodyD);
-    put(6, 15, bodyM);
-    put(25, 15, bodyM);
+    // ---- a few boils (restrained — the heavy is muscle, not blob) ----
+    disc(put, 16 + B, 13 + bob, 2, boil);              // big one on the shoulder blade
+    put(15 + B, 12 + bob, boilL);
+    put(16 + B, 12 + bob, P.white);                    // wet glint
+    ring(put, 16 + B, 13 + bob, 3, flD);               // swollen rim
+    disc(put, 12 + B, 17 + bob, 1, boil); put(12 + B, 16 + bob, boilL);
+    put(18 + B, 18 + bob, boil);
+    put(12 + stride + B, 21 + bob, boil);              // one on the near thigh
+    // ooze trail (animates with the walk)
+    put(16 + B, 16 + bob, ooze);
+    put(16 + B, 17 + bob + (ph % 2), ooze);
+
+    // ---- head: ON TOP of the shoulders, brow and teeth ----
+    const hx = 9 + rear + B, hy = 6 + bob;
+    disc(put, hx + 1, hy, 4, fl);
+    put(hx + 3, hy - 3, flL);                          // crown light
+    rect(put, hx - 3, hy - 2, 7, 2, flD);              // massive scowling brow
+    put(hx - 3, hy - 1, flM);
+    // slitted furious eye
+    put(hx - 1, hy - 1, flash ? P.white : '#d8e030');
+    put(hx, hy - 1, flash ? P.white : P.outline);
+    // ---- the gaping maw (wider when it roars mid-swipe) ----
+    const gape = 2 + roar;
+    rect(put, hx - 4, hy + 1, 8, gape, flash ? P.white : '#4a1408');
+    put(hx - 1, hy + 2, flash ? P.white : P.redD);      // throat
+    for (let k = 0; k < 4; k++) {
+      put(hx - 4 + k * 2, hy + 1, bnL);                 // upper fangs
+      if (roar > 0) put(hx - 4 + k * 2, hy + 2, bn);
+      put(hx - 3 + k * 2, hy + gape, bnL);              // lower fangs
+    }
+    put(hx - 4, hy + gape + 1, ooze);                   // drool off the jaw
+    put(hx - 4, hy + gape + 2 + (ph % 2), ooze);
+    // thick neck planting the head on the shoulders
+    rect(put, hx, hy + 3, 4, 2, flM);
+
+    // ---- far arm: hangs from the far shoulder, small claw drag ----
+    line(put, 17 + rear + B, 12 + bob, 18 + B, 18 + bob, flD);
+    line(put, 18 + B, 18 + bob, 17 + B, 23 + bob, flM);
+    put(16 + B, 25 + bob, bn);                          // dragging claws
+    put(17 + B, 26 + bob, bn);
+
+    // ---- near arm: the SWIPE claw, drawn last over everything ----
+    {
+      const shX = 8 + rear + B, shY = 11 + bob;         // near shoulder (top of the torso)
+      // wrist arc: rest → raised back → overhead → raking down past the maw → low
+      const W: ReadonlyArray<readonly [number, number]> =
+        ai >= 0 ? [[14, 6], [9, 4], [2, 12], [4, 20]] : [[5, 21], [5, 21], [5, 21], [5, 21]];
+      const [wx0, wy] = ai >= 0 ? W[ai] : [5 - Math.round(stride / 2), 21];
+      const wx = wx0 + B;
+      const elX = Math.round((shX + wx) / 2) + (ai === 0 || ai === 1 ? 2 : -2);
+      const elY = Math.round((shY + wy) / 2) - (ai === 0 || ai === 1 ? 2 : 0);
+      // thick arm (3px)
+      line(put, shX, shY - 1, elX, elY - 1, flL);
+      line(put, shX, shY, elX, elY, fl);
+      line(put, shX, shY + 1, elX, elY + 1, flD);
+      line(put, elX, elY - 1, wx, wy - 1, flL);
+      line(put, elX, elY, wx, wy, fl);
+      line(put, elX, elY + 1, wx, wy + 1, flD);
+      disc(put, elX, elY, 1, fl);                       // elbow knob
+      put(elX, elY - 2, boil);                          // boil at the joint
+      // the big claw: knuckle mass + three long bone talons
+      disc(put, wx, wy, 2, flM);
+      put(wx, wy - 1, fl);
+      const cdx = ai < 0 ? 0 : ai <= 1 ? 1 : 1;         // talon direction
+      const cdy = ai < 0 ? 1 : ai <= 1 ? -1 : 1;
+      for (let k = -1; k <= 1; k++) {
+        put(wx + 2 * cdx + k, wy + 2 * cdy, bn);
+        put(wx + 3 * cdx + k, wy + 3 * cdy, k === 0 ? bnL : bn);
+        if (k === 0) put(wx + 4 * cdx, wy + 4 * cdy, bnL);
+      }
+      // motion arc on the impact frame — traces overhead → strike point
+      if (ai === 2) {
+        for (let a = Math.PI * 1.05; a <= Math.PI * 1.5; a += 0.15) {
+          const ax2 = Math.round(shX + Math.cos(a) * 9);
+          const ay2 = Math.round(shY + Math.sin(a) * 9);
+          mput(ax2, ay2, a < Math.PI * 1.25 ? P.white : flL);
+        }
+        mput(wx - 1, wy - 3, P.white);                  // crack at the strike point
+        mput(wx + 1, wy - 2, P.white);
+      } else if (ai === 3) {
+        mput(wx + 1, wy - 4, flL);                      // fading trail
+        mput(wx + 2, wy - 6, flL);
+      }
+    }
+
+    strokeOutline(px, mput);
   };
 }
 
@@ -676,115 +896,176 @@ export function drawEnemyInfectedHeavy(f: EFrame) {
 export type ToadFrame = 'idle' | 'hop0' | 'hop1' | 'hop2' | 'hop3' | 'atk0' | 'atk1' | 'hit' | 'die0' | 'die1' | 'die2' | 'die3';
 
 export function drawEnemyToad(f: ToadFrame) {
-  return (put: Put) => {
+  return (rawPut: Put) => {
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 9 - step * 2;
       if (r <= 0) return;
-      ellipse(put, 16, 20, r + 2, r, P.infect);
-      ellipse(put, 16, 20, Math.max(0, r + 1), Math.max(0, r - 1), P.infectL);
+      ellipse(rawPut, 16, 20, r + 2, r, P.toad);
+      ellipse(rawPut, 16, 20, Math.max(0, r + 1), Math.max(0, r - 1), P.toadL);
       // toxic splatter particles
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2 + step * 0.5;
         const d = step * 3 + 2;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(20 + Math.sin(a) * d), '#40e060');
+        rawPut(Math.round(16 + Math.cos(a) * d), Math.round(20 + Math.sin(a) * d), '#40e060');
+        rawPut(Math.round(16 + Math.cos(a) * d) + 1, Math.round(20 + Math.sin(a) * d), P.toadW);
       }
       return;
     }
 
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
-    const body = flash ? P.white : P.infect;
-    const bodyD = flash ? P.white : P.infectD;
-    const bodyM = flash ? P.white : P.infectM;
-    const bodyL = flash ? P.white : P.infectL;
+    const hide  = flash ? P.white : P.toad;
+    const hideD = flash ? P.white : P.toadD;
+    const hideM = flash ? P.white : P.toadM;
+    const hideL = flash ? P.white : P.toadL;
+    const wart  = flash ? P.white : P.toadW;
+    const wartL = flash ? P.white : P.toadWL;
+    const belly = flash ? P.white : P.toadB;
     const green = flash ? P.white : '#40e060';
-    const greenD = flash ? P.white : '#208030';
 
     // Hop offsets: how high off the ground the toad is
     let hopY = 0;
     let squashX = 0; // widen body on landing
     let squashY = 0; // flatten body on landing
-    if (f === 'hop0') { hopY = -2; squashY = 1; } // crouching to launch
-    if (f === 'hop1') { hopY = -8; }                // peak of hop
-    if (f === 'hop2') { hopY = -5; }                // coming down
-    if (f === 'hop3') { hopY = 0; squashX = 2; squashY = -1; } // landing squash
+    if (f === 'hop0') { hopY = 1; squashY = 1; squashX = 1; } // coiled to launch
+    if (f === 'hop1') { hopY = -7; }                           // peak of hop
+    if (f === 'hop2') { hopY = -4; }                           // coming down
+    if (f === 'hop3') { hopY = 0; squashX = 2; squashY = 1; }  // landing squash
+    const airborne = f === 'hop1' || f === 'hop2';
 
-    const isAtk = f === 'atk0' || f === 'atk1';
+    const isAtk0 = f === 'atk0';
+    const isAtk1 = f === 'atk1';
 
-    // Shadow (smaller when airborne)
-    const shadowR = hopY < -3 ? 4 : 6;
-    for (let dy = -1; dy <= 1; dy++)
+    // Shadow (smaller when airborne, unrecorded)
+    const shadowR = hopY < -3 ? 5 : 8;
+    for (let dy = 0; dy <= 1; dy++)
       for (let dx = -shadowR; dx <= shadowR; dx++)
-        if ((dx * dx) / (shadowR * shadowR) + (dy * dy) / 2 <= 1)
-          put(16 + dx, 28 + dy, P.shadow);
+        if ((dx * dx) / (shadowR * shadowR) + (dy * dy) / 1.2 <= 1)
+          mput(16 + dx, 27 + dy, P.shadow);
 
-    const cy = 20 + hopY; // body center y
+    const cy = 17 + hopY + (isAtk0 ? 1 : 0); // body centre (crouches on the windup)
 
-    // Back legs (wide, frog-like)
-    if (f === 'hop0') {
-      // Crouched — legs compressed
-      rect(put, 7, cy + 5, 4, 3, bodyD);
-      rect(put, 21, cy + 5, 4, 3, bodyD);
-      put(6, cy + 7, greenD); put(25, cy + 7, greenD); // webbed toes
-    } else if (f === 'hop1' || f === 'hop2') {
-      // Airborne — legs extended behind
-      rect(put, 6, cy + 6, 5, 2, bodyD);
-      rect(put, 21, cy + 6, 5, 2, bodyD);
-      put(5, cy + 7, greenD); put(6, cy + 8, greenD);
-      put(26, cy + 7, greenD); put(25, cy + 8, greenD);
+    // ---- hind leg: the big folded thigh at the rear ----
+    if (airborne) {
+      // launch kick — leg extended back and down
+      line(put, 22, cy + 3, 27, cy + 8, hideM);
+      line(put, 22, cy + 4, 26, cy + 8, hideD);
+      put(28, cy + 9, flash ? P.white : '#c8a040');     // kicked-back toes
+      put(27, cy + 10, flash ? P.white : '#c8a040');
     } else {
-      // Idle / landed — legs tucked
-      rect(put, 7, cy + 4, 4, 4, bodyD);
-      rect(put, 21, cy + 4, 4, 4, bodyD);
-      put(7, cy + 8, greenD); put(8, cy + 8, greenD);
-      put(23, cy + 8, greenD); put(24, cy + 8, greenD);
+      disc(put, 22, cy + 3, 4, hide);                   // folded thigh
+      put(20, cy + 1, hideD);                           // fold crease
+      put(21, cy + 2, hideD);
+      put(21, cy + 4, wart);                            // thigh spots
+      put(23, cy + 2, wart);
+      put(23, cy + 5, wart);
+      // long webbed foot tucked forward under the body
+      for (let x = 17; x <= 23; x++) put(x, 25 - squashY + (x % 2), hideM);
+      put(17, 26 - squashY, flash ? P.white : '#c8a040'); // claw tips
+      put(19, 26 - squashY, flash ? P.white : '#c8a040');
     }
 
-    // Front legs
-    rect(put, 10, cy + 5, 3, 3, bodyD);
-    rect(put, 19, cy + 5, 3, 3, bodyD);
-    put(10, cy + 7, greenD); put(21, cy + 7, greenD);
-
-    // Body (wide and squat toad)
-    const bw = 9 + squashX;
-    const bh = 6 + squashY;
-    ellipse(put, 16, cy, bw, bh, bodyD);
-    ellipse(put, 16, cy - 1, bw - 1, bh - 1, body);
-    ellipse(put, 16, cy - 2, bw - 2, Math.max(1, bh - 2), bodyL);
-
-    // Warts / pustules on back
-    put(11, cy - 2, green); put(12, cy - 3, greenD);
-    put(20, cy - 1, green); put(21, cy - 2, greenD);
-    put(15, cy - 4, green); put(18, cy - 3, green);
-    put(13, cy + 1, green);
-
-    // Eyes (bulging on top of head, toad-like)
-    disc(put, 12, cy - 4, 3, bodyD);
-    disc(put, 20, cy - 4, 3, bodyD);
-    disc(put, 12, cy - 4, 2, bodyM);
-    disc(put, 20, cy - 4, 2, bodyM);
-    // Eye glow
-    put(12, cy - 5, '#e0ff40'); put(13, cy - 5, '#e0ff40');
-    put(20, cy - 5, '#e0ff40'); put(21, cy - 5, '#e0ff40');
-    put(12, cy - 4, P.outline); put(20, cy - 4, P.outline);
-
-    // Mouth
-    if (isAtk) {
-      // Open mouth — spitting
-      rect(put, 13, cy + 2, 6, 3, P.outline);
-      rect(put, 14, cy + 3, 4, 1, green);
-      // Glob leaving mouth
-      if (f === 'atk1') {
-        disc(put, 16, cy - 6, 2, green);
-        put(16, cy - 7, '#80ff90');
+    // ---- squat warty body, brow raised at the front ----
+    const bw = 10 + squashX;
+    const bh = 7 - squashY;
+    ellipse(put, 16, cy, bw, bh, hide);
+    // pebbled hide texture
+    for (let yy = -bh; yy <= bh; yy++)
+      for (let xx = -bw; xx <= bw; xx++) {
+        const X = 16 + xx, Y = cy + yy;
+        if (!px.has(Y * 32 + X)) continue;
+        if ((xx * 3 + yy * 7 + 64) % 9 === 0) put(X, Y, hideM);
+        else if ((xx * 5 + yy * 3 + 64) % 13 === 0) put(X, Y, hideD);
       }
+    // back highlight
+    for (let xx = -3; xx <= 4; xx++)
+      if ((xx + 32) % 2 === 0) put(16 + xx, cy - bh + 1, hideL);
+
+    // ---- warts — raised brown bumps with lit tops ----
+    disc(put, 17, cy - 4, 1, wart); put(17, cy - 5, wartL);
+    disc(put, 21, cy - 2, 1, wart); put(21, cy - 3, wartL);
+    disc(put, 13, cy - 3, 1, wart); put(13, cy - 4, wartL);
+    put(19, cy - 6, wart);
+    put(24, cy - 4, wart);
+    put(11, cy - 1, wart);
+    put(15, cy - 1, wart);
+    put(23, cy + 1, wart);
+
+    // ---- grumpy face: heavy brow, amber eye, downturned frown ----
+    // brow ridge looming over the eye
+    rect(put, 5, cy - 6, 6, 2, hideM);
+    rect(put, 5, cy - 6, 6, 1, hideD);
+    put(11, cy - 5, hideD);
+    // big amber eye with a slit pupil
+    put(7, cy - 4, flash ? P.white : '#e89018');
+    put(8, cy - 4, flash ? P.white : '#f0a830');
+    put(7, cy - 3, flash ? P.white : '#a85808');
+    put(8, cy - 3, flash ? P.white : P.outline);        // slit
+    put(6, cy - 4, P.white);                            // wet glint
+    // nostril on the snout
+    put(4, cy - 2, hideD);
+    // mouth + chin
+    if (isAtk1) {
+      // maw wide open — the glob is coming out
+      ellipse(put, 7, cy + 2, 4, 3, flash ? P.white : '#2e1208');
+      rect(put, 4, cy, 7, 1, hideD);                    // raised upper lip
+      put(8, cy + 3, flash ? P.white : P.redD);         // throat
+      // the toxic glob emerging from the mouth
+      disc(put, 4, cy + 2, 1, green);
+      put(3, cy + 1, flash ? P.white : '#80ff90');
+      put(4, cy + 3, flash ? P.white : '#208030');
+      put(6, cy + 5, belly);                            // dropped chin
     } else {
-      // Closed mouth — wide line
-      rect(put, 12, cy + 2, 8, 1, P.outline);
+      // the reference's wide downturned frown
+      line(put, 3, cy + 1, 7, cy + 3, hideD);
+      line(put, 7, cy + 3, 12, cy + 3, hideD);
+      put(12, cy + 4, hideD);                           // grumpy corner crease
+      // tan chin + belly
+      for (let yy = cy + 4; yy <= cy + bh; yy++)
+        for (let xx = 4; xx <= 13 - (yy - cy - 4); xx++) {
+          if (!px.has(yy * 32 + xx)) continue;
+          put(xx, yy, belly);
+        }
+      put(6, cy + 5, flash ? P.white : '#9a8050');      // chin shade
+      put(9, cy + 6, flash ? P.white : '#9a8050');
+    }
+    // inflated throat pouch on the windup
+    if (isAtk0) {
+      disc(put, 7, cy + 4, 3, belly);
+      put(6, cy + 3, flash ? P.white : '#d8bc8c');      // stretched skin sheen
+      put(5, cy + 5, flash ? P.white : '#9a8050');
     }
 
-    // Throat pouch (slightly lighter)
-    rect(put, 13, cy + 1, 6, 1, bodyL);
+    // ---- front legs: planted, long toes splayed forward ----
+    if (airborne) {
+      // tucked up against the chest
+      line(put, 10, cy + 4, 8, cy + 6, hideM);
+      put(7, cy + 6, flash ? P.white : '#c8a040');
+    } else {
+      // near leg
+      rect(put, 9, cy + 4, 2, 25 - squashY - (cy + 4), hide);
+      put(9, cy + 4, hideL);                            // shoulder light
+      put(10, cy + 6, hideD);                           // elbow crease
+      // splayed toes with claws
+      put(7, 25 - squashY, hide);
+      put(6, 26 - squashY, flash ? P.white : '#c8a040');
+      put(8, 26 - squashY, flash ? P.white : '#c8a040');
+      put(10, 26 - squashY, flash ? P.white : '#c8a040');
+      // far leg
+      rect(put, 13, cy + 5, 2, 24 - squashY - (cy + 5), hideM);
+      put(12, 25 - squashY, hideD);
+      put(14, 25 - squashY, hideD);
+    }
+
+    strokeOutline(px, mput);
   };
 }
 
