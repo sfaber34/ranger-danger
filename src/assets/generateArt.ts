@@ -642,7 +642,14 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('fboss-idle',       ['fboss_idle0','fboss_idle1','fboss_idle2','fboss_idle3'], 6, -1);
   mk('fboss-move',       ['fboss_move0','fboss_move1','fboss_move2','fboss_move3'], 8, -1);
   mk('fboss-atk',        ['fboss_atk0','fboss_atk1'], 4, 0);
-  mk('fboss-chargewind', ['fboss_chargeWind','fboss_idle0'], 6, -1);
+  // Dash windup: plays ONCE (repeat 0) over the 1.2s charge_wind state —
+  // the arms rise a single time (cw0→cw1), then stay locked overhead while
+  // the peak frames (cw2-5, flame phases 0-3) keep the inferno pulsing.
+  mk('fboss-chargewind', [
+    'fboss_chargeWind0','fboss_chargeWind1',
+    'fboss_chargeWind2','fboss_chargeWind3','fboss_chargeWind4','fboss_chargeWind5',
+    'fboss_chargeWind2','fboss_chargeWind3','fboss_chargeWind4','fboss_chargeWind5',
+  ], 8, 0);
   mk('fboss-hit',        ['fboss_hit'], 10, 0);
   mk('fboss-birth',      ['fboss_birth0','fboss_birth1','fboss_birth2','fboss_birth3','fboss_birth4'], 4, 0);
   mk('fboss-die',        ['fboss_die0','fboss_die1','fboss_die2','fboss_die3','fboss_die4'], 6, 0);

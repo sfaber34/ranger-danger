@@ -976,6 +976,8 @@ export interface WendigoOpts {
   pockets?: number;
   phase?: number;      // 0-3 flame flicker phase
   armSway?: number;    // -1 (slam) … 1 (claws raised)
+  flare?: number;      // 0 (calm) … 2 (full dash-windup inferno)
+  armsOverhead?: boolean; // windup pose: arms thrown high, talons to the sky
 }
 
 export function drawWendigoBody(rawPut: Put, opts: WendigoOpts) {
@@ -1033,13 +1035,17 @@ export function drawWendigoBody(rawPut: Put, opts: WendigoOpts) {
   // ---- ANIMATED GREEN FLAME PYRE (lower body) ----
   // Each column is a flame tongue whose height breathes with the phase; the
   // side tongues climb past the pelvis so the fire visibly engulfs the hips.
-  const heatBoost = chargeGlow ? 0.12 : 0;
-  for (let x = -10; x <= 10; x++) {
+  // `flare` (dash windup) surges the pyre: taller, wider, hotter — at full
+  // flare a wall of fire towers up behind the skeleton.
+  const flare = opts.flare ?? (chargeGlow ? 0.6 : 0);
+  const heatBoost = flare * 0.1 + (chargeGlow ? 0.06 : 0);
+  for (let x = -12; x <= 12; x++) {
     const ax = Math.abs(x);
-    const base = 30 - ax * 1.9;
+    const base = 30 + flare * 6 - ax * (1.9 - flare * 0.3);
     const lick = Math.sin(x * 1.9 + ph * (Math.PI / 2)) * 4
                + Math.sin(x * 0.7 - ph * (Math.PI / 4)) * 2;
-    const h = Math.max(3, Math.round(base + lick));
+    const h = Math.round(base + lick);
+    if (h < 3) continue;
     for (let i = 0; i < h; i++) {
       const y = 58 - i;
       const t = i / h;
@@ -1048,15 +1054,23 @@ export function drawWendigoBody(rawPut: Put, opts: WendigoOpts) {
       pf(cx + x, y, heat > 0.55 ? fC : heat > 0.38 ? fL : heat > 0.2 ? fG : fD);
     }
   }
-  // white-hot core writhing up the middle
-  for (let i = 0; i < 13; i++)
+  // white-hot core writhing up the middle (taller while flaring)
+  for (let i = 0; i < 13 + Math.round(flare * 5); i++)
     pf(cx + Math.round(Math.sin(i * 0.8 + ph * 1.3) * 1.5), 56 - i, i < 7 ? fC : fL);
-  // detached sparks drifting upward (cycle with the phase)
+  // detached sparks drifting upward (the whole swarm rises during a flare)
   const sparks: ReadonlyArray<readonly [number, number]> = [[-9, 33], [7, 29], [-5, 25], [10, 36], [3, 22]];
   for (let k = 0; k < sparks.length; k++) {
-    if ((k + ph) % 3 === 0) continue;
+    if (flare < 1 && (k + ph) % 3 === 0) continue;
     const [sx, sy] = sparks[k];
-    pf(cx + sx, sy - ((ph * 2 + k * 3) % 6), k % 2 === 0 ? fL : fG);
+    pf(cx + sx, sy - ((ph * 2 + k * 3) % 6) - Math.round(flare * 4), k % 2 === 0 ? fL : fG);
+  }
+  // windup only: embers spiraling high around the whole body
+  if (flare >= 1) {
+    for (let k = 0; k < 6; k++) {
+      const ang = (k / 6) * Math.PI * 2 + ph * 0.9;
+      pf(Math.round(cx + Math.cos(ang) * (13 + (k % 2) * 3)),
+         Math.round(34 + bob + Math.sin(ang) * 12), k % 2 === 0 ? fL : fG);
+    }
   }
 
   // ---- torso: hollow chest cavity behind the ribs ----
@@ -1113,11 +1127,16 @@ export function drawWendigoBody(rawPut: Put, opts: WendigoOpts) {
   }
 
   // ---- arms: thick reaching bones ending in hooked talons ----
+  // armsOverhead (dash windup) throws the arms high above the shoulders
+  // with the talons raking the sky; otherwise armSway tilts the reach.
   const armUp = Math.round(armSway * 3);
+  const overhead = !!opts.armsOverhead;
   for (const s of [-1, 1] as const) {
     const shX = cx + s * 11, shY = ty + 1;
-    const elX = cx + s * 18, elY = ty + 2 - armUp;
-    const wrX = cx + s * 24, wrY = ty + 5 - armUp * 2;
+    const elX = overhead ? cx + s * 15 : cx + s * 18;
+    const elY = overhead ? ty - 5 : ty + 2 - armUp;
+    const wrX = overhead ? cx + s * 18 : cx + s * 24;
+    const wrY = overhead ? ty - 11 : ty + 5 - armUp * 2;
     // upper arm (3px thick — this thing is strong)
     line(put, shX, shY - 1, elX, elY - 1, boneL);
     line(put, shX, shY, elX, elY, bone);
@@ -1126,13 +1145,16 @@ export function drawWendigoBody(rawPut: Put, opts: WendigoOpts) {
     line(put, elX, elY - 1, wrX, wrY - 1, boneL);
     line(put, elX, elY, wrX, wrY, bone);
     line(put, elX, elY + 1, wrX, wrY + 1, boneD);
-    // jagged elbow spur
-    put(elX, elY - 2, bone);
-    put(elX - s, elY - 3, boneL);
+    if (!overhead) { // jagged elbow spur
+      put(elX, elY - 2, bone);
+      put(elX - s, elY - 3, boneL);
+    }
     // bony palm
-    disc(put, wrX, wrY + 1, 2, bone);
-    put(wrX, wrY, boneL);
-    // three huge talons hooking down and inward from the palm
+    disc(put, wrX, wrY + (overhead ? -1 : 1), 2, bone);
+    put(wrX, wrY + (overhead ? -2 : 0), boneL);
+    // three huge talons hooking from the palm — downward normally,
+    // skyward in the overhead windup pose
+    const dir = overhead ? -1 : 1;
     const TALON: ReadonlyArray<ReadonlyArray<readonly [number, number]>> = [
       [[0, 1], [1, 1], [1, 2], [2, 3], [2, 4], [1, 5]],          // outer hook
       [[0, 2], [1, 2], [1, 3], [1, 4], [2, 5], [2, 6], [1, 7]],  // long middle talon
@@ -1143,7 +1165,7 @@ export function drawWendigoBody(rawPut: Put, opts: WendigoOpts) {
       const bx = wrX + s * (k * 2 - 2);
       for (let j = 0; j < path.length; j++) {
         const [dx2, dy2] = path[j];
-        put(bx + s * dx2, wrY + 1 + dy2, j === path.length - 1 ? boneL : j < 2 ? boneD : bone);
+        put(bx + s * dx2, wrY + dir * (1 + dy2), j === path.length - 1 ? boneL : j < 2 ? boneD : bone);
       }
     }
   }
@@ -1151,8 +1173,20 @@ export function drawWendigoBody(rawPut: Put, opts: WendigoOpts) {
   // ---- flame tongues licking up over the lower ribs (drawn over the bone) ----
   for (const s of [-1, 1] as const) {
     const lx2 = cx + s * (3 + (ph % 2));
-    for (let j = 0; j < 6; j++)
-      pf(lx2 + Math.round(Math.sin(j * 0.9 + ph) * 1.5), ty + 13 - j, j > 3 ? fG : j > 1 ? fL : fC);
+    const tall = 6 + Math.round(flare * 3);
+    for (let j = 0; j < tall; j++)
+      pf(lx2 + Math.round(Math.sin(j * 0.9 + ph) * 1.5), ty + 13 - j, j > tall - 3 ? fG : j > 1 ? fL : fC);
+  }
+  // windup: fire crawls up the raised arms toward the claws
+  if (flare >= 1) {
+    for (const s of [-1, 1] as const) {
+      const wrX = overhead ? cx + s * 18 : cx + s * 24;
+      const wrY = overhead ? ty - 11 : ty + 5 - armUp * 2;
+      pf(wrX - s, wrY - 2, fL);
+      pf(wrX + s, wrY - 3 + (ph % 2), fG);
+      pf(wrX, wrY - 4 + ((ph + 1) % 2), fD);
+      pf(overhead ? cx + s * 14 : cx + s * 17, overhead ? ty - 3 : ty + 1 - armUp, fG);
+    }
   }
 
   // ---- skull: heavy-browed deer skull, jaw agape ----
@@ -1256,7 +1290,7 @@ export type ForestBossFrame =
   | 'idle0' | 'idle1' | 'idle2' | 'idle3'
   | 'move0' | 'move1' | 'move2' | 'move3'
   | 'atk0' | 'atk1'
-  | 'chargeWind'
+  | 'chargeWind0' | 'chargeWind1' | 'chargeWind2' | 'chargeWind3' | 'chargeWind4' | 'chargeWind5'
   | 'hit'
   | 'birth0' | 'birth1' | 'birth2' | 'birth3' | 'birth4'
   | 'die0' | 'die1' | 'die2' | 'die3' | 'die4';
@@ -1265,7 +1299,7 @@ export const forestBossFrames: ForestBossFrame[] = [
   'idle0','idle1','idle2','idle3',
   'move0','move1','move2','move3',
   'atk0','atk1',
-  'chargeWind','hit',
+  'chargeWind0','chargeWind1','chargeWind2','chargeWind3','chargeWind4','chargeWind5','hit',
   'birth0','birth1','birth2','birth3','birth4',
   'die0','die1','die2','die3','die4'
 ];
@@ -1284,7 +1318,14 @@ export function drawForestBoss(frame: ForestBossFrame) {
       case 'move3':      return drawWendigoBody(put, { bob: -1, phase: 3, armSway: 0 });
       case 'atk0':       return drawWendigoBody(put, { bob: -2, armSway: 1, phase: 0 });   // claws raised
       case 'atk1':       return drawWendigoBody(put, { bob: 2, armSway: -1, phase: 2 });   // slam
-      case 'chargeWind': return drawWendigoBody(put, { chargeGlow: true, bob: 0, phase: 1 });
+      // dash windup: ONE arm raise (out → overhead), then the arms stay
+      // locked skyward while only the flames pulse (cw2-5 cycle the phase)
+      case 'chargeWind0': return drawWendigoBody(put, { chargeGlow: true, armSway: 1, flare: 0.6, phase: 0, bob: -1 });
+      case 'chargeWind1': return drawWendigoBody(put, { chargeGlow: true, armsOverhead: true, flare: 1.2, phase: 1, bob: -2 });
+      case 'chargeWind2': return drawWendigoBody(put, { chargeGlow: true, armsOverhead: true, flare: 2, phase: 0, bob: -2 });
+      case 'chargeWind3': return drawWendigoBody(put, { chargeGlow: true, armsOverhead: true, flare: 2, phase: 1, bob: -2 });
+      case 'chargeWind4': return drawWendigoBody(put, { chargeGlow: true, armsOverhead: true, flare: 2, phase: 2, bob: -2 });
+      case 'chargeWind5': return drawWendigoBody(put, { chargeGlow: true, armsOverhead: true, flare: 2, phase: 3, bob: -2 });
       case 'hit':        return drawWendigoBody(put, { flash: true });
       case 'birth0':     return drawWendigoBody(put, { pockets: 0, phase: 0 });
       case 'birth1':     return drawWendigoBody(put, { pockets: 1, phase: 1 });
