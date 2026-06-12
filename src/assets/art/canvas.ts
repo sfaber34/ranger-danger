@@ -167,6 +167,12 @@ export const P = {
   wBone:   '#c8c0a8',
   wBoneD:  '#8a8068',
   wBoneL:  '#e8e0d0',
+
+  // Forest boss green-flame ramp (dark edge → white-hot core)
+  gfire:   '#2aa84a',
+  gfireD:  '#15602c',
+  gfireL:  '#7df08a',
+  gfireC:  '#d6ffd2',
   wGhost:  '#1a3a20',   // solid equivalent of translucent green mist
   wGhostD: '#0e2410',   // darker mist
   wGhostL: '#2a5a30',   // lighter mist edge

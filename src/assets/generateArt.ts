@@ -638,8 +638,9 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('iboss-die',        ['iboss_die0','iboss_die1','iboss_die2','iboss_die3','iboss_die4'], 6, 0);
 
   // Forest boss (Ent) animations
-  mk('fboss-idle',       ['fboss_idle0','fboss_idle1'], 2, -1);
-  mk('fboss-move',       ['fboss_move0','fboss_move1','fboss_move2','fboss_move3'], 5, -1);
+  // 4-frame idle/move at flicker rates so the green flames never sit still
+  mk('fboss-idle',       ['fboss_idle0','fboss_idle1','fboss_idle2','fboss_idle3'], 6, -1);
+  mk('fboss-move',       ['fboss_move0','fboss_move1','fboss_move2','fboss_move3'], 8, -1);
   mk('fboss-atk',        ['fboss_atk0','fboss_atk1'], 4, 0);
   mk('fboss-chargewind', ['fboss_chargeWind','fboss_idle0'], 6, -1);
   mk('fboss-hit',        ['fboss_hit'], 10, 0);
