@@ -156,6 +156,39 @@ export const P = {
   spiderM: '#1a1a1a',
   spiderL: '#4a4a4a',
   spiderEye: '#ff2020',
+  // bat (grey-brown fur, plum membrane wings)
+  bat2:   '#4e4248',
+  bat2D:  '#2a2228',
+  bat2M:  '#3c3238',
+  bat2L:  '#6a5a62',
+  batW:   '#5e2c44',   // wing membrane plum
+  batWD:  '#3a1a2c',
+  batWL:  '#7e4058',   // membrane sheen / ear inner
+
+  // dragonfly (charcoal-maroon, red accents, pale green wings)
+  dfly:   '#3a3236',
+  dflyD:  '#1e181c',
+  dflyM:  '#2c2629',
+  dflyL:  '#564a50',
+  dflyR:  '#c81c24',   // red eye / segment streaks / pincers
+  dflyRD: '#701014',
+  dflyW:  '#c2ccba',   // pale green wing
+  dflyWD: '#8e9888',   // wing edges
+
+  // mosquito (brown, pale wings)
+  mosq:   '#6a5240',
+  mosqD:  '#3e2e22',
+  mosqM:  '#54402f',
+  mosqL:  '#8a705a',
+  mosqW:  '#d8dcd0',   // pale translucent wing
+  mosqWD: '#a8ac9e',   // wing veins/edges
+
+  // crow/raven (charcoal feathers)
+  crow:   '#2e2e34',
+  crowD:  '#16161a',
+  crowM:  '#232328',
+  crowL:  '#4a4a54',
+
   // blighted toad (olive warty grump)
   toad:   '#7a6e38',
   toadD:  '#4a4220',

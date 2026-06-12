@@ -14,7 +14,7 @@ import {
   drawEnemySpider, drawEnemyCrow, drawEnemyBat, drawEnemyDragonfly,
   drawEnemyMosquito, drawMosquitoDart, drawBirdPoop,
   drawEnemySkeleton, drawEnemyWarlock, drawEnemyGolem, drawEnemyShadowImp,
-  drawEnemyCastleBat, drawEnemyCastleRat, drawWarlockBolt,
+  drawEnemyCastleRat, drawWarlockBolt,
   drawEnemyDesert, drawSunBolt,
 } from './art/enemies';
 import {
@@ -121,10 +121,15 @@ export function generateAllArt(scene: Phaser.Scene) {
   // Spider uses the extended frame set (6-frame scuttle, 4-frame lunge)
   for (const f of e6Frames) add(scene, `es_${f}`, makeCanvas(32, drawEnemySpider(f)));
   // River flying enemies
-  for (const f of eFrames) add(scene, `ecr_${f}`, makeCanvas(32, drawEnemyCrow(f)));
-  for (const f of eFrames) add(scene, `ebt_${f}`, makeCanvas(32, drawEnemyBat(f)));
-  for (const f of eFrames) add(scene, `edf_${f}`, makeCanvas(32, drawEnemyDragonfly(f)));
-  for (const f of eFrames) add(scene, `emq_${f}`, makeCanvas(32, drawEnemyMosquito(f)));
+  // Crow uses the extended frame set (6-frame wingbeat, 4-frame dive)
+  for (const f of e6Frames) add(scene, `ecr_${f}`, makeCanvas(32, drawEnemyCrow(f)));
+  // Bat uses the extended frame set (6-frame wingbeat, 4-frame screech-bite).
+  // castle_bat enemies share these textures — there is no separate ecb set.
+  for (const f of e6Frames) add(scene, `ebt_${f}`, makeCanvas(32, drawEnemyBat(f)));
+  // Dragonfly uses the extended frame set (6-frame hover, 4-frame fang dart)
+  for (const f of e6Frames) add(scene, `edf_${f}`, makeCanvas(32, drawEnemyDragonfly(f)));
+  // Mosquito uses the extended frame set (6-frame hover, 4-frame needle jab)
+  for (const f of e6Frames) add(scene, `emq_${f}`, makeCanvas(32, drawEnemyMosquito(f)));
   // Mosquito dart projectile
   add(scene, 'mdart_0', makeCanvas(16, drawMosquitoDart('dart0')));
   add(scene, 'mdart_1', makeCanvas(16, drawMosquitoDart('dart1')));
@@ -136,7 +141,6 @@ export function generateAllArt(scene: Phaser.Scene) {
   for (const f of eFrames) add(scene, `ewl_${f}`, makeCanvas(32, drawEnemyWarlock(f)));
   for (const f of eFrames) add(scene, `ego_${f}`, makeCanvas(32, drawEnemyGolem(f)));
   for (const f of eFrames) add(scene, `esi_${f}`, makeCanvas(32, drawEnemyShadowImp(f)));
-  for (const f of eFrames) add(scene, `ecb_${f}`, makeCanvas(32, drawEnemyCastleBat(f)));
   for (const f of eFrames) add(scene, `ecrat_${f}`, makeCanvas(32, drawEnemyCastleRat(f)));
   // Warlock magic bolt projectile
   add(scene, 'wbolt_0', makeCanvas(32, drawWarlockBolt('bolt0')));
@@ -523,23 +527,27 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('es-die',  ['es_die0','es_die1','es_die2','es_die3'], 10, 0);
 
   // River flying enemies
-  mk('ecr-move', ['ecr_move0','ecr_move1','ecr_move2','ecr_move3'], 8, -1);
-  mk('ecr-atk',  ['ecr_atk0','ecr_atk1'], 8, -1);
+  // 6-frame wingbeat + 4-frame scream-and-dive strike
+  mk('ecr-move', ['ecr_move0','ecr_move1','ecr_move2','ecr_move3','ecr_move4','ecr_move5'], 12, -1);
+  mk('ecr-atk',  ['ecr_atk0','ecr_atk1','ecr_atk2','ecr_atk3'], 10, -1);
   mk('ecr-hit',  ['ecr_hit'], 10, 0);
   mk('ecr-die',  ['ecr_die0','ecr_die1','ecr_die2','ecr_die3'], 10, 0);
 
-  mk('ebt-move', ['ebt_move0','ebt_move1','ebt_move2','ebt_move3'], 6, -1);
-  mk('ebt-atk',  ['ebt_atk0','ebt_atk1'], 6, -1);
+  // 6-frame full wingbeat + 4-frame screech-lunge-snap (shared by castle_bat)
+  mk('ebt-move', ['ebt_move0','ebt_move1','ebt_move2','ebt_move3','ebt_move4','ebt_move5'], 12, -1);
+  mk('ebt-atk',  ['ebt_atk0','ebt_atk1','ebt_atk2','ebt_atk3'], 10, -1);
   mk('ebt-hit',  ['ebt_hit'], 8, 0);
   mk('ebt-die',  ['ebt_die0','ebt_die1','ebt_die2','ebt_die3'], 8, 0);
 
-  mk('edf-move', ['edf_move0','edf_move1','edf_move2','edf_move3'], 12, -1);
-  mk('edf-atk',  ['edf_atk0','edf_atk1'], 12, -1);
+  // 6-frame darting hover + 4-frame rear-and-dart fang strike
+  mk('edf-move', ['edf_move0','edf_move1','edf_move2','edf_move3','edf_move4','edf_move5'], 14, -1);
+  mk('edf-atk',  ['edf_atk0','edf_atk1','edf_atk2','edf_atk3'], 12, -1);
   mk('edf-hit',  ['edf_hit'], 10, 0);
   mk('edf-die',  ['edf_die0','edf_die1','edf_die2','edf_die3'], 10, 0);
 
-  mk('emq-move', ['emq_move0','emq_move1','emq_move2','emq_move3'], 10, -1);
-  mk('emq-atk',  ['emq_atk0','emq_atk1'], 10, -1);
+  // 6-frame buzzing hover + 4-frame rear-and-jab dart shot
+  mk('emq-move', ['emq_move0','emq_move1','emq_move2','emq_move3','emq_move4','emq_move5'], 14, -1);
+  mk('emq-atk',  ['emq_atk0','emq_atk1','emq_atk2','emq_atk3'], 12, -1);
   mk('emq-hit',  ['emq_hit'], 10, 0);
   mk('emq-die',  ['emq_die0','emq_die1','emq_die2','emq_die3'], 10, 0);
 
@@ -567,10 +575,6 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('esi-hit',  ['esi_hit'], 10, 0);
   mk('esi-die',  ['esi_die0','esi_die1','esi_die2','esi_die3'], 10, 0);
 
-  mk('ecb-move', ['ecb_move0','ecb_move1','ecb_move2','ecb_move3'], 6, -1);
-  mk('ecb-atk',  ['ecb_atk0','ecb_atk1'], 6, -1);
-  mk('ecb-hit',  ['ecb_hit'], 8, 0);
-  mk('ecb-die',  ['ecb_die0','ecb_die1','ecb_die2','ecb_die3'], 8, 0);
 
   mk('ecrat-move', ['ecrat_move0','ecrat_move1','ecrat_move2','ecrat_move3'], 10, -1);
   mk('ecrat-atk',  ['ecrat_atk0','ecrat_atk1'], 10, -1);

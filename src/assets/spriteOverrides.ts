@@ -13,7 +13,7 @@ const CAMPAIGN_BIOME_FOLDERS: Record<Biome, string[]> = {
   forest:     ['bear', 'spider', 'wolf', 'boss_forest'],
   infected:   ['toad', 'infected_basic', 'infected_heavy', 'boss_infected'],
   river:      ['crow', 'bat', 'dragonfly', 'mosquito', 'boss_river'],
-  castle:     ['skeleton', 'warlock', 'golem', 'shadow_imp', 'castle_bat', 'castle_rat', 'boss_castle_q', 'boss_castle_d'],
+  castle:     ['skeleton', 'warlock', 'golem', 'shadow_imp', 'bat', 'castle_rat', 'boss_castle_q', 'boss_castle_d'],
   desert:     ['scorpion', 'boss_scorpion', 'scarab', 'sand_mite', 'cactus_hopper', 'dune_strider', 'sand_wraith', 'temple_guardian', 'sun_mote', 'boss_desert_burrower', 'boss_desert_scorpion', 'boss_desert_sandstorm', 'boss_desert_wraith', 'boss_desert_construct', 'boss_desert_sun_priest'],
   // Unimplemented biomes — fall back to loading everything if a future level
   // somehow routes here, so a missing entry doesn't ship as broken sprites.
@@ -63,7 +63,7 @@ export function biomeFolderFilter(biome: Biome, difficulty: Difficulty): Set<str
 //
 // Names that work in OVERRIDES match the sprite-folder names: basic, heavy,
 // snake, rat, deer, wolf, bear, spider, infected_basic, infected_heavy, crow,
-// bat, dragonfly, mosquito, skeleton, warlock, golem, shadow_imp, castle_bat,
+// bat, dragonfly, mosquito, skeleton, warlock, golem, shadow_imp,
 // castle_rat, toad, scorpion, boss_scorpion, scarab, sand_mite, cactus_hopper, dune_strider,
 // sand_wraith, temple_guardian, sun_mote, player, plus the bosses (boss_grasslands, boss_meadow,
 // boss_infected, boss_forest, boss_river, boss_castle_q, boss_castle_d).
@@ -103,7 +103,6 @@ const OVERRIDES: Record<string, CharacterOverrides> = {
   dragonfly:  { pngScaleMultiplier: 1.2,  anims: { move: { fps: 24 }, atk: { fps: 24 } }  },
   mosquito:  { pngScaleMultiplier: 1.1 },
   bat:  { pngScaleMultiplier: 1.2 },
-  castle_bat:  { pngScaleMultiplier: 1.1 },
   shadow_imp:  { anims: { move: { fps: 18 } } },
   toad:  { pngScaleMultiplier: 1.2 },
   infected_basic:  { pngScaleMultiplier: 1.2,  anims: { atk: { fps: 22 } } },
@@ -196,7 +195,6 @@ const BUILTIN: CharacterSpec[] = [
   { folder: 'warlock',        texPrefix: 'ewl',   anims: stdEnemyAnims('ewl') },
   { folder: 'golem',          texPrefix: 'ego',   anims: stdEnemyAnims('ego') },
   { folder: 'shadow_imp',     texPrefix: 'esi',   anims: stdEnemyAnims('esi') },
-  { folder: 'castle_bat',     texPrefix: 'ecb',   anims: stdEnemyAnims('ecb') },
   { folder: 'castle_rat',     texPrefix: 'ecrat', anims: stdEnemyAnims('ecrat') },
   { folder: 'scorpion',        texPrefix: 'escp',  anims: stdEnemyAnims('escp') },
   { folder: 'boss_scorpion',   texPrefix: 'ebsc',  anims: stdEnemyAnims('ebsc') },

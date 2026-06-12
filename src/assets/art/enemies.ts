@@ -1439,292 +1439,642 @@ export function drawEnemySpider(f: EFrame6) {
 // ==================================================================
 //  ENEMY CROW (32x32) — dark flying bird, basic river enemy
 // ==================================================================
-export function drawEnemyCrow(f: EFrame) {
-  return (put: Put) => {
+export function drawEnemyCrow(f: EFrame6) {
+  return (rawPut: Put) => {
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 6 - step * 2;
       if (r <= 0) return;
-      disc(put, 16, 18, r, '#232330');
-      disc(put, 16, 18, Math.max(0, r - 1), '#383850');
+      disc(rawPut, 16, 18, r, P.crow);
+      disc(rawPut, 16, 18, Math.max(0, r - 1), P.crowL);
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2 + step * 0.5;
         const d = step * 3 + 2;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), '#1a1a28');
+        rawPut(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), P.crowD);
+        rawPut(Math.round(16 + Math.cos(a) * d) + 1, Math.round(18 + Math.sin(a) * d), P.crowM);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
-    const body = flash ? P.white : '#232330';
-    const bodyD = flash ? P.white : '#141420';
-    const bodyL = flash ? P.white : '#383850';
+    const fe  = flash ? P.white : P.crow;    // charcoal feathers
+    const feD = flash ? P.white : P.crowD;
+    const feM = flash ? P.white : P.crowM;
+    const feL = flash ? P.white : P.crowL;   // grey feather edges
+    const beak = flash ? P.white : '#3a3a42';
+    const maw  = flash ? P.white : '#a01820'; // screaming red mouth
 
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 1 : 0;
-    const bob = [0, -1, -2, -1][phase];
-    const wingY = [0, -2, -3, -1][phase];
+    // 6-phase wingbeat; attack = scream + diving talon strike
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : 0;
+    // flap: 1 = full upstroke … -1 = full downstroke
+    const flap = mi >= 0 ? [0.9, 0.5, -0.2, -0.9, -0.4, 0.3][mi]
+               : ai >= 0 ? [0.7, -0.3, -0.8, 0.2][ai] : 0.5;
+    const ox = ai >= 0 ? [1, -1, -2, 0][ai] : 0;        // dive lunge
+    const tilt = ai >= 0 ? [0, 1, 2, 1][ai] : 0;        // nose-down pitch
+    const bodyDy = flap < -0.5 ? -1 : flap > 0.6 ? 1 : 0; // body rises on the downstroke
+    const gape = ai === 1 ? 2 : ai === 2 ? 3 : 1;       // always screaming a little
 
-    // Shadow
-    for (let dy = -1; dy <= 1; dy++)
-      for (let dx = -5; dx <= 5; dx++)
-        if ((dx * dx) / 25 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+    // small shadow far below (it flies high)
+    for (let dx = -5; dx <= 5; dx++)
+      if ((dx * dx) / 25 <= 1) mput(16 + dx + ox, 28, P.shadow);
 
-    // Wings behind body — thick, connected
-    for (let i = 0; i < 9; i++) {
-      const t = i / 8;
-      const wy = Math.round(wingY * Math.sin(t * Math.PI));
-      const th = Math.max(0, Math.round(2 - t * 1.5));
-      for (let d = 0; d <= th; d++) {
-        put(12 - i, 15 + bob + wy + d, bodyD);
-        put(20 + i, 15 + bob + wy + d, bodyD);
+    const bcx = 14 + ox, bcy = 17 + bodyDy + tilt;      // body centre
+
+    // ---- FAR WING: rises behind the body, darker, long primaries ----
+    {
+      const wrX = bcx + 3, wrY = bcy - 4;
+      const th = Math.PI * (1.95 - flap * 0.28);        // up-right ↔ down-right
+      for (let k = 0; k < 4; k++) {
+        const a = th + (k - 1.5) * 0.14;
+        const len = 9 + (1.5 - Math.abs(k - 1.5)) * 2;
+        const tx2 = Math.round(wrX + Math.cos(a) * len);
+        const ty2 = Math.round(wrY + Math.sin(a) * len);
+        line(put, wrX, wrY, tx2, ty2, feD);
+        put(tx2, ty2, feM);                              // feather tip
       }
-      put(12 - i, 15 + bob + wy, bodyL);
-      put(20 + i, 15 + bob + wy, bodyL);
+      disc(put, wrX, wrY, 2, feD);                       // coverts
     }
 
-    // Body
-    disc(put, 16, 16 + bob, 5, bodyD);
-    disc(put, 16, 16 + bob, 4, body);
-    // Head
-    disc(put, 16, 11 + bob, 3, bodyL);
-    // Beak
-    put(16, 14 + bob, '#c8a028');
-    put(16, 15 + bob, '#b49020');
-    // Eyes
-    put(14, 10 + bob, flash ? P.white : '#ff5050');
-    put(18, 10 + bob, flash ? P.white : '#ff5050');
-    // Tail
-    put(14, 22 + bob, bodyD); put(15, 23 + bob, bodyD);
-    put(18, 22 + bob, bodyD); put(17, 23 + bob, bodyD);
-
-    // Attack: beak open
-    if (f === 'atk0' || f === 'atk1') {
-      put(15, 14 + bob, '#c8a028'); put(17, 14 + bob, '#c8a028');
-      if (f === 'atk1') put(16, 16 + bob, '#400808');
+    // ---- tail fan sweeping back ----
+    for (const [tx2, ty2] of [[26, 22 - tilt], [28, 19 - tilt], [27, 16 - tilt]] as const) {
+      line(put, bcx + 7, bcy + 1, tx2 + ox, ty2 + bodyDy, feM);
+      put(tx2 + ox, ty2 + bodyDy, feD);
     }
+
+    // ---- body: slim swept fuselage — wings carry the silhouette ----
+    disc(put, bcx - 3, bcy, 3, fe);                      // rounded chest
+    ellipse(put, bcx + 2, bcy, 6, 2, fe);                // narrow body line to the tail
+    // feather streaks + breast sheen
+    for (let yy = -2; yy <= 2; yy++)
+      for (let xx = -6; xx <= 7; xx++) {
+        const X = bcx + 1 + xx, Y = bcy + yy;
+        if (!px.has(Y * 32 + X)) continue;
+        if ((xx * 3 + yy * 7 + 64) % 9 === 0) put(X, Y, feM);
+        else if (xx < -2 && (xx * 5 + yy * 3 + 64) % 7 === 0) put(X, Y, feL);
+      }
+    put(bcx - 5, bcy, feL);                              // breast light
+    put(bcx - 4, bcy + 1, feL);
+    put(bcx + 5, bcy - 1, feM);                          // rump taper shading
+
+    // ---- NEAR WING: the big layered fan over the body, long primaries ----
+    {
+      const wrX = bcx - 1, wrY = bcy - 3;
+      const th = Math.PI * (1.05 + flap * 0.28);         // up-left ↔ down-left
+      for (let k = 0; k < 5; k++) {
+        const a = th + (k - 2) * 0.13;
+        const len = 10 + (2 - Math.abs(k - 2)) * 2;
+        const tx2 = Math.round(wrX + Math.cos(a) * len);
+        const ty2 = Math.round(wrY + Math.sin(a) * len);
+        line(put, wrX, wrY, tx2, ty2, fe);
+        line(put, wrX, wrY - 1, tx2, ty2 - 1, feM);      // layered shading
+        put(tx2, ty2, feL);                               // grey-edged primary tip
+      }
+      disc(put, wrX, wrY, 2, fe);                         // coverts
+      put(wrX - 1, wrY - 1, feL);                         // leading-edge light
+    }
+
+    // ---- head + hooked beak, screaming ----
+    const hx = bcx - 6, hy = bcy - 3 + tilt;
+    disc(put, hx, hy, 3, fe);
+    put(hx + 1, hy - 2, feM);                            // crown shading
+    put(hx + 2, hy + 1, feM);                            // shaggy hackles
+    put(hx + 3, hy + 2, feM);
+    // burning red eye
+    put(hx - 1, hy - 1, flash ? P.white : P.red);
+    put(hx, hy - 1, flash ? P.white : P.redD);
+    put(hx - 1, hy - 2, P.white);                        // glint
+    // hooked upper beak
+    rect(put, hx - 5, hy, 3, 1, beak);
+    put(hx - 5, hy + 1, beak);                           // the hook
+    put(hx - 2, hy - 1, beak);
+    // screaming gape with red interior
+    for (let j = 1; j <= gape; j++) put(hx - 4 + (j > 1 ? 1 : 0), hy + j, maw);
+    // lower beak swung open
+    line(put, hx - 2, hy + 1, hx - 4, hy + 1 + gape, beak);
+
+    // ---- dangling talons (thrust forward on the strike) ----
+    const fwd = ai === 1 || ai === 2 ? 3 : 0;
+    for (const [fx2, fy2] of [[bcx - 2 - fwd, bcy + 3], [bcx + 1 - fwd, bcy + 4]] as const) {
+      put(fx2, fy2, feM);                                // leg
+      put(fx2 - 1, fy2 + 1, beak);                       // claws hook forward
+      put(fx2 - 2, fy2 + 1 + (fwd ? 0 : 1), beak);
+      put(fx2, fy2 + 2, beak);
+    }
+    // dive speed streaks on the strike frame
+    if (ai === 2) {
+      mput(bcx + 8, bcy - 2, feL);
+      mput(bcx + 9, bcy + 1, feL);
+    }
+
+    strokeOutline(px, mput);
   };
 }
 
 // ==================================================================
 //  ENEMY BAT (32x32) — heavy flyer with large membrane wings
 // ==================================================================
-export function drawEnemyBat(f: EFrame) {
-  return (put: Put) => {
+export function drawEnemyBat(f: EFrame6) {
+  return (rawPut: Put) => {
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 7 - step * 2;
       if (r <= 0) return;
-      disc(put, 16, 18, r, '#3c2832');
-      disc(put, 16, 18, Math.max(0, r - 1), '#5a3848');
+      disc(rawPut, 16, 18, r, P.bat2);
+      disc(rawPut, 16, 18, Math.max(0, r - 1), P.batW);
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2 + step * 0.4;
         const d = step * 3 + 3;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), '#2a1820');
+        rawPut(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), P.bat2D);
+        rawPut(Math.round(16 + Math.cos(a) * d) + 1, Math.round(18 + Math.sin(a) * d), P.batWD);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+    // tiny triangle rasteriser for the wing membrane
+    const tri = (x0: number, y0: number, x1: number, y1: number, x2: number, y2: number, c: string) => {
+      const minX = Math.max(0, Math.min(x0, x1, x2)), maxX = Math.min(31, Math.max(x0, x1, x2));
+      const minY = Math.max(0, Math.min(y0, y1, y2)), maxY = Math.min(31, Math.max(y0, y1, y2));
+      const d = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+      if (d === 0) return;
+      for (let y = minY; y <= maxY; y++)
+        for (let x = minX; x <= maxX; x++) {
+          const a = ((x1 - x) * (y2 - y) - (x2 - x) * (y1 - y)) / d;
+          const b2 = ((x2 - x) * (y0 - y) - (x0 - x) * (y2 - y)) / d;
+          if (a >= 0 && b2 >= 0 && 1 - a - b2 >= 0) put(x, y, c);
+        }
+    };
+
     const flash = f === 'hit';
-    const body = flash ? P.white : '#3c2832';
-    const bodyD = flash ? P.white : '#2a1820';
-    const bodyL = flash ? P.white : '#5a3848';
-    const membrane = flash ? P.white : '#372030';
-    const membraneL = flash ? P.white : '#4a3040';
+    const fur  = flash ? P.white : P.bat2;
+    const furD = flash ? P.white : P.bat2D;
+    const furM = flash ? P.white : P.bat2M;
+    const furL = flash ? P.white : P.bat2L;
+    const mem  = flash ? P.white : P.batW;     // plum membrane
+    const memD = flash ? P.white : P.batWD;
+    const memL = flash ? P.white : P.batWL;
 
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 1 : 0;
-    const bob = [0, -1, 0, 1][phase];
-    const wingA = [0, -4, -5, -2][phase];
+    // 6-phase full wingbeat; attack = screech → lunge → snap
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const FLAP = [0.95, 0.6, -0.6, -0.95, -0.6, 0.6] as const;
+    const flapT = mi >= 0 ? FLAP[mi] : ai >= 0 ? [0.9, -0.4, -0.9, 0.3][ai] : 0.6;
+    const ox = ai >= 0 ? [1, -1, -2, -1][ai] : 0;     // bite lunge
+    const gape = ai === 1 ? 3 : ai === 0 ? 2 : 1;     // snarl → wide → SNAP shut
+    const snap = ai === 2;
+    const bodyDy = flapT < -0.5 ? -1 : flapT > 0.6 ? 1 : 0;
 
-    // Shadow
-    for (let dy = -1; dy <= 1; dy++)
-      for (let dx = -6; dx <= 6; dx++)
-        if ((dx * dx) / 36 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+    // small shadow far below
+    for (let dx = -6; dx <= 6; dx++)
+      if ((dx * dx) / 36 <= 1) mput(16 + dx + ox, 28, P.shadow);
 
-    // Wing membranes — large, connected to body
-    for (let i = 0; i < 11; i++) {
-      const t = i / 10;
-      const wy = 15 + bob + Math.round(wingA * Math.sin(t * Math.PI));
-      const memH = Math.round(4 + Math.sin(t * Math.PI) * 4);
-      for (let dy = 0; dy <= memH; dy++) {
-        put(13 - i, wy + dy, membrane);
-        put(19 + i, wy + dy, membrane);
+    const bcx = 16 + ox, bcy = 19 + bodyDy;           // body centre
+
+    // ---- shared wing-fan builder: BOTH wings sweep back over the body
+    // through the same stroke arc (up-back ↔ down-back). Near wing is full
+    // size and drawn LAST (over everything); far wing 0.9× behind the body.
+    const wingFan = (shX: number, shY: number, phaseOff: number, scale: number,
+                     memC: string, anchorX: number, anchorY: number, near: boolean) => {
+      const phi = ((-5 - 60 * flapT + phaseOff) * Math.PI) / 180;
+      const wrX = Math.round(shX + Math.cos(phi) * 5 * scale);
+      const wrY = Math.round(shY + Math.sin(phi) * 5 * scale);
+      const LEN = [10, 12, 12, 10] as const;
+      const tips: Array<readonly [number, number]> = [];
+      for (let k = 0; k < 4; k++) {
+        const a = phi + ((k - 1.5) * 18 * Math.PI) / 180;   // 54° fan centred on the stroke
+        tips.push([
+          Math.round(wrX + Math.cos(a) * LEN[k] * scale),
+          Math.round(wrY + Math.sin(a) * LEN[k] * scale),
+        ]);
       }
-      // Bone along top
-      put(13 - i, wy, membraneL);
-      put(19 + i, wy, membraneL);
+      // membrane panels between the fingers + the panel back to the hip
+      for (let k = 0; k < 3; k++)
+        tri(wrX, wrY, tips[k][0], tips[k][1], tips[k + 1][0], tips[k + 1][1], memC);
+      tri(wrX, wrY, tips[3][0], tips[3][1], anchorX, anchorY, memC);
+      if (near) {
+        // sheen streaks mid-panel, folds near the wrist, scalloped edge
+        for (let k = 0; k < 3; k++) {
+          const mx2 = Math.round((tips[k][0] + tips[k + 1][0]) / 2);
+          const my2 = Math.round((tips[k][1] + tips[k + 1][1]) / 2);
+          put(Math.round((wrX + mx2) / 2), Math.round((wrY + my2) / 2), memL);
+          put(Math.round((wrX * 3 + mx2) / 4), Math.round((wrY * 3 + my2) / 4), memD);
+          put(Math.round(mx2 + (wrX - mx2) * 0.18), Math.round(my2 + (wrY - my2) * 0.18), memD);
+        }
+      }
+      // bone armature over the membrane
+      line(put, shX, shY, wrX, wrY, furD);
+      if (near) line(put, shX + 1, shY, wrX + 1, wrY, furM);
+      for (const [tx2, ty2] of tips) {
+        line(put, wrX, wrY, tx2, ty2, furD);
+        put(tx2, ty2, furM);                           // finger tip knuckle
+      }
+      disc(put, wrX, wrY, 1, near ? fur : furM);       // wrist mass
+      put(wrX, wrY - 2, near ? furL : furD);           // thumb claw
+      if (near) put(wrX + 1, wrY - 3, furD);
+    };
+
+    // far wing behind the body (the near wing is drawn last, after the head)
+    wingFan(bcx + 2, bcy - 5, -8, 0.9, memD, bcx + 5, bcy - 1, false);
+
+    // ---- furry body, angled into the flight line ----
+    ellipse(put, bcx, bcy, 5, 4, fur);
+    disc(put, bcx - 3, bcy + 1, 3, fur);              // chest mass toward the head
+    for (let yy = -3; yy <= 4; yy++)
+      for (let xx = -5; xx <= 4; xx++) {
+        const X = bcx + xx, Y = bcy + yy;
+        if (!px.has(Y * 32 + X)) continue;
+        if ((xx * 3 + yy * 7 + 64) % 7 === 0) put(X, Y, furM);
+        else if (yy < 0 && (xx * 5 + yy * 3 + 64) % 9 === 0) put(X, Y, furL);
+      }
+    // ragged fur fringe along the belly
+    put(bcx - 2, bcy + 4, furD);
+    put(bcx, bcy + 5, furD);
+    put(bcx + 2, bcy + 4, furD);
+    put(bcx - 4, bcy + 3, furL);                      // chest fluff
+    put(bcx - 5, bcy + 2, furL);
+    // small clawed feet trailing behind
+    line(put, bcx + 4, bcy + 2, bcx + 6, bcy + 5, furM);
+    put(bcx + 7, bcy + 5, furD); put(bcx + 7, bcy + 6, furD);
+    line(put, bcx + 2, bcy + 3, bcx + 4, bcy + 6, furM);
+    put(bcx + 5, bcy + 7, furD);
+
+    // ---- head: big ears, heavy brow, snub muzzle — unmistakably a bat ----
+    const hx = bcx - 8, hy = bcy - 4;
+    disc(put, hx, hy, 3, fur);
+    put(hx - 1, hy - 2, furL);                        // crown fluff
+    put(hx + 1, hy - 3, furL);
+    put(hx + 2, hy + 1, furM);                        // cheek fur
+    put(hx + 3, hy + 2, furL);                        // fluffy jaw ruff
+    put(hx + 2, hy + 3, furL);
+    // near ear — TALL pointed triangle with a plum inner
+    put(hx, hy - 4, fur); put(hx + 1, hy - 4, fur); put(hx + 2, hy - 4, fur);
+    put(hx, hy - 5, fur); put(hx + 1, hy - 5, fur);
+    put(hx + 1, hy - 6, fur);
+    put(hx + 1, hy - 7, furD);                        // tip
+    put(hx + 1, hy - 4, memL);                        // plum inner
+    put(hx + 1, hy - 5, memL);
+    put(hx, hy - 4, furD);                            // front ridge
+    // far ear — behind, darker
+    put(hx + 4, hy - 4, furM); put(hx + 5, hy - 4, furM);
+    put(hx + 4, hy - 5, furM);
+    put(hx + 4, hy - 6, furD);
+    // heavy brow over a burning red eye
+    put(hx - 2, hy - 2, furD);
+    put(hx - 1, hy - 2, furD);
+    put(hx - 1, hy - 1, flash ? P.white : P.red);
+    put(hx, hy - 1, flash ? P.white : P.redD);
+    put(hx - 2, hy - 1, P.white);                     // glint
+    // snub upturned muzzle with a pink nose
+    rect(put, hx - 4, hy, 2, 2, fur);
+    put(hx - 4, hy, flash ? P.white : '#c87890');     // nose pad
+    put(hx - 4, hy - 1, flash ? P.white : '#a85a70'); // upturned nostril
+    put(hx - 3, hy + 1, furM);                        // muzzle crease
+    if (snap) {
+      // jaws clacked shut — clenched fangs + impact burst
+      rect(put, hx - 4, hy + 2, 5, 1, furD);
+      put(hx - 4, hy + 2, P.white);
+      put(hx - 2, hy + 2, P.white);
+      mput(hx - 5, hy, P.white);
+      mput(hx - 5, hy + 3, P.white);
+    } else {
+      // open snarl — red mouth, white fangs top + bottom
+      rect(put, hx - 4, hy + 2, 5, gape - 1, flash ? P.white : '#a01820');
+      put(hx - 4, hy + 2, P.white);                   // upper fangs
+      put(hx - 2, hy + 2, P.white);
+      put(hx, hy + 2, P.white);
+      put(hx - 3, hy + gape, P.white);                // lower fang
+      put(hx - 1, hy + gape, P.white);
+      put(hx - 4, hy + gape + 1, furM);               // dropped jaw
+      put(hx - 3, hy + gape + 1, furM);
     }
 
-    // Body
-    for (let dy = -5; dy <= 5; dy++)
-      for (let dx = -3; dx <= 3; dx++)
-        if ((dx * dx) / 9 + (dy * dy) / 25 <= 1) put(16 + dx, 17 + bob + dy, body);
-    // Head
-    disc(put, 16, 11 + bob, 3, bodyL);
-    // Ears
-    put(13, 7 + bob, bodyL); put(13, 8 + bob, bodyL); put(14, 8 + bob, body);
-    put(19, 7 + bob, bodyL); put(19, 8 + bob, bodyL); put(18, 8 + bob, body);
-    // Eyes
-    put(14, 11 + bob, flash ? P.white : '#ff3030');
-    put(18, 11 + bob, flash ? P.white : '#ff3030');
-    // Fangs
-    if (f === 'atk0' || f === 'atk1') {
-      put(15, 14 + bob, P.white); put(17, 14 + bob, P.white);
-      if (f === 'atk1') { put(15, 15 + bob, P.white); put(17, 15 + bob, P.white); }
-    } else {
-      put(15, 14 + bob, '#e0e0e0'); put(17, 14 + bob, '#e0e0e0');
-    }
+    // ---- NEAR WING drawn last — the full-size fan rides over everything ----
+    wingFan(bcx - 1, bcy - 5, 0, 1.0, mem, bcx + 2, bcy + 1, true);
+
+    strokeOutline(px, mput);
   };
 }
 
 // ==================================================================
 //  ENEMY DRAGONFLY (32x32) — fast iridescent insect
 // ==================================================================
-export function drawEnemyDragonfly(f: EFrame) {
-  return (put: Put) => {
+export function drawEnemyDragonfly(f: EFrame6) {
+  return (rawPut: Put) => {
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 5 - step * 1.5;
       if (r <= 0) return;
-      disc(put, 16, 16, Math.max(0, Math.round(r)), '#28a0b4');
+      disc(rawPut, 16, 16, Math.max(0, Math.round(r)), P.dfly);
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2 + step * 0.5;
         const d = step * 3 + 2;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(16 + Math.sin(a) * d), '#1a708a');
+        rawPut(Math.round(16 + Math.cos(a) * d), Math.round(16 + Math.sin(a) * d), P.dflyD);
+        rawPut(Math.round(16 + Math.cos(a) * d) + 1, Math.round(16 + Math.sin(a) * d), i % 2 === 0 ? P.dflyR : P.dflyW);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
-    const bodyC = flash ? P.white : '#28a0b4';
-    const bodyD = flash ? P.white : '#1a708a';
-    const bodyL = flash ? P.white : '#38c0d8';
-    const wingC = flash ? P.white : '#80d8e8';
-    const wingD = flash ? P.white : '#60b8cc';
+    const bd  = flash ? P.white : P.dfly;     // charcoal-maroon chitin
+    const bdD = flash ? P.white : P.dflyD;
+    const bdM = flash ? P.white : P.dflyM;
+    const bdL = flash ? P.white : P.dflyL;
+    const red  = flash ? P.white : P.dflyR;   // red accents
+    const redD = flash ? P.white : P.dflyRD;
+    const wg  = flash ? P.white : P.dflyW;    // pale green wing
+    const wgD = flash ? P.white : P.dflyWD;
+    const bn  = flash ? P.white : P.wBone;    // mandible fangs
 
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 1 : 0;
-    const bob = [0, -1, -2, -1][phase];
-    const wingA = [0, -2, -3, -1][phase];
-    const wingA2 = Math.round(-wingA * 0.5);
+    // 6-phase darting hover; attack = rear → darting fang lunge
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : 0;
+    const bob = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 1.2) : ai === 0 ? -1 : 0;
+    const ox = ai >= 0 ? [1, -1, -2, -1][ai] : 0;     // lunge thrust
+    const strike = ai === 2;
+    // full wingbeat: +1 = stroke top … -1 = stroke bottom, sweeping ~70°
+    const FLAP = [0.95, 0.6, -0.6, -0.95, -0.6, 0.6] as const;
+    const flapT = mi >= 0 ? FLAP[mi] : ai >= 0 ? [0.9, -0.5, -0.9, 0.3][ai] : 0.6;
+    const flapPrev = mi >= 0 ? FLAP[(mi + 5) % 6] : flapT; // for the blur ghost
+    const wingTip = (bx2: number, by2: number, len: number, spread: number, fT: number) => {
+      const th = ((-24 - 34 * fT + spread) * Math.PI) / 180; // back-up ↔ back-down
+      return [Math.round(bx2 + Math.cos(th) * len), Math.round(by2 + Math.sin(th) * len)] as const;
+    };
 
-    // Shadow
-    for (let dy = -1; dy <= 1; dy++)
-      for (let dx = -5; dx <= 5; dx++)
-        if ((dx * dx) / 25 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+    // small shadow far below (it darts high)
+    for (let dx = -5; dx <= 5; dx++)
+      if ((dx * dx) / 25 <= 1) mput(16 + dx + ox, 28, P.shadow);
 
-    // Upper wings — attached to thorax
-    for (let i = 0; i < 9; i++) {
-      const t = i / 8;
-      const wy = Math.round(wingA * t);
-      const th = Math.max(0, Math.round(1.5 - t));
-      for (let d = 0; d <= th; d++) {
-        put(14 - i, 11 + bob + wy + d, wingD);
-        put(18 + i, 11 + bob + wy + d, wingD);
-      }
-      put(14 - i, 11 + bob + wy, wingC);
-      put(18 + i, 11 + bob + wy, wingC);
+    const tcx = 9 + ox, tcy = 14 + bob;               // thorax centre
+
+    // ---- FAR WING PAIR: behind the body, darker, full stroke ----
+    for (const [bx2, len, spread] of [[2, 10, 0], [3, 9, 20]] as const) {
+      const [tipX, tipY] = wingTip(tcx + bx2, tcy - 2, len, spread, flapT);
+      line(put, tcx + bx2, tcy - 2, tipX, tipY, wgD);
+      line(put, tcx + bx2 + 1, tcy - 2, tipX, tipY + 1, wgD);
+      put(tipX, tipY, bdM);
     }
-    // Lower wings
-    for (let i = 0; i < 7; i++) {
-      const t = i / 6;
-      const wy = Math.round(wingA2 * t);
-      put(14 - i, 14 + bob + wy, wingD);
-      put(18 + i, 14 + bob + wy, wingD);
+
+    // ---- segmented abdomen sweeping back-down, red streak per segment ----
+    for (let s = 0; s < 6; s++) {
+      const t = s / 5;
+      const sx2 = Math.round(tcx + 4 + t * 14);
+      const sy2 = Math.round(tcy + 2 + t * 6 + Math.sin(t * 2.5) * 1.5);
+      const r = s < 3 ? 2 : 1;
+      disc(put, sx2, sy2, r, bd);
+      put(sx2 + r, sy2, bdD);                          // segment seam
+      put(sx2 - 1, sy2 - 1, red);                      // the red streak highlight
+      if (r >= 2) put(sx2, sy2 - 1, redD);
+      put(sx2, sy2 + r, bdD);                          // under-shadow
+    }
+    // tail tip: red pincer claws
+    const tipX2 = tcx + 19, tipY2 = tcy + 9;
+    put(tipX2, tipY2, redD);
+    put(tipX2 + 1, tipY2 - 1, red);
+    put(tipX2 + 2, tipY2, red);
+    put(tipX2 + 1, tipY2 + 1, red);
+    put(tipX2 + 2, tipY2 + 2, redD);
+
+    // ---- spiky thorax ----
+    disc(put, tcx, tcy, 3, bdM);
+    disc(put, tcx, tcy - 1, 2, bd);
+    put(tcx - 1, tcy - 2, bdL);                        // chitin sheen
+    // bristle spikes on the back
+    put(tcx, tcy - 4, bdD);
+    put(tcx + 2, tcy - 4, bdD);
+    put(tcx - 2, tcy - 3, bdD);
+    // red spot on the shoulder (reference's thorax accent)
+    put(tcx + 2, tcy + 1, red);
+    put(tcx + 3, tcy + 1, redD);
+
+    // ---- six bristly legs dangling beneath ----
+    for (let k = 0; k < 6; k++) {
+      const far = k >= 3;
+      const hipX = tcx - 1 + (k % 3) * 2 + (far ? 1 : 0);
+      const wig = mi >= 0 ? ((ph + k) % 3 === 0 ? 1 : 0) : 0;
+      const c = far ? bdD : bdM;
+      line(put, hipX, tcy + 2, hipX - 2, tcy + 6 + wig, c);
+      line(put, hipX - 2, tcy + 6 + wig, hipX - 1, tcy + 9 + wig, c);
+      if (!far) put(hipX - 3, tcy + 7 + wig, bdD);     // bristle
     }
 
-    // Long segmented body (abdomen)
-    for (let i = 0; i < 12; i++) {
-      const c = i < 4 ? bodyL : i < 8 ? bodyC : bodyD;
-      put(16, 10 + i + bob, c);
-      if (i < 6) { put(15, 10 + i + bob, bodyD); put(17, 10 + i + bob, bodyD); }
+    // ---- NEAR WING PAIR: pale green blades with red veins, full stroke ----
+    for (const [bx2, len, spread, lead] of [[0, 12, -6, true], [1, 11, 16, false]] as const) {
+      const [tipX, tipY] = wingTip(tcx + bx2, tcy - 3, len, spread, flapT);
+      // blade fill
+      line(put, tcx + bx2, tcy - 3, tipX, tipY, wg);
+      line(put, tcx + bx2 + 1, tcy - 2, tipX + 1, tipY + 1, wg);
+      line(put, tcx + bx2, tcy - 4, tipX - 1, tipY, wgD); // edge
+      // the red vein running the wing's length
+      line(put, tcx + bx2 + 1, tcy - 3, tipX - 1, tipY + 1, redD);
+      put(tipX, tipY, wgD);
+      if (lead) put(tcx + bx2, tcy - 5, wgD);          // leading socket
+      // motion-blur ghost at the PREVIOUS stroke position
+      const [gx2, gy2] = wingTip(tcx + bx2, tcy - 3, len - 1, spread, flapPrev);
+      mput(gx2, gy2, wgD);
+      mput(Math.round((tcx + bx2 + gx2) / 2), Math.round((tcy - 3 + gy2) / 2), wgD);
     }
-    // Head
-    disc(put, 16, 9 + bob, 2, bodyL);
-    // Big compound eyes
-    put(14, 8 + bob, flash ? P.white : '#c83030');
-    put(18, 8 + bob, flash ? P.white : '#c83030');
 
-    // Attack: abdomen curls forward
-    if (f === 'atk0' || f === 'atk1') {
-      put(16, 22 + bob, bodyD);
-      if (f === 'atk1') put(16, 23 + bob, '#ff6060');
+    // ---- head: huge red compound eye + bone mandibles ----
+    const hx = tcx - 4, hy = tcy + 1;
+    disc(put, hx, hy, 2, bd);
+    put(hx + 1, hy - 2, bdD);                          // horn nub
+    put(hx - 1, hy - 3, bdD);
+    // the big red eye
+    put(hx - 1, hy - 1, red);
+    put(hx, hy - 1, red);
+    put(hx - 1, hy, redD);
+    put(hx, hy, strike ? P.white : redD);
+    put(hx - 2, hy - 1, P.white);                      // wet glint
+    // second eye hint behind
+    put(hx + 2, hy - 1, redD);
+    // bone mandible fangs hooking down
+    put(hx - 2, hy + 2, bn);
+    put(hx - 3, hy + 3 + (strike ? 1 : 0), bn);
+    put(hx, hy + 2, bn);
+    put(hx - 1, hy + 3 + (strike ? 1 : 0), flash ? P.white : P.wBoneD);
+
+    // strike: speed streaks + fang flash
+    if (strike) {
+      mput(hx - 3, hy - 2, bdL);
+      mput(hx - 3, hy + 1, bdL);
+      mput(hx - 2, hy + 4, P.white);
     }
+
+    strokeOutline(px, mput);
   };
 }
 
 // ==================================================================
 //  ENEMY MOSQUITO (32x32) — ranged attacker, shoots darts
 // ==================================================================
-export function drawEnemyMosquito(f: EFrame) {
-  return (put: Put) => {
+export function drawEnemyMosquito(f: EFrame6) {
+  return (rawPut: Put) => {
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 5 - step * 1.5;
       if (r <= 0) return;
-      disc(put, 16, 17, Math.max(0, Math.round(r)), '#504638');
+      disc(rawPut, 16, 17, Math.max(0, Math.round(r)), P.mosq);
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2 + step * 0.5;
         const d = step * 3 + 2;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(17 + Math.sin(a) * d), '#3a3028');
+        rawPut(Math.round(16 + Math.cos(a) * d), Math.round(17 + Math.sin(a) * d), P.mosqD);
+        rawPut(Math.round(16 + Math.cos(a) * d) + 1, Math.round(17 + Math.sin(a) * d), P.mosqW);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
-    const body = flash ? P.white : '#504638';
-    const bodyD = flash ? P.white : '#3a3028';
-    const bodyL = flash ? P.white : '#685a48';
-    const wingC = flash ? P.white : '#b4c8d8';
+    const bd  = flash ? P.white : P.mosq;    // body brown
+    const bdD = flash ? P.white : P.mosqD;
+    const bdM = flash ? P.white : P.mosqM;
+    const bdL = flash ? P.white : P.mosqL;
+    const wg  = flash ? P.white : P.mosqW;   // pale wing
+    const wgD = flash ? P.white : P.mosqWD;
+    const tan = flash ? P.white : '#c08648'; // abdomen underside
 
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 1 : 0;
-    const bob = [-1, 0, 1, 0][phase];
-    const wingA = [2, -2, 2, -2][phase]; // fast flapping
+    // 6-phase hover (wings blur); attack = rear up → jab the proboscis
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : 0;
+    const bob = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 1.2) : ai === 0 ? -1 : 0;
+    const ox = ai >= 0 ? [1, -1, -3, -1][ai] : 0;     // jab lunge (toward prey)
+    const jab = ai === 2;                             // the dart leaves the needle
+    // full wingbeat: +1 = stroke top … -1 = stroke bottom, sweeping ~75°
+    const FLAP = [0.95, 0.6, -0.6, -0.95, -0.6, 0.6] as const;
+    const flapT = mi >= 0 ? FLAP[mi] : ai >= 0 ? [0.9, -0.5, -0.9, 0.3][ai] : 0.6;
+    const flapPrev = mi >= 0 ? FLAP[(mi + 5) % 6] : flapT; // for the blur ghost
+    // wing tip from a base point: angle swings with the stroke
+    const wingTip = (bx2: number, by2: number, len: number, spread: number, fT: number) => {
+      const th = ((-22 - 38 * fT + spread) * Math.PI) / 180; // back-up ↔ back-down
+      return [Math.round(bx2 + Math.cos(th) * len), Math.round(by2 + Math.sin(th) * len)] as const;
+    };
 
-    // Shadow
-    for (let dy = -1; dy <= 1; dy++)
-      for (let dx = -4; dx <= 4; dx++)
-        if ((dx * dx) / 16 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
+    // small shadow far below (it hovers high)
+    for (let dx = -4; dx <= 4; dx++)
+      if ((dx * dx) / 16 <= 1) mput(16 + dx + ox, 28, P.shadow);
 
-    // Wings — fast blur, attached to thorax
-    for (let i = 0; i < 8; i++) {
-      const t = i / 7;
-      const wy = Math.round(wingA * Math.sin(t * Math.PI));
-      const th = Math.max(0, Math.round(1 - t * 0.8));
-      for (let d = 0; d <= th; d++) {
-        put(14 - i, 13 + bob + wy + d, wingC);
-        put(18 + i, 13 + bob + wy + d, wingC);
-      }
+    const bcx = 14 + ox, bcy = 17 + bob;              // thorax centre
+
+    // ---- FAR WING: swept back, drawn behind the body, full stroke ----
+    {
+      const [tipX, tipY] = wingTip(bcx + 3, bcy - 3, 11, 8, flapT);
+      line(put, bcx + 3, bcy - 3, tipX, tipY, wgD);
+      line(put, bcx + 4, bcy - 2, tipX, tipY + 1, wgD);
+      put(tipX, tipY, bdM);                            // wing tip
     }
 
-    // Body (thin abdomen)
-    for (let dy = -4; dy <= 4; dy++)
-      for (let dx = -2; dx <= 2; dx++)
-        if ((dx * dx) / 4 + (dy * dy) / 16 <= 1) put(16 + dx, 17 + bob + dy, body);
-    // Lighter thorax
-    disc(put, 16, 14 + bob, 2, bodyL);
-    // Head
-    disc(put, 16, 11 + bob, 2, bodyL);
-    // Proboscis — long needle pointing down/forward
-    put(16, 13 + bob, '#a08060');
-    put(16, 9 + bob, '#a08060');
-    put(16, 8 + bob, '#807050');
-    // Eyes
-    put(14, 10 + bob, flash ? P.white : '#c80000');
-    put(18, 10 + bob, flash ? P.white : '#c80000');
-    // Dangly legs
-    put(14, 19 + bob, bodyD); put(13, 21 + bob, bodyD);
-    put(18, 19 + bob, bodyD); put(19, 21 + bob, bodyD);
-    put(15, 20 + bob, bodyD); put(14, 22 + bob, bodyD);
-    put(17, 20 + bob, bodyD); put(18, 22 + bob, bodyD);
-
-    // Attack animation: proboscis extends, dart fires
-    if (f === 'atk0') {
-      put(16, 7 + bob, '#c0a060');
-      put(16, 6 + bob, '#c0a060');
-    } else if (f === 'atk1') {
-      put(16, 7 + bob, '#e0c080');
-      put(16, 6 + bob, '#e0c080');
-      put(16, 5 + bob, '#60c040'); // venom glow at tip
+    // ---- segmented abdomen tapering back-up ----
+    for (let s = 0; s < 5; s++) {
+      const t = s / 4;
+      const sx2 = Math.round(bcx + 3 + t * 11);
+      const sy2 = Math.round(bcy + 1 - t * 4);
+      const r = s < 2 ? 3 : s < 4 ? 2 : 1;
+      disc(put, sx2, sy2, r, bd);
+      put(sx2 - r + 1, sy2 - r + 1, bdL);             // segment sheen
+      put(sx2 + 1, sy2 - r, bdD);                      // band seam
+      if (r >= 2) put(sx2, sy2 + r, tan);              // tan underside
     }
+    put(bcx + 16, bcy - 4, bdD);                       // pointed tip
+
+    // ---- humped thorax ----
+    disc(put, bcx, bcy, 3, bdM);
+    disc(put, bcx, bcy - 1, 2, bd);
+    put(bcx - 1, bcy - 2, bdL);                        // hump light
+    put(bcx + 1, bcy - 3, bdL);
+
+    // ---- six thin jointed legs (flutter with the hover) ----
+    // [hipDx, kneeDx, kneeDy, footDx, footDy, far]
+    const LEGS: ReadonlyArray<readonly [number, number, number, number, number, boolean]> = [
+      [-2, -5, 4, -7, 9, false],    // foreleg dangling forward
+      [0, -1, 5, -3, 10, false],    // mid
+      [2, 4, 4, 3, 9, false],       // hind trailing back
+      [-1, -4, 3, -6, 8, true],     // far side set (shorter, darker)
+      [1, 0, 4, -1, 9, true],
+      [3, 5, 3, 5, 8, true],
+    ];
+    for (let k = 0; k < LEGS.length; k++) {
+      const [hdx, kdx, kdy, fdx, fdy, far] = LEGS[k];
+      const wig = mi >= 0 ? ((ph + k) % 3 === 0 ? 1 : 0) : 0;  // nervous flutter
+      const c = far ? bdD : bdM;
+      line(put, bcx + hdx, bcy + 2, bcx + kdx, bcy + kdy + wig, c);
+      line(put, bcx + kdx, bcy + kdy + wig, bcx + fdx, bcy + fdy + wig, c);
+      if (!far) put(bcx + kdx, bcy + kdy + wig, bdL);  // knee joint
+    }
+
+    // ---- NEAR WING: pale veined blade, sweeping the full stroke arc ----
+    {
+      const [tipX, tipY] = wingTip(bcx + 1, bcy - 3, 13, 0, flapT);
+      // blade fill — three strokes wide
+      line(put, bcx + 1, bcy - 3, tipX, tipY, wg);
+      line(put, bcx + 2, bcy - 2, tipX + 1, tipY + 1, wg);
+      line(put, bcx + 2, bcy - 4, tipX - 1, tipY, wgD); // leading edge
+      // vein lines
+      line(put, bcx + 3, bcy - 3, tipX - 2, tipY + 2, wgD);
+      put(tipX, tipY, wgD);
+      // motion-blur ghost: a faint blade at the PREVIOUS stroke position
+      const [gx2, gy2] = wingTip(bcx + 1, bcy - 3, 12, 0, flapPrev);
+      mput(gx2, gy2, wgD);
+      mput(Math.round((bcx + 1 + gx2) / 2), Math.round((bcy - 3 + gy2) / 2), wgD);
+    }
+
+    // ---- head: big compound eye + the needle ----
+    const hx = bcx - 4, hy = bcy + 1;
+    disc(put, hx, hy, 2, bd);
+    // compound eye — dark dome with a grid glint
+    put(hx - 1, hy - 1, flash ? P.white : '#1c1c20');
+    put(hx, hy - 1, flash ? P.white : '#1c1c20');
+    put(hx - 1, hy, flash ? P.white : '#2e2e36');
+    put(hx - 1, hy - 1, flash ? P.white : '#4a4a55'); // facet glint
+    // wispy antennae sweeping up-forward
+    put(hx - 1, hy - 3, bdM);
+    put(hx - 2, hy - 4, bdM);
+    put(hx - 3, hy - 4, bdD);
+    put(hx, hy - 4, bdD);
+    put(hx - 1, hy - 5, bdD);
+    // ---- the PROBOSCIS: long needle, thrust on the jab ----
+    const ext = jab ? 2 : 0;
+    line(put, hx - 2, hy + 1, hx - 7 - ext, hy + 4 + (ai === 0 ? -1 : 0), bdD);
+    put(hx - 3, hy + 1, bdL);                          // base sheath
+    if (jab) {
+      // dart muzzle flash at the needle tip
+      mput(hx - 8, hy + 4, P.white);
+      mput(hx - 7, hy + 5, flash ? P.white : '#60c040');
+    }
+
+    strokeOutline(px, mput);
   };
 }
 
@@ -2133,96 +2483,6 @@ export function drawEnemyShadowImp(f: EFrame) {
       put(7, 16 + bob, grin); put(6, 15 + bob, grin);
       put(25, 16 + bob, grin); put(26, 15 + bob, grin);
     }
-  };
-}
-
-// ==================================================================
-//  CASTLE BAT (32x32) — dark bat with spread wings, red eyes, fangs
-// ==================================================================
-export function drawEnemyCastleBat(f: EFrame) {
-  return (put: Put) => {
-    if (f.startsWith('die')) {
-      const step = parseInt(f.slice(3));
-      const r = 7 - step * 2;
-      if (r <= 0) return;
-      disc(put, 16, 18, Math.max(0, r), '#2a1a2a');
-      disc(put, 16, 18, Math.max(0, r - 1), '#3a2a3a');
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2 + step * 0.4;
-        const d = step * 3 + 3;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), '#1a0a1a');
-      }
-      return;
-    }
-    const flash = f === 'hit';
-    const body = flash ? P.white : '#2a1a2a';
-    const bodyD = flash ? P.white : '#1a0a1a';
-    const bodyL = flash ? P.white : '#3a2a3a';
-    const membrane = flash ? P.white : '#221428';
-    const membraneL = flash ? P.white : '#3a2838';
-    const eyeC = flash ? P.white : '#ff2020';
-    const fang = flash ? P.white : '#d8d0c0';
-
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 1 : 0;
-    const bob = [0, -1, 0, 1][phase];
-    const wingA = [0, -5, -6, -3][phase];
-
-    // Shadow
-    for (let dy = -1; dy <= 1; dy++)
-      for (let dx = -6; dx <= 6; dx++)
-        if ((dx * dx) / 36 + (dy * dy) / 1.5 <= 1) put(16 + dx, 28 + dy, P.shadow);
-
-    // Wing membranes
-    for (let i = 0; i < 12; i++) {
-      const t = i / 11;
-      const wy = 15 + bob + Math.round(wingA * Math.sin(t * Math.PI));
-      const memH = Math.round(3 + Math.sin(t * Math.PI) * 4);
-      for (let dy = 0; dy <= memH; dy++) {
-        put(12 - i, wy + dy, membrane);
-        put(20 + i, wy + dy, membrane);
-      }
-      // Wing bones
-      put(12 - i, wy, membraneL);
-      put(20 + i, wy, membraneL);
-    }
-    // Wing claw tips
-    put(0, 15 + bob + wingA, bodyL);
-    put(31, 15 + bob + wingA, bodyL);
-
-    // Body — oval
-    for (let dy = -4; dy <= 4; dy++)
-      for (let dx = -3; dx <= 3; dx++)
-        if ((dx * dx) / 9 + (dy * dy) / 16 <= 1) put(16 + dx, 17 + bob + dy, body);
-    // Lighter belly
-    for (let dy = 0; dy <= 3; dy++)
-      for (let dx = -2; dx <= 2; dx++)
-        if ((dx * dx) / 4 + (dy * dy) / 9 <= 1) put(16 + dx, 18 + bob + dy, bodyL);
-
-    // Head
-    disc(put, 16, 11 + bob, 3, bodyL);
-    disc(put, 16, 11 + bob, 2, body);
-
-    // Pointed ears
-    put(12, 8 + bob, bodyL); put(12, 7 + bob, bodyL); put(13, 9 + bob, bodyL);
-    put(20, 8 + bob, bodyL); put(20, 7 + bob, bodyL); put(19, 9 + bob, bodyL);
-
-    // Red eyes
-    put(14, 11 + bob, eyeC); put(18, 11 + bob, eyeC);
-    // Eye glow
-    put(14, 10 + bob, '#ff4040'); put(18, 10 + bob, '#ff4040');
-
-    // Fangs
-    put(15, 14 + bob, fang); put(17, 14 + bob, fang);
-    if (f === 'atk0' || f === 'atk1') {
-      put(15, 15 + bob, fang); put(17, 15 + bob, fang);
-      if (f === 'atk1') {
-        put(15, 16 + bob, fang); put(17, 16 + bob, fang);
-      }
-    }
-
-    // Mouth
-    put(15, 13 + bob, bodyD); put(16, 13 + bob, bodyD); put(17, 13 + bob, bodyD);
   };
 }
 

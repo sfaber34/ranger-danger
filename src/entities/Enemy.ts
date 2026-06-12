@@ -192,8 +192,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.play('esi-move');
         break;
       case 'castle_bat':
-        applyEntityVisual(this, 'castle_bat', 'move', 0.45, 20, 20, 22, 22);
-        this.play('ecb-move');
+        // castle_bat reuses the bat character wholesale (own stats, same art)
+        applyEntityVisual(this, 'bat', 'move', 0.45, 20, 20, 22, 22);
+        this.play('ebt-move');
         this.flying = true;
         break;
       case 'castle_rat':
@@ -275,7 +276,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       case 'warlock': return 'ewl';
       case 'golem': return 'ego';
       case 'shadow_imp': return 'esi';
-      case 'castle_bat': return 'ecb';
+      case 'castle_bat': return 'ebt'; // shares the bat's textures/anims
       case 'castle_rat': return 'ecrat';
       case 'scorpion': return 'escp';
       case 'boss_scorpion': return 'ebsc';
