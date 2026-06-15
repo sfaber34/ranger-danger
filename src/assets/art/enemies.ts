@@ -2128,432 +2128,726 @@ export function drawBirdPoop() {
 // ==================================================================
 //  SKELETON SOLDIER (32x32) — bone-white warrior with rusty sword
 // ==================================================================
-export function drawEnemySkeleton(f: EFrame) {
+export function drawEnemySkeleton(f: EFrame6) {
   return (rawPut: Put) => {
-    const put = f.startsWith('die') ? rawPut : mirrorX(rawPut);
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
-      const r = 8 - step * 2;
+      const r = 7 - step * 2;
       if (r <= 0) return;
-      disc(put, 16, 18, Math.max(0, r), '#d8d0c0');
-      disc(put, 16, 18, Math.max(0, r - 2), '#c8c0a8');
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2 + step * 0.5;
-        const d = step * 3 + 2;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), '#b8b098');
+      disc(rawPut, 16, 18, r, P.wBone);
+      disc(rawPut, 16, 18, Math.max(0, r - 1), P.wBoneL);
+      // bones + helmet shards clattering apart
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2 + step * 0.4;
+        const d = step * 3 + 3;
+        const x = Math.round(16 + Math.cos(a) * d), y = Math.round(18 + Math.sin(a) * d);
+        rawPut(x, y, P.wBoneD);
+        rawPut(x + 1, y, i % 3 === 0 ? P.stoneM : P.wBone);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
-    const bone = flash ? P.white : '#d8d0c0';
-    const boneD = flash ? P.white : '#c8c0a8';
-    const boneDD = flash ? P.white : '#b8b098';
-    const cloth = flash ? P.white : '#3a4a5a';
-    const sword = flash ? P.white : '#8892a0';
+    const bn  = flash ? P.white : P.wBone;     // aged bone
+    const bnD = flash ? P.white : P.wBoneD;
+    const bnL = flash ? P.white : P.wBoneL;
+    const ir  = flash ? P.white : P.stoneM;    // iron helmet
+    const irD = flash ? P.white : P.stoneD;
+    const irL = flash ? P.white : P.stone;
+    const brz = flash ? P.white : P.bronze;    // helmet band / sword guard
+    const brzL = flash ? P.white : P.bronzeL;
+    const stl = flash ? P.white : P.steel;     // blade
+    const stlL = flash ? P.white : P.silverL;
+    const out = flash ? P.white : P.outline;
 
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 2 : 0;
-    const bob = [0, -1, 0, 1][phase];
+    // 6-phase hunched shamble; attack = raise sword overhead → SLASH down
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : 0;
+    const bob = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 1) : 0;
+    const ox = ai >= 0 ? [1, 1, -2, -1][ai] : 0;       // steps into the slash
+    const lean = ai === 2 ? 1 : 0;                     // extra hunch on the strike
 
-    // Skull
-    rect(put, 14, 4 + bob, 5, 5, bone);
-    rect(put, 15, 3 + bob, 3, 1, bone);
-    // Eye sockets
-    put(14, 6 + bob, P.outline); put(15, 6 + bob, P.outline);
-    put(17, 6 + bob, P.outline); put(18, 6 + bob, P.outline);
-    // Nose
-    put(16, 7 + bob, boneDD);
-    // Jaw
-    rect(put, 14, 9 + bob, 5, 1, boneD);
-    put(14, 9 + bob, boneDD); put(18, 9 + bob, boneDD);
+    // ground shadow (unrecorded)
+    for (let dy = 0; dy <= 1; dy++)
+      for (let dx = -7; dx <= 7; dx++)
+        if ((dx * dx) / 49 + (dy * dy) / 1.2 <= 1) mput(15 + dx + ox, 27 + dy, P.shadow);
 
-    // Spine
-    rect(put, 16, 10 + bob, 1, 3, boneD);
+    const B = ox;
 
-    // Ribcage
-    rect(put, 13, 11 + bob, 7, 4, boneD);
-    // Rib gaps
-    put(14, 12 + bob, cloth); put(18, 12 + bob, cloth);
-    put(14, 14 + bob, cloth); put(18, 14 + bob, cloth);
-    put(16, 12 + bob, cloth); put(16, 14 + bob, cloth);
+    // ---- legs: matched bone pairs walking a real cycle ----
+    // Both legs share one builder (identical femur/shin lengths); they swing
+    // half a cycle apart — foot travels fore/aft and lifts mid-swing.
+    const stride = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 2) : 0;
+    const boneLeg = (hipX: number, phOff: number, far: boolean) => {
+      let swing = 0, lift = 0;
+      if (mi >= 0) {
+        const ang = (ph / 6) * Math.PI * 2 + phOff;
+        swing = Math.round(Math.sin(ang) * 2.5);
+        lift = Math.max(0, Math.round(Math.cos(ang) * 1.5));
+      } else if (ai === 2) {
+        swing = hipX < 16 ? -2 : 1;                    // steps into the slash
+      }
+      const hipY = 20 + bob;
+      const kx = hipX - 1 + (swing >> 1), ky = hipY + 3;   // knee leads the swing
+      const fx2 = hipX - 1 + swing, fy2 = 26 - lift;
+      const c = far ? bnD : bn;
+      line(put, hipX, hipY, kx, ky, c);                // femur
+      line(put, kx, ky, fx2, fy2, c);                  // shin
+      if (!far) {
+        put(kx, ky, bnL);                              // knee knob
+        put(fx2 - 2, fy2, bn);                         // toes forward
+        put(fx2 - 1, fy2, bnL);
+      } else {
+        put(fx2 - 1, fy2, bnD);
+      }
+      put(fx2, fy2, c);                                // heel
+    };
+    boneLeg(17 + B, Math.PI, true);                    // far leg, opposite phase
+    boneLeg(15 + B, 0, false);
 
-    // Tattered cloth around waist
-    rect(put, 13, 15 + bob, 7, 3, cloth);
-    put(13, 17 + bob, null); put(15, 17 + bob, null); put(19, 17 + bob, null);
+    // ---- pelvis: hip crests around a dark sacrum notch ----
+    rect(put, 13 + B, 19 + bob, 5, 2, bn);
+    put(13 + B, 19 + bob, bnL);                        // hip crest highlights
+    put(17 + B, 19 + bob, bnL);
+    put(15 + B, 19 + bob, out);                        // sacrum notch
+    put(15 + B, 20 + bob, bnD);
 
-    // Arms — bone segments
-    // Left arm
-    put(12, 11 + bob, boneD); put(11, 12 + bob, boneD); put(10, 13 + bob, boneD);
-    // Right arm holding sword
-    put(20, 11 + bob, boneD); put(21, 12 + bob, boneD); put(22, 13 + bob, boneD);
+    // ---- bare spine at the waist — THE skeleton silhouette read:
+    // the body pinches to a single bone column between cage and hips ----
+    put(15 + B, 18 + bob, bnL);
+    put(16 + B, 18 + bob, bnD);                        // vertebra nub
+    put(15 + B, 17 + bob, bn);
 
-    // Sword in right hand
-    if (f === 'atk0') {
-      // Sword raised
-      put(22, 10 + bob, sword); put(22, 9 + bob, sword); put(22, 8 + bob, sword);
-      put(22, 7 + bob, sword); put(22, 6 + bob, '#a0a8b8');
-    } else if (f === 'atk1') {
-      // Sword swung down
-      put(23, 14 + bob, sword); put(24, 15 + bob, sword); put(25, 16 + bob, sword);
-      put(26, 17 + bob, sword); put(27, 18 + bob, '#a0a8b8');
-    } else {
-      // Sword at rest, angled
-      put(23, 12 + bob, sword); put(24, 11 + bob, sword); put(25, 10 + bob, sword);
-      put(26, 9 + bob, sword); put(27, 8 + bob, '#a0a8b8');
+    // ---- ribcage: bright rib bars over dark hollow gaps ----
+    const rcx = 11 + B;
+    for (let r = 0; r < 3; r++) {
+      const ry2 = 12 + r * 2 + bob + (r > 0 ? lean : 0);
+      rect(put, rcx, ry2 + 1, 6, 1, out);              // hollow between the ribs
+      rect(put, rcx, ry2, 6, 1, r === 0 ? bnL : bn);   // the rib bar
+      put(rcx - 1, ry2 + 1, bn);                       // rib wraps the chest front
+      put(rcx + 6, ry2, bnD);                          // anchors at the spine
+    }
+    // sternum + collarbones over the cage
+    rect(put, rcx + 2, 11 + bob, 1, 6, bnL);
+    put(rcx, 11 + bob, bnL);
+    put(rcx + 4, 11 + bob, bnL);
+    put(rcx + 1, 10 + bob, bn);                        // collarbone
+    put(rcx + 5, 10 + bob, bn);
+    // spine column climbing the back of the cage
+    for (let s = 0; s < 4; s++)
+      put(18 + B - (s > 1 ? 1 : 0), 12 + s + bob, s % 2 === 0 ? bnL : bnD);
+
+    // ---- THE SWORD + both arms gripping it ----
+    {
+      // hilt position: held low and forward at rest, overhead on the windup,
+      // swept down past the feet on the slash
+      const HILT: ReadonlyArray<readonly [number, number]> = [[13, 8], [11, 8], [9, 19], [8, 18]];
+      const [hxR, hyR] = ai >= 0 ? HILT[ai] : [9 - (stride >> 1), 17 + bob];
+      const hx2 = hxR + B, hy2 = hyR;
+      // blade angle: forward-up at rest, skyward on the raise, down-forward on the slash
+      const bA = ai === 0 ? -1.9 : ai === 1 ? -1.45 : ai === 2 ? 2.65 : 3.39; // radians
+      const bdx = Math.cos(bA), bdy = Math.sin(bA);
+      // far arm reaching to the grip
+      line(put, 13 + B, 13 + bob, hx2 + 1, hy2, bnD);
+      // near arm: shoulder → elbow → grip
+      const elX = Math.round((11 + B + hx2) / 2) + 1;
+      const elY = Math.round((13 + bob + hy2) / 2) + (ai === 1 ? -1 : 1);
+      line(put, 11 + B, 13 + bob, elX, elY, bn);
+      line(put, elX, elY, hx2, hy2, bn);
+      line(put, elX, elY + 1, hx2, hy2 + 1, bnD);
+      disc(put, elX, elY, 1, bnL);                     // elbow knob
+      // hand bones on the grip
+      disc(put, hx2, hy2, 1, bnL);
+      // pommel behind the hand
+      put(hx2 - Math.round(bdx * 2), hy2 - Math.round(bdy * 2), brz);
+      // bronze crossguard perpendicular to the blade
+      put(hx2 + Math.round(bdx) - Math.round(bdy), hy2 + Math.round(bdy) + Math.round(bdx), brzL);
+      put(hx2 + Math.round(bdx) + Math.round(bdy), hy2 + Math.round(bdy) - Math.round(bdx), brz);
+      // the blade — two strokes of steel with a bright edge, dark tip
+      const tipX = hx2 + Math.round(bdx * 8), tipY = hy2 + Math.round(bdy * 8);
+      line(put, hx2 + Math.round(bdx * 2), hy2 + Math.round(bdy * 2), tipX, tipY, stl);
+      line(put, hx2 + Math.round(bdx * 2), hy2 + Math.round(bdy * 2) - 1, tipX, tipY - 1, stlL);
+      put(tipX, tipY, stlL);                           // point
+      put(tipX, tipY - 1, out);
+      // slash frame: the arc the blade just carved + a step into it
+      if (ai === 2) {
+        for (let a = -1.5; a <= 1.9; a += 0.5) {
+          const sx2 = Math.round(hx2 + Math.cos(a) * 10);
+          const sy2 = Math.round(hy2 - 2 + Math.sin(a) * 10);
+          mput(sx2, sy2, a > 0.9 ? P.white : stlL);
+        }
+        mput(tipX - 1, tipY + 2, P.white);             // bite at the arc's end
+      }
     }
 
-    // Legs — bone with cloth
-    const legOff = [0, 1, 0, -1][phase];
-    // Left leg
-    put(14, 18 + bob, boneD); put(14, 19 + bob + legOff, boneD);
-    put(14, 20 + bob + legOff, boneD); put(14, 21 + bob + legOff, boneD);
-    put(13, 22 + bob + legOff, boneDD); put(14, 22 + bob + legOff, boneDD);
-    // Right leg
-    put(18, 18 + bob, boneD); put(18, 19 + bob - legOff, boneD);
-    put(18, 20 + bob - legOff, boneD); put(18, 21 + bob - legOff, boneD);
-    put(17, 22 + bob - legOff, boneDD); put(18, 22 + bob - legOff, boneDD);
+    // ---- skull under the spiked helmet: pale, hollow-eyed, grinning ----
+    const hx = 12 + B, hy = 9 + bob + lean;
+    // face — bright bone so the skull pops out of the helmet's shadow
+    rect(put, hx - 3, hy, 6, 3, bnL);
+    put(hx + 2, hy + 1, bn);                           // back of the skull shading
+    put(hx + 2, hy + 2, bnD);
+    put(hx - 3, hy + 2, bn);                           // cheekbone underside
+    // jaw seam separating the mandible
+    rect(put, hx - 2, hy + 2, 4, 1, bnD);
+    // grinning teeth row below the seam
+    put(hx - 3, hy + 3, bnL);
+    put(hx - 2, hy + 3, out);
+    put(hx - 1, hy + 3, bnL);
+    put(hx, hy + 3, out);
+    put(hx + 1, hy + 3, bnL);
+    put(hx + 2, hy + 3, bnD);                          // jaw hinge
+    // big hollow eye socket + the far socket behind the nasal ridge
+    rect(put, hx - 2, hy, 2, 2, out);
+    put(hx - 1, hy, flash ? P.white : '#d04020');      // ember pinprick in the socket
+    put(hx + 1, hy, out);                              // far socket
+    put(hx, hy, bnL);                                  // nasal ridge between them
+    put(hx - 3, hy + 1, out);                          // nose hole at the front edge
+    // ---- iron helmet: dome + riveted band + cheek guard + spike ----
+    disc(put, hx, hy - 3, 4, ir);
+    disc(put, hx - 1, hy - 4, 2, irL);                 // dome highlight
+    put(hx + 2, hy - 4, irD);                          // dome shading
+    rect(put, hx - 4, hy - 1, 9, 1, brz);              // riveted band
+    put(hx - 3, hy - 1, brzL);                         // rivets
+    put(hx - 1, hy - 1, brzL);
+    put(hx + 1, hy - 1, brzL);
+    put(hx + 3, hy - 1, brzL);
+    rect(put, hx - 4, hy, 1, 3, ir);                   // cheek guard
+    put(hx - 4, hy + 1, irD);
+    // spike on top
+    put(hx, hy - 7, brz);
+    put(hx, hy - 8, brzL);
+
+    strokeOutline(px, mput);
   };
 }
 
 // ==================================================================
 //  WARLOCK (32x32) — dark robed magic caster with glowing purple eyes
 // ==================================================================
-export function drawEnemyWarlock(f: EFrame) {
+export function drawEnemyWarlock(f: EFrame6) {
   return (rawPut: Put) => {
-    const put = f.startsWith('die') ? rawPut : mirrorX(rawPut);
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
       const r = 8 - step * 2;
       if (r <= 0) return;
-      disc(put, 16, 18, Math.max(0, r), '#2a0a3a');
-      disc(put, 16, 18, Math.max(0, r - 2), '#3a1a4a');
-      for (let i = 0; i < 7; i++) {
-        const a = (i / 7) * Math.PI * 2 + step * 0.6;
-        const d = step * 3 + 2;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(18 + Math.sin(a) * d), '#aa40ff');
+      disc(rawPut, 16, 18, r, P.wlk);
+      disc(rawPut, 16, 18, Math.max(0, r - 1), P.wlkM);
+      // the robe collapses; sparks of dying violet magic
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + step * 0.4;
+        const d = step * 3 + 3;
+        const x = Math.round(16 + Math.cos(a) * d), y = Math.round(18 + Math.sin(a) * d);
+        rawPut(x, y, P.wlkD);
+        rawPut(x + 1, y, i % 2 === 0 ? P.wlkG : P.bronze);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
-    const robe = flash ? P.white : '#2a0a3a';
-    const robeM = flash ? P.white : '#3a1a4a';
-    const glow = flash ? P.white : '#aa40ff';
-    const glowL = flash ? P.white : '#dd80ff';
-    const hands = flash ? P.white : '#6a8a5a';
+    const rb  = flash ? P.white : P.wlk;     // dark purple robe
+    const rbD = flash ? P.white : P.wlkD;
+    const rbM = flash ? P.white : P.wlkM;
+    const rbL = flash ? P.white : P.wlkL;
+    const gl  = flash ? P.white : P.wlkG;    // violet glow
+    const glL = flash ? P.white : P.wlkGL;
+    const skin = flash ? P.white : P.stone;  // grey skin
+    const skinD = flash ? P.white : P.stoneM;
+    const brz = flash ? P.white : P.bronze;  // staff + trim
+    const brzL = flash ? P.white : P.bronzeL;
+    const bone = flash ? P.white : P.wBone;  // skull ornament
+    const out = flash ? P.white : P.outline;
 
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 2 : 0;
-    const bob = [0, -1, 0, 1][phase];
+    // 6-phase gliding walk; attack = glow brightens → staff levels → FIRE
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : 0;
+    const bob = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 1) : 0;
+    const ox = ai === 2 ? 1 : 0;                       // recoil as the bolt leaves
+    const charge = ai === 0;                           // orb flares
+    const aimed = ai === 1 || ai === 2;                // staff levelled at the player
+    const firing = ai === 2;
 
-    // Hood
-    rect(put, 13, 4 + bob, 7, 6, robe);
-    rect(put, 12, 5 + bob, 1, 4, robe);
-    rect(put, 20, 5 + bob, 1, 4, robe);
-    rect(put, 14, 3 + bob, 5, 1, robeM);
+    // ground shadow (unrecorded)
+    for (let dy = 0; dy <= 1; dy++)
+      for (let dx = -7; dx <= 7; dx++)
+        if ((dx * dx) / 49 + (dy * dy) / 1.2 <= 1) mput(13 + dx + ox, 27 + dy, P.shadow);
 
-    // Face shadow inside hood
-    rect(put, 14, 6 + bob, 5, 3, '#1a0828');
+    const B = ox;
 
-    // Glowing purple eyes
-    put(15, 7 + bob, glow); put(17, 7 + bob, glow);
-    put(15, 6 + bob, glowL); put(17, 6 + bob, glowL);
+    // ---- the robe: tall tapering cloak with a tattered hem ----
+    for (let y = 11; y <= 26; y++) {
+      const t = (y - 11) / 15;
+      const halfW = Math.round(3 + t * 5);
+      const cxR = 12 + Math.round(t * 1) + B;
+      for (let dx = -halfW; dx <= halfW; dx++) {
+        // ragged hem — tatters tear out of the last rows
+        if (y > 23 && ((dx * 5 + y * 3 + ph) % 4 === 0)) continue;
+        // vertical fold banding, swaying with the stride
+        const band = (((dx + ((y + ph) >> 2)) % 4) + 4) % 4;
+        put(cxR + dx, y + bob, band === 0 ? rbL : band === 2 ? rbD : band === 3 ? rbM : rb);
+      }
+    }
+    // bronze trim down the leading edge + along the hem
+    for (let y = 12; y <= 24; y += 3) put(8 - Math.round((y - 11) / 8) + B, y + bob, brz);
+    for (let x = 6; x <= 19; x += 3) put(x + B, 25 + bob, brz);
 
-    // Robe body
-    rect(put, 13, 10 + bob, 7, 8, robe);
-    rect(put, 12, 12 + bob, 1, 6, robeM);
-    rect(put, 20, 12 + bob, 1, 6, robeM);
-    // Robe flare at bottom
-    rect(put, 11, 18 + bob, 11, 3, robe);
-    rect(put, 12, 21 + bob, 9, 1, robeM);
-    // Ragged bottom edge
-    put(11, 20 + bob, null); put(21, 20 + bob, null);
-    put(13, 21 + bob, null); put(19, 21 + bob, null);
+    // ---- shoulder mantle with gold trim + skull ornament ----
+    rect(put, 6 + B, 11 + bob, 13, 3, rbM);
+    rect(put, 6 + B, 13 + bob, 13, 1, rbD);
+    rect(put, 6 + B, 11 + bob, 13, 1, rbL);
+    put(6 + B, 13 + bob, brzL);                        // trim corners
+    put(18 + B, 13 + bob, brz);
+    // skull pin on the near shoulder
+    put(7 + B, 11 + bob, bone);
+    put(8 + B, 11 + bob, bone);
+    put(7 + B, 12 + bob, bone);
+    put(8 + B, 12 + bob, out);                         // socket
+    // gold chain + medallion down the chest
+    put(11 + B, 14 + bob, flash ? P.white : P.gold);
+    put(12 + B, 15 + bob, flash ? P.white : P.goldM);
+    put(11 + B, 16 + bob, flash ? P.white : P.gold);
+    disc(put, 12 + B, 18 + bob, 1, brzL);              // medallion
+    put(12 + B, 18 + bob, flash ? P.white : '#8a2060'); // gem
 
-    // Staff in left hand
-    put(11, 8 + bob, '#5a3a1a'); put(11, 9 + bob, '#5a3a1a');
-    put(11, 10 + bob, '#5a3a1a'); put(11, 11 + bob, '#5a3a1a');
-    put(11, 12 + bob, '#5a3a1a'); put(11, 13 + bob, '#5a3a1a');
-    put(11, 14 + bob, '#5a3a1a'); put(11, 15 + bob, '#5a3a1a');
-    put(11, 16 + bob, '#5a3a1a'); put(11, 17 + bob, '#5a3a1a');
-    // Crystal on top
-    put(11, 6 + bob, glow); put(11, 5 + bob, glowL);
-    put(10, 6 + bob, glow); put(12, 6 + bob, glow);
-    put(11, 7 + bob, glow);
+    // ---- peaked hood with a shadowed grey face + violet eyes ----
+    const hy = 6 + bob;
+    // hood mass, peak curling back
+    disc(put, 11 + B, hy + 2, 4, rb);
+    put(13 + B, hy - 1, rb);
+    put(14 + B, hy - 2, rbM);
+    put(15 + B, hy - 1, rbD);                          // curled peak tip
+    rect(put, 8 + B, hy - 1, 5, 2, rbL);               // hood ridge light
+    // dark opening with the grey face sunk inside
+    rect(put, 8 + B, hy + 1, 4, 4, out);
+    put(9 + B, hy + 4, skin);                          // chin catching light
+    put(10 + B, hy + 4, skinD);
+    put(10 + B, hy + 3, skinD);                        // gaunt cheek
+    // glowing violet eyes
+    put(8 + B, hy + 2, charge || firing ? P.white : gl);
+    put(10 + B, hy + 2, glL);
+    if (charge || firing) mput(7 + B, hy + 2, gl);     // glare spilling from the hood
+    // bronze hood trim
+    put(8 + B, hy, brz);
+    put(12 + B, hy + 1, brz);
 
-    // Left hand on staff
-    put(12, 13 + bob, hands);
-    // Right casting hand
-    put(20, 14 + bob, hands); put(21, 14 + bob, hands);
+    // ---- near arm: grey clawed hand reaching from the sleeve ----
+    rect(put, 7 + B, 15 + bob, 3, 3, rbM);             // hanging sleeve
+    put(7 + B, 17 + bob, rbD);
+    put(6 + B, 18 + bob, skin);                        // grey hand
+    put(5 + B, 19 + bob, skin);
+    put(4 + B, 20 + bob, skinD);                       // claw fingers
+    put(5 + B, 21 + bob, skinD);
 
-    // Casting effect on attack
-    if (f === 'atk0') {
-      put(22, 13 + bob, glow); put(23, 13 + bob, glow);
-      put(22, 14 + bob, glowL); put(23, 14 + bob, glow);
-      put(22, 15 + bob, glow); put(23, 15 + bob, glow);
-    } else if (f === 'atk1') {
-      disc(put, 23, 14 + bob, 2, glowL);
-      put(25, 14 + bob, glow); put(26, 14 + bob, glow);
-      put(23, 12 + bob, glow); put(23, 16 + bob, glow);
+    // ---- THE STAFF: bronze shaft, claw setting, burning violet orb ----
+    {
+      // vertical at rest/charge; levelled at the player when aimed
+      const handX = 9 + B, handY = 14 + bob;
+      let shaftX0: number, shaftY0: number, shaftX1: number, shaftY1: number;
+      let orbX: number, orbY: number;
+      if (aimed) {
+        shaftX0 = handX + 4; shaftY0 = handY + 1;      // butt end behind the hand
+        shaftX1 = handX - 6; shaftY1 = handY - 1;      // levelled forward
+        orbX = handX - 7; orbY = handY - 1;
+      } else {
+        shaftX0 = handX - 3; shaftY0 = 25 + bob;       // planted at the hem
+        shaftX1 = handX - 3; shaftY1 = 5 + bob;
+        orbX = handX - 3; orbY = 3 + bob;
+      }
+      line(put, shaftX0, shaftY0, shaftX1, shaftY1, brz);
+      put(Math.round((shaftX0 + shaftX1) / 2), Math.round((shaftY0 + shaftY1) / 2), brzL); // band
+      // grey hand gripping the shaft
+      put(handX - (aimed ? 1 : 3), handY, skin);
+      put(handX - (aimed ? 0 : 2), handY, skinD);
+      // claw setting prongs around the orb
+      put(orbX - 1, orbY + 1, brz);
+      put(orbX + 1, orbY + 1, brz);
+      put(orbX, orbY + 2, brzL);
+      // the orb — violet fire, flickering at rest, blazing when charged
+      const hot = charge || firing;
+      disc(put, orbX, orbY, hot ? 2 : 1, gl);
+      put(orbX, orbY, hot || flash ? P.white : glL);
+      // flame lick off the orb (flickers with the walk phase)
+      mput(orbX, orbY - 2, gl);
+      mput(orbX + (ph % 2 === 0 ? 0 : 1), orbY - 3, glL);
+      if (hot) {
+        mput(orbX - 1, orbY - 2, gl);
+        mput(orbX + 1, orbY - 3, gl);
+      }
+      // soft glow halo (unrecorded)
+      mput(orbX - 2, orbY, flash ? P.white : '#6a30a0');
+      mput(orbX + 2, orbY - 1, flash ? P.white : '#6a30a0');
+      // FIRING: the purple fireball leaves the orb toward the player
+      if (firing) {
+        mput(orbX - 2, orbY, P.white);                 // muzzle flash
+        mput(orbX - 3, orbY - 1, glL);
+        mput(orbX - 3, orbY + 1, glL);
+        disc(mput, Math.max(1, orbX - 4), orbY, 1, gl);       // the bolt streaking away
+        mput(Math.max(0, orbX - 6), orbY, glL);
+      }
     }
 
-    // Robe sway on walk
-    const legOff = [0, 1, 0, -1][phase];
-    put(14, 21 + bob + legOff, robeM);
-    put(18, 21 + bob - legOff, robeM);
+    strokeOutline(px, mput);
   };
 }
 
 // ==================================================================
 //  GOLEM (32x32) — massive stone guardian with glowing orange runes
 // ==================================================================
-export function drawEnemyGolem(f: EFrame) {
+export function drawEnemyGolem(f: EFrame6) {
   return (rawPut: Put) => {
-    const put = f.startsWith('die') ? rawPut : mirrorX(rawPut);
-    // Darker basalt/obsidian palette — the previous mid-grey '#5a6270' and
-    // '#636d7a' were two of the four castle flagstone shades, so the golem
-    // disappeared into the floor on the castle level.
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
-      const r = 10 - step * 2;
+      const r = 9 - step * 2;
       if (r <= 0) return;
-      disc(put, 16, 16, Math.max(0, r), '#2c303a');
-      disc(put, 16, 16, Math.max(0, r - 2), '#3c4250');
+      disc(rawPut, 16, 18, r, P.glm);
+      disc(rawPut, 16, 18, Math.max(0, r - 1), P.glmM);
+      // rubble + dying rune embers
       for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2 + step * 0.4;
-        const d = step * 3 + 3;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(16 + Math.sin(a) * d), '#ffa020');
+        const a = (i / 8) * Math.PI * 2 + step * 0.3;
+        const d = step * 3 + 4;
+        const x = Math.round(16 + Math.cos(a) * d), y = Math.round(18 + Math.sin(a) * d);
+        rawPut(x, y, P.glmD);
+        rawPut(x + 1, y, i % 3 === 0 ? P.glmR : P.glm);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
-    const stone = flash ? P.white : '#2c303a';
-    const stoneD = flash ? P.white : '#1c1f26';
-    const stoneL = flash ? P.white : '#3c4250';
-    const rune = flash ? P.white : '#ffa020';
+    const st  = flash ? P.white : P.glm;     // warm stone
+    const stD = flash ? P.white : P.glmD;    // seams / crevices
+    const stM = flash ? P.white : P.glmM;
+    const stL = flash ? P.white : P.glmL;    // lit block faces
+    const rn  = flash ? P.white : P.glmR;    // rune glow
+    const rnL = flash ? P.white : P.glmRL;
+    const moss = flash ? P.white : P.leafB;
+    const out = flash ? P.white : P.outline;
 
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 2 : 0;
-    const bob = [0, -1, 0, 1][phase];
+    // 6-phase stomping walk; attack = wind back → PUNCH with the lead fist.
+    // The golem is built SYMMETRIC and front-facing — a centred head between
+    // two equal boulder shoulders — so it reads instantly at game scale.
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : 0;
+    const bob = mi >= 0 ? [1, 0, 0, 1, 0, 0][ph] : 0;  // hard stomp dip
+    const ox = ai >= 0 ? [1, 2, -2, -1][ai] : 0;       // coils back, then lunges in
+    const charged = ai === 1;
+    const punch = ai === 2;
 
-    // Massive blocky head
-    rect(put, 12, 2 + bob, 9, 7, stone);
-    rect(put, 13, 1 + bob, 7, 1, stoneL);
-    // Glowing eyes
-    put(14, 5 + bob, rune); put(15, 5 + bob, rune);
-    put(18, 5 + bob, rune); put(19, 5 + bob, rune);
-    // Brow ridge
-    rect(put, 13, 4 + bob, 7, 1, stoneD);
-    // Jaw
-    rect(put, 13, 8 + bob, 7, 1, stoneD);
+    // ground shadow (unrecorded)
+    for (let dy = 0; dy <= 1; dy++)
+      for (let dx = -10; dx <= 10; dx++)
+        if ((dx * dx) / 100 + (dy * dy) / 1.2 <= 1) mput(16 + dx + ox, 28 + dy, P.shadow);
 
-    // Massive torso
-    rect(put, 10, 9 + bob, 13, 10, stone);
-    rect(put, 9, 10 + bob, 1, 8, stoneD);
-    rect(put, 23, 10 + bob, 1, 8, stoneD);
-    // Chest rune lines
-    put(16, 11 + bob, rune); put(16, 12 + bob, rune); put(16, 13 + bob, rune);
-    put(14, 12 + bob, rune); put(18, 12 + bob, rune);
-    put(13, 13 + bob, rune); put(19, 13 + bob, rune);
+    const B = ox;
+    const cx = 16 + B;
 
-    // Shoulders (blocky)
-    rect(put, 7, 9 + bob, 3, 4, stoneL);
-    rect(put, 23, 9 + bob, 3, 4, stoneL);
+    // ---- legs: two equal stone pillars with a clear gap between ----
+    const stride = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 2) : 0;
+    const liftL = mi >= 0 ? Math.max(0, Math.round(Math.cos((ph / 6) * Math.PI * 2))) : 0;
+    const liftR = mi >= 0 ? Math.max(0, Math.round(-Math.cos((ph / 6) * Math.PI * 2))) : 0;
+    // left leg
+    rect(put, cx - 5 + stride, 21 + bob, 4, 6 - liftL - bob, st);
+    put(cx - 5 + stride, 21 + bob, stL);               // lit edge
+    put(cx - 3 + stride, 23 + bob, stD);               // knee seam
+    rect(put, cx - 6 + stride, 26 - liftL, 5, 1, stM); // foot slab
+    // right leg
+    rect(put, cx + 1 - stride, 21 + bob, 4, 6 - liftR - bob, st);
+    put(cx + 3 - stride, 23 + bob, stD);               // knee seam
+    put(cx + 4 - stride, 22 + bob, stM);               // shaded side
+    rect(put, cx + 1 - stride, 26 - liftR, 5, 1, stM); // foot slab
 
-    // Arms
-    const atkSwing = f === 'atk1' ? 3 : 0;
-    // Left arm
-    rect(put, 7, 13 + bob, 3, 5, stone);
-    put(7, 18 + bob, stoneD); put(8, 18 + bob, stoneD); put(9, 18 + bob, stoneD);
-    // Right arm
-    rect(put, 23, 13 + bob - atkSwing, 3, 5, stone);
-    put(23, 18 + bob - atkSwing, stoneD); put(24, 18 + bob - atkSwing, stoneD); put(25, 18 + bob - atkSwing, stoneD);
-
-    // Arm runes
-    put(8, 15 + bob, rune);
-    put(24, 15 + bob - atkSwing, rune);
-
-    // Legs — thick pillars
-    const legOff = [0, 1, 0, -1][phase];
-    // Left leg
-    rect(put, 11, 19 + bob, 4, 5 + legOff, stone);
-    rect(put, 11, 24 + bob + legOff, 5, 1, stoneD);
-    // Right leg
-    rect(put, 18, 19 + bob, 4, 5 - legOff, stone);
-    rect(put, 17, 24 + bob - legOff, 5, 1, stoneD);
-    // Leg runes
-    put(13, 21 + bob + legOff, rune);
-    put(19, 21 + bob - legOff, rune);
-
-    // Attack: fist glow
-    if (f === 'atk0') {
-      put(24, 17 + bob, rune); put(25, 17 + bob, rune);
-    } else if (f === 'atk1') {
-      put(24, 14 + bob, rune); put(25, 14 + bob, rune);
-      put(23, 15 + bob, rune); put(26, 15 + bob, rune);
+    // ---- torso: a centred chest of stacked stone blocks ----
+    rect(put, cx - 6, 10 + bob, 13, 11, st);
+    // block seam grid
+    rect(put, cx - 6, 14 + bob, 13, 1, stD);
+    rect(put, cx - 1, 10 + bob, 1, 4, stD);
+    rect(put, cx - 4, 15 + bob, 1, 6, stD);
+    rect(put, cx + 3, 15 + bob, 1, 5, stD);
+    rect(put, cx - 6, 19 + bob, 13, 1, stD);
+    // lit top + side shading
+    rect(put, cx - 6, 10 + bob, 13, 1, stL);
+    rect(put, cx - 6, 11 + bob, 1, 9, stL);            // lit left edge
+    rect(put, cx + 6, 11 + bob, 1, 9, stM);            // shaded right edge
+    put(cx + 5, 20 + bob, moss);                       // moss in the waist seam
+    // ---- the CHEST RUNE: centred glowing square spiral ----
+    const rc = charged || punch ? rnL : rn;
+    put(cx - 1, 15 + bob, rc); put(cx, 15 + bob, rc); put(cx + 1, 15 + bob, rc);
+    put(cx + 1, 16 + bob, rc);
+    put(cx - 1, 17 + bob, rc); put(cx, 17 + bob, rc); put(cx + 1, 17 + bob, rc);
+    put(cx - 1, 16 + bob, charged || punch ? P.white : rnL); // spiral core
+    if (charged || punch) {
+      mput(cx - 2, 16 + bob, rn);                      // heat bleeding off
+      mput(cx + 2, 16 + bob, rn);
     }
+
+    // ---- head: CENTRED block on a neck above the shoulders ----
+    const hy = 3 + bob;
+    rect(put, cx - 3, hy, 7, 5, st);
+    rect(put, cx - 3, hy, 7, 1, stL);                  // lit cap
+    put(cx + 3, hy + 1, stM);                          // shaded side
+    put(cx - 3, hy + 4, stM);                          // jaw shading
+    // dark visor slot with two burning eyes
+    rect(put, cx - 2, hy + 2, 5, 2, out);
+    put(cx - 1, hy + 3, charged || punch ? P.white : rn);
+    put(cx + 1, hy + 3, rnL);
+    if (charged || punch) mput(cx - 3, hy + 3, rn);    // glare spilling out
+    // neck: dark gap + stone stub into the chest
+    rect(put, cx - 3, hy + 5, 7, 1, out);
+    rect(put, cx - 1, hy + 5, 2, 2, stD);              // neck stub
+
+    // ---- two EQUAL boulder shoulders flanking the head ----
+    for (const s of [-1, 1] as const) {
+      disc(put, cx + s * 8, 12 + bob, 4, st);
+      disc(put, cx + s * 8 - 1, 11 + bob, 2, s === -1 ? stL : stM); // lit left / shaded right
+      put(cx + s * 10, 14 + bob, stD);                 // crevice seam
+      put(cx + s * 7, 15 + bob, stD);
+    }
+    put(cx - 9, 10 + bob, stL);                        // sun catches the left pauldron
+    put(cx - 11, 14 + bob, moss);                      // mossy crack
+    // small square rune on the lead pauldron
+    put(cx - 9, 12 + bob, rc);
+    put(cx - 8, 12 + bob, rc);
+    put(cx - 9, 13 + bob, rc);
+
+    // ---- right arm: hangs straight, matching the punch arm's mass ----
+    rect(put, cx + 7, 15 + bob, 3, 5, st);
+    put(cx + 9, 16 + bob, stM);                        // shaded side
+    put(cx + 8, 17 + bob, stD);                        // elbow seam
+    rect(put, cx + 6, 20 + bob, 4, 4, st);             // fist block
+    rect(put, cx + 6, 20 + bob, 4, 1, stL);
+    put(cx + 7, 22 + bob, stD);                        // knuckle seam
+
+    // ---- left arm: THE punch arm (equal mass; animates on attack) ----
+    {
+      // fist position: hangs at rest, coils back, then drives forward
+      const FIST: ReadonlyArray<readonly [number, number]> = [[-4, 13], [-2, 14], [-13, 15], [-11, 17]];
+      const [fdx, fyR] = ai >= 0 ? FIST[ai] : [-10, 20 + bob];
+      const fx2 = cx + fdx, fy2 = fyR;
+      const shoX = cx - 8, shoY = 14 + bob;            // under the lead pauldron
+      if (ai >= 0 && ai <= 1) {
+        // coiled: forearm folds up beside the shoulder
+        line(put, shoX, shoY, fx2 + 1, fy2 + 2, st);
+        line(put, shoX + 1, shoY, fx2 + 2, fy2 + 2, stM);
+      } else {
+        // hanging / extended: upper arm + forearm with seams
+        rect(put, shoX - 1, shoY + 1, 3, 4, st);
+        put(shoX - 1, shoY + 2, stL);
+        put(shoX, shoY + 4, stD);                      // elbow seam
+        line(put, shoX - 1, shoY + 5, fx2 + 2, fy2 + 1, st);
+        line(put, shoX, shoY + 5, fx2 + 3, fy2 + 2, stM);
+      }
+      // boulder fist with knuckle seams
+      rect(put, fx2, fy2, 4, 4, st);
+      rect(put, fx2, fy2, 4, 1, stL);
+      put(fx2 + 1, fy2 + 2, stD);
+      put(fx2 + 3, fy2 + 1, stD);
+      // the punch: impact burst + drive lines
+      if (punch) {
+        mput(fx2 - 1, fy2 - 1, P.white);
+        mput(fx2 - 1, fy2 + 2, rnL);
+        mput(fx2 - 1, fy2 + 4, P.white);
+        mput(fx2 + 6, fy2 - 1, stL);                   // drive lines trailing
+        mput(fx2 + 8, fy2 + 1, stL);
+      } else if (ai === 3) {
+        mput(fx2 - 1, fy2 + 1, stL);                   // settling dust
+      }
+    }
+
+    strokeOutline(px, mput);
   };
 }
 
 // ==================================================================
 //  SHADOW IMP (32x32) — small dark fiend with horns, orange eyes
 // ==================================================================
-export function drawEnemyShadowImp(f: EFrame) {
+export function drawEnemyShadowImp(f: EFrame6) {
   return (rawPut: Put) => {
-    const put = f.startsWith('die') ? rawPut : mirrorX(rawPut);
     if (f.startsWith('die')) {
       const step = parseInt(f.slice(3));
-      const r = 6 - step * 1.5;
+      const r = 6 - step * 2;
       if (r <= 0) return;
-      disc(put, 16, 20, Math.max(0, Math.round(r)), '#1a1028');
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2 + step * 0.6;
-        const d = step * 3 + 2;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(20 + Math.sin(a) * d), '#3a2a48');
-      }
-      return;
-    }
-    const flash = f === 'hit';
-    const body = flash ? P.white : '#1a1028';
-    const bodyM = flash ? P.white : '#2a1a38';
-    const bodyL = flash ? P.white : '#3a2a48';
-    const eyes = flash ? P.white : '#ff8800';
-    const grin = flash ? P.white : '#ff4040';
-
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 2 : 0;
-    const bob = [0, -1, 0, 1][phase];
-
-    // Shadow on ground
-    for (let dy = -1; dy <= 0; dy++)
-      for (let dx = -3; dx <= 3; dx++)
-        if (Math.abs(dx) + Math.abs(dy) <= 3) put(16 + dx, 27 + dy, P.shadow);
-
-    // Small body
-    disc(put, 16, 18 + bob, 4, body);
-    disc(put, 16, 18 + bob, 3, bodyM);
-
-    // Head
-    disc(put, 16, 12 + bob, 4, bodyM);
-    disc(put, 16, 12 + bob, 3, bodyL);
-
-    // Horns
-    put(12, 10 + bob, bodyL); put(11, 9 + bob, bodyL); put(10, 8 + bob, body);
-    put(20, 10 + bob, bodyL); put(21, 9 + bob, bodyL); put(22, 8 + bob, body);
-
-    // Eyes — bright orange
-    put(14, 12 + bob, eyes); put(18, 12 + bob, eyes);
-    // Eye glow
-    put(14, 11 + bob, '#ffaa44'); put(18, 11 + bob, '#ffaa44');
-
-    // Red grin
-    put(14, 14 + bob, grin); put(15, 14 + bob, grin); put(16, 14 + bob, grin);
-    put(17, 14 + bob, grin); put(18, 14 + bob, grin);
-
-    // Thin arms
-    put(11, 17 + bob, bodyL); put(10, 18 + bob, bodyL); put(9, 19 + bob, bodyL);
-    put(21, 17 + bob, bodyL); put(22, 18 + bob, bodyL); put(23, 19 + bob, bodyL);
-
-    // Claws
-    put(8, 19 + bob, grin); put(9, 20 + bob, grin);
-    put(24, 19 + bob, grin); put(23, 20 + bob, grin);
-
-    // Small legs
-    const legOff = [0, 1, 0, -1][phase];
-    put(14, 22 + bob + legOff, bodyL); put(14, 23 + bob + legOff, bodyL);
-    put(13, 24 + bob + legOff, body);
-    put(18, 22 + bob - legOff, bodyL); put(18, 23 + bob - legOff, bodyL);
-    put(19, 24 + bob - legOff, body);
-
-    // Pointed tail
-    put(16, 22 + bob, body); put(17, 23 + bob, body); put(18, 24 + bob, bodyL);
-    put(19, 25 + bob, bodyL);
-
-    // Smoky wisps
-    if (phase % 2 === 0) {
-      put(13, 20 + bob, bodyL); put(19, 16 + bob, bodyL);
-    } else {
-      put(19, 20 + bob, bodyL); put(13, 16 + bob, bodyL);
-    }
-
-    // Attack: claws forward
-    if (f === 'atk0') {
-      put(8, 17 + bob, grin); put(7, 17 + bob, grin);
-      put(24, 17 + bob, grin); put(25, 17 + bob, grin);
-    } else if (f === 'atk1') {
-      put(7, 16 + bob, grin); put(6, 15 + bob, grin);
-      put(25, 16 + bob, grin); put(26, 15 + bob, grin);
-    }
-  };
-}
-
-// ==================================================================
-//  CASTLE RAT (32x32) — plague rat, dark castle themed
-// ==================================================================
-export function drawEnemyCastleRat(f: EFrame) {
-  return (rawPut: Put) => {
-    const put = f.startsWith('die') ? rawPut : mirrorX(rawPut);
-    if (f.startsWith('die')) {
-      const step = parseInt(f.slice(3));
-      const r = 7 - step * 2;
-      if (r <= 0) return;
-      disc(put, 16, 20, Math.max(0, r), '#4a3a2a');
+      disc(rawPut, 16, 18, r, P.imp);
+      disc(rawPut, 16, 18, Math.max(0, r - 1), P.impM);
+      // the imp bursts into embers and horn shards
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2 + step * 0.5;
         const d = step * 3 + 2;
-        put(Math.round(16 + Math.cos(a) * d), Math.round(20 + Math.sin(a) * d), '#5a4a38');
+        const x = Math.round(16 + Math.cos(a) * d), y = Math.round(18 + Math.sin(a) * d);
+        rawPut(x, y, P.impD);
+        rawPut(x + 1, y, i % 2 === 0 ? '#ffc81e' : P.imp);
       }
       return;
     }
+
+    const mput = mirrorX(rawPut);
+    const px = new Set<number>();
+    const put: Put = (x, y, c) => {
+      if (c == null || x < 0 || y < 0 || x >= 32 || y >= 32) return;
+      px.add(y * 32 + x);
+      mput(x, y, c);
+    };
+
     const flash = f === 'hit';
-    const bodyA = flash ? P.white : '#4a3a2a';
-    const bodyB = flash ? P.white : '#5a4a38';
-    const bodyC = flash ? P.white : '#3a2a1a';
-    const tail = flash ? P.white : '#6a5a48';
+    const hd  = flash ? P.white : P.imp;     // rust-red hide
+    const hdD = flash ? P.white : P.impD;
+    const hdM = flash ? P.white : P.impM;
+    const hdL = flash ? P.white : P.impL;    // muscle highlights
+    const horn = flash ? P.white : '#3a2a34'; // dark horns / claws
+    const hornL = flash ? P.white : '#5a4458';
+    const eye = flash ? P.white : '#ffc81e'; // burning amber
+    const teeth = flash ? P.white : P.wBoneL;
+    const out = flash ? P.white : P.outline;
 
-    const phase = f === 'move0' ? 0 : f === 'move1' ? 1 : f === 'move2' ? 2 : f === 'move3' ? 3 :
-                  f === 'atk0' ? 0 : f === 'atk1' ? 2 : 0;
+    // 6-phase scamper; attack = claw coils up → SWIPE across
+    const mi = f.startsWith('move') ? +f[4] : -1;
+    const ai = f.startsWith('atk') ? +f[3] : -1;
+    const ph = mi >= 0 ? mi : 0;
+    const bob = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 1.2) : ai === 0 ? 1 : 0;
+    const ox = ai >= 0 ? [1, 1, -2, -1][ai] : 0;       // coils, then lunges in
+    const swipe = ai === 2;
 
-    const rats = [
-      { x: 10, y: 19 + [0, 1, 0, -1][phase], c: bodyA },
-      { x: 16, y: 17 + [0, -1, 0, 1][(phase + 1) % 4], c: bodyB },
-      { x: 14, y: 22 + [0, 1, 0, -1][(phase + 2) % 4], c: bodyA },
-    ];
+    // ground shadow (unrecorded)
+    for (let dy = 0; dy <= 1; dy++)
+      for (let dx = -7; dx <= 7; dx++)
+        if ((dx * dx) / 49 + (dy * dy) / 1.2 <= 1) mput(14 + dx + ox, 27 + dy, P.shadow);
 
-    // Tails first (behind)
-    for (let i = 0; i < rats.length; i++) {
-      const r = rats[i];
-      const tw = [0, 1, 0, -1][(phase + i) % 4];
-      put(r.x + 6, r.y + 1 + tw, tail);
-      put(r.x + 7, r.y + tw, tail);
-      put(r.x + 8, r.y + tw, tail);
-      put(r.x + 9, r.y - 1 + tw, tail);
+    const B = ox;
+
+    // ---- tail: whips back and up to an arrow-spade tip ----
+    const tw = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 1.5) : ai === 0 ? -1 : 0;
+    for (let t = 0; t <= 1; t += 0.15) {
+      const tx2 = Math.round(19 + 7 * t) + B;
+      const ty2 = Math.round(17 - 5 * Math.pow(t, 1.4)) + tw + bob;
+      put(tx2, ty2, t < 0.5 ? hdM : hd);
+    }
+    // the spade tip
+    put(27 + B, 11 + tw + bob, hdM);
+    put(28 + B, 10 + tw + bob, hd);
+    put(28 + B, 12 + tw + bob, hd);
+    put(29 + B, 11 + tw + bob, hdD);
+
+    // ---- far limbs (darker, behind the body) ----
+    // far leg
+    line(put, 17 + B, 18 + bob, 19 + B, 22 + bob, hdD);
+    line(put, 19 + B, 22 + bob, 17 + B, 26, hdD);
+    put(16 + B, 26, horn);                             // far foot claw
+    // far arm dangling
+    line(put, 13 + B, 13 + bob, 11 + B, 18 + bob, hdD);
+    put(10 + B, 19 + bob, hdD);
+
+    // ---- hunched wiry torso with spine spikes ----
+    disc(put, 15 + B, 15 + bob, 3, hd);                // chest
+    disc(put, 17 + B, 17 + bob, 3, hd);                // hip mass
+    rect(put, 13 + B, 14 + bob, 5, 5, hd);             // fill
+    put(13 + B, 13 + bob, hdL);                        // shoulder muscle light
+    put(14 + B, 14 + bob, hdL);                        // pec highlight
+    put(14 + B, 16 + bob, hdD);                        // rib shading
+    put(15 + B, 17 + bob, hdD);
+    put(18 + B, 19 + bob, hdM);                        // haunch shade
+    // small dark spikes down the hunched spine
+    put(15 + B, 11 + bob, horn);
+    put(17 + B, 12 + bob, horn);
+    put(19 + B, 14 + bob, horn);
+
+    // ---- near leg: digitigrade crouch with dark foot claws ----
+    const stride = mi >= 0 ? Math.round(Math.sin((ph / 6) * Math.PI * 2) * 2) : 0;
+    const lift = mi >= 0 ? Math.max(0, Math.round(Math.cos((ph / 6) * Math.PI * 2))) : 0;
+    line(put, 16 + B, 18 + bob, 13 + (stride >> 1) + B, 21 + bob, hd);   // thigh
+    line(put, 17 + B, 18 + bob, 14 + (stride >> 1) + B, 21 + bob, hdM);
+    line(put, 13 + (stride >> 1) + B, 21 + bob, 16 + B, 23 + bob, hdM);  // hock kicks back
+    line(put, 16 + B, 23 + bob, 13 + stride + B, 26 - lift, hd);         // shin to the foot
+    // foot with dark claws
+    put(12 + stride + B, 26 - lift, hd);
+    put(11 + stride + B, 26 - lift, horn);
+    put(13 + stride + B, 26 - lift, horn);
+
+    // ---- head: horns, big ear, burning eyes, toothy grin ----
+    const hx = 9 + B, hy = 9 + bob;
+    disc(put, hx, hy, 3, hd);
+    put(hx + 1, hy - 3, hdM);                          // crown
+    // big pointed ear sweeping back
+    line(put, hx + 3, hy - 1, hx + 7, hy - 4, hdM);
+    line(put, hx + 3, hy, hx + 7, hy - 3, hd);
+    put(hx + 7, hy - 4, hdD);                          // ear tip
+    put(hx + 4, hy - 1, hdD);                          // ear inner
+    // two dark horns curving up and back
+    line(put, hx, hy - 3, hx + 3, hy - 7, horn);
+    put(hx + 4, hy - 8, hornL);                        // big horn tip
+    put(hx - 2, hy - 3, horn);                         // brow horn
+    put(hx - 2, hy - 4, horn);
+    put(hx - 1, hy - 5, hornL);
+    // scowling brow over burning amber eyes
+    put(hx - 2, hy - 1, hdD);
+    put(hx - 1, hy - 1, hdD);
+    put(hx - 1, hy, swipe ? P.white : eye);
+    put(hx - 2, hy, flash ? P.white : '#c87808');      // eye corner
+    // wide grin crammed with teeth
+    rect(put, hx - 3, hy + 2, 5, 1, out);
+    put(hx - 3, hy + 2, teeth);
+    put(hx - 1, hy + 2, teeth);
+    put(hx + 1, hy + 2, teeth);
+    put(hx - 2, hy + 3, teeth);                        // lower fangs
+    put(hx, hy + 3, teeth);
+
+    // ---- near arm: long, thin, ending in splayed claws (THE swipe arm) ----
+    {
+      // hand position: reaching forward at rest; coils up, then rakes across
+      const HAND: ReadonlyArray<readonly [number, number]> = [[13, 8], [11, 6], [4, 15], [5, 20]];
+      const [hxR, hyR] = ai >= 0 ? HAND[ai] : [6 - (stride >> 1), 19 + bob];
+      const cx2 = hxR + B, cy2 = hyR;
+      const shX = 12 + B, shY = 13 + bob;
+      const elX = Math.round((shX + cx2) / 2) + (ai === 0 || ai === 1 ? 2 : -1);
+      const elY = Math.round((shY + cy2) / 2) + (ai === 0 || ai === 1 ? 0 : 1);
+      line(put, shX, shY, elX, elY, hd);
+      line(put, elX, elY, cx2, cy2, hd);
+      line(put, elX, elY + 1, cx2, cy2 + 1, hdM);
+      put(elX, elY, hdL);                              // elbow
+      // three splayed claw fingers
+      const cdx = ai >= 0 && ai <= 1 ? 1 : -1;         // up on the coil, forward on the rake
+      const cdy = ai >= 0 && ai <= 1 ? -1 : 1;
+      put(cx2 + cdx, cy2 + cdy, horn);
+      put(cx2 + cdx * 2, cy2, hornL);
+      put(cx2, cy2 + cdy * 2, horn);
+      // the swipe: arc streaks raking across
+      if (swipe) {
+        mput(cx2 + 3, cy2 - 5, hdL);
+        mput(cx2 + 1, cy2 - 3, P.white);
+        mput(cx2, cy2 - 1, P.white);
+        mput(cx2 + 1, cy2 + 3, hdL);
+      } else if (ai === 3) {
+        mput(cx2 + 1, cy2 - 3, hdL);                   // fading trail
+      }
     }
 
-    // Rat bodies
-    for (let i = 0; i < rats.length; i++) {
-      const r = rats[i];
-      const legOff = [0, 1, 0, 1][(phase + i) % 4];
-      // Body
-      rect(put, r.x, r.y, 7, 4, r.c);
-      rect(put, r.x + 1, r.y - 1, 5, 1, r.c);
-      // Darker stripe
-      rect(put, r.x + 1, r.y, 5, 1, bodyC);
-      // Legs
-      put(r.x, r.y + 4 - legOff, bodyC);
-      put(r.x + 1, r.y + 4 - legOff, bodyC);
-      put(r.x + 5, r.y + 4 + legOff, bodyC);
-      put(r.x + 6, r.y + 4 + legOff, bodyC);
-      // Head
-      rect(put, r.x - 2, r.y, 3, 3, r.c);
-      // Ear
-      put(r.x - 1, r.y - 1, '#8a6a5a');
-      // Eye — red
-      put(r.x - 2, r.y + 1, '#ff2020');
-      // Pink nose
-      put(r.x - 3, r.y + 1, '#e0a0a0');
-    }
+    strokeOutline(px, mput);
   };
 }
+
 
 type DesertEnemyVariant = 'scorpion' | 'boss_scorpion' | 'scarab' | 'sand_mite' | 'cactus_hopper' | 'dune_strider' | 'sand_wraith' | 'temple_guardian' | 'sun_mote';
 

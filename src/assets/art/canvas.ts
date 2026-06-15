@@ -156,6 +156,28 @@ export const P = {
   spiderM: '#1a1a1a',
   spiderL: '#4a4a4a',
   spiderEye: '#ff2020',
+  // shadow imp (rust-red demon)
+  imp:    '#8a3a2a',
+  impD:   '#4e1c14',
+  impM:   '#6a2a1e',
+  impL:   '#aa5440',
+
+  // warlock (dark purple robe + violet staff glow)
+  wlk:    '#3e2a4e',
+  wlkD:   '#241632',
+  wlkM:   '#31203e',
+  wlkL:   '#5a4070',
+  wlkG:   '#a040e0',   // staff glow violet
+  wlkGL:  '#d090ff',
+
+  // stone golem (warm rock + glowing runes)
+  glm:    '#8a8274',
+  glmD:   '#4e483c',
+  glmM:   '#6a6456',
+  glmL:   '#aaa291',
+  glmR:   '#ff9018',   // rune/eye glow
+  glmRL:  '#ffc850',
+
   // bat (grey-brown fur, plum membrane wings)
   bat2:   '#4e4248',
   bat2D:  '#2a2228',

@@ -52,7 +52,6 @@ const ENTITY_PROC_SCALES: Record<string, number> = {
   warlock: 0.5,
   golem: 0.55,
   shadow_imp: 0.45,
-  castle_rat: 0.45,
 };
 
 export function isDebugGalleryRequested(): boolean {

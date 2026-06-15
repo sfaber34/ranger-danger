@@ -14,7 +14,7 @@ import {
   drawEnemySpider, drawEnemyCrow, drawEnemyBat, drawEnemyDragonfly,
   drawEnemyMosquito, drawMosquitoDart, drawBirdPoop,
   drawEnemySkeleton, drawEnemyWarlock, drawEnemyGolem, drawEnemyShadowImp,
-  drawEnemyCastleRat, drawWarlockBolt,
+  drawWarlockBolt,
   drawEnemyDesert, drawSunBolt,
 } from './art/enemies';
 import {
@@ -137,11 +137,14 @@ export function generateAllArt(scene: Phaser.Scene) {
   add(scene, 'bird_poop', makeCanvas(16, drawBirdPoop()));
 
   // Castle enemies
-  for (const f of eFrames) add(scene, `esk_${f}`, makeCanvas(32, drawEnemySkeleton(f)));
-  for (const f of eFrames) add(scene, `ewl_${f}`, makeCanvas(32, drawEnemyWarlock(f)));
-  for (const f of eFrames) add(scene, `ego_${f}`, makeCanvas(32, drawEnemyGolem(f)));
-  for (const f of eFrames) add(scene, `esi_${f}`, makeCanvas(32, drawEnemyShadowImp(f)));
-  for (const f of eFrames) add(scene, `ecrat_${f}`, makeCanvas(32, drawEnemyCastleRat(f)));
+  // Skeleton uses the extended frame set (6-frame shamble, 4-frame sword slash)
+  for (const f of e6Frames) add(scene, `esk_${f}`, makeCanvas(32, drawEnemySkeleton(f)));
+  // Warlock uses the extended frame set (6-frame glide, 4-frame staff cast)
+  for (const f of e6Frames) add(scene, `ewl_${f}`, makeCanvas(32, drawEnemyWarlock(f)));
+  // Golem uses the extended frame set (6-frame stomp, 4-frame punch)
+  for (const f of e6Frames) add(scene, `ego_${f}`, makeCanvas(32, drawEnemyGolem(f)));
+  // Shadow imp uses the extended frame set (6-frame scamper, 4-frame swipe)
+  for (const f of e6Frames) add(scene, `esi_${f}`, makeCanvas(32, drawEnemyShadowImp(f)));
   // Warlock magic bolt projectile
   add(scene, 'wbolt_0', makeCanvas(32, drawWarlockBolt('bolt0')));
   add(scene, 'wbolt_1', makeCanvas(32, drawWarlockBolt('bolt1')));
@@ -555,31 +558,31 @@ export function registerAnimations(scene: Phaser.Scene) {
   mk('mdart-spin', ['mdart_0','mdart_1'], 8, -1);
 
   // Castle enemies
-  mk('esk-move', ['esk_move0','esk_move1','esk_move2','esk_move3'], 8, -1);
-  mk('esk-atk',  ['esk_atk0','esk_atk1'], 8, -1);
+  // 6-frame shamble + 4-frame raise-and-slash
+  mk('esk-move', ['esk_move0','esk_move1','esk_move2','esk_move3','esk_move4','esk_move5'], 10, -1);
+  mk('esk-atk',  ['esk_atk0','esk_atk1','esk_atk2','esk_atk3'], 10, -1);
   mk('esk-hit',  ['esk_hit'], 10, 0);
   mk('esk-die',  ['esk_die0','esk_die1','esk_die2','esk_die3'], 10, 0);
 
-  mk('ewl-move', ['ewl_move0','ewl_move1','ewl_move2','ewl_move3'], 8, -1);
-  mk('ewl-atk',  ['ewl_atk0','ewl_atk1'], 8, -1);
+  // 6-frame gliding walk + 4-frame charge-aim-fire staff cast
+  mk('ewl-move', ['ewl_move0','ewl_move1','ewl_move2','ewl_move3','ewl_move4','ewl_move5'], 10, -1);
+  mk('ewl-atk',  ['ewl_atk0','ewl_atk1','ewl_atk2','ewl_atk3'], 10, 0); // one cycle per cast
   mk('ewl-hit',  ['ewl_hit'], 10, 0);
   mk('ewl-die',  ['ewl_die0','ewl_die1','ewl_die2','ewl_die3'], 10, 0);
 
-  mk('ego-move', ['ego_move0','ego_move1','ego_move2','ego_move3'], 6, -1);
-  mk('ego-atk',  ['ego_atk0','ego_atk1'], 6, -1);
+  // 6-frame stomping walk + 4-frame wind-and-punch
+  mk('ego-move', ['ego_move0','ego_move1','ego_move2','ego_move3','ego_move4','ego_move5'], 9, -1);
+  mk('ego-atk',  ['ego_atk0','ego_atk1','ego_atk2','ego_atk3'], 8, -1);
   mk('ego-hit',  ['ego_hit'], 8, 0);
   mk('ego-die',  ['ego_die0','ego_die1','ego_die2','ego_die3'], 8, 0);
 
-  mk('esi-move', ['esi_move0','esi_move1','esi_move2','esi_move3'], 10, -1);
-  mk('esi-atk',  ['esi_atk0','esi_atk1'], 10, -1);
+  // 6-frame scamper + 4-frame coil-and-rake claw swipe
+  mk('esi-move', ['esi_move0','esi_move1','esi_move2','esi_move3','esi_move4','esi_move5'], 12, -1);
+  mk('esi-atk',  ['esi_atk0','esi_atk1','esi_atk2','esi_atk3'], 10, -1);
   mk('esi-hit',  ['esi_hit'], 10, 0);
   mk('esi-die',  ['esi_die0','esi_die1','esi_die2','esi_die3'], 10, 0);
 
 
-  mk('ecrat-move', ['ecrat_move0','ecrat_move1','ecrat_move2','ecrat_move3'], 10, -1);
-  mk('ecrat-atk',  ['ecrat_atk0','ecrat_atk1'], 10, -1);
-  mk('ecrat-hit',  ['ecrat_hit'], 10, 0);
-  mk('ecrat-die',  ['ecrat_die0','ecrat_die1','ecrat_die2','ecrat_die3'], 10, 0);
 
   // Warlock bolt
   mk('wbolt-spin', ['wbolt_0','wbolt_1'], 8, -1);

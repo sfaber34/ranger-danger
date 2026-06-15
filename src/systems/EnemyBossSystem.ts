@@ -406,9 +406,9 @@ export class EnemyBossSystem {
 
         if (dist < 30) {
           e.setVelocity(0, 0);
-          if (e.anims.currentAnim?.key !== `${prefix}-atk`) e.play(`${prefix}-atk`);
           if (time > e.attackCd) {
             e.attackCd = time + 800;
+            e.play(`${prefix}-atk`);   // one cast cycle per strike
             scene.player.hurt(e.dmg, scene);
             scene.hud.pushHud();
             if (scene.player.hp <= 0) scene.end.lose();
@@ -418,10 +418,17 @@ export class EnemyBossSystem {
 
         if (dist < wlRange && scene.pathing.hasLineOfSight(e.x, e.y, tx, ty)) {
           e.setVelocity(0, 0);
-          if (e.anims.currentAnim?.key !== `${prefix}-atk`) e.play(`${prefix}-atk`);
-          if (time > e.attackCd && this.enemyOnScreen(e)) {
-            e.attackCd = time + CFG.castle.warlockFireRate;
+          // One full cast animation per bolt: the anim starts on the fire
+          // decision and the bolt leaves ~200ms later, when the staff levels
+          // (frames: charge → aim → FIRE → recover, then hold until next cast).
+          const boltAt = (e as any)._boltEmitAt ?? 0;
+          if (boltAt > 0 && time >= boltAt) {
+            (e as any)._boltEmitAt = 0;
             this.spawnWarlockBolt(e.x, e.y, tx, ty);
+          } else if (boltAt === 0 && time > e.attackCd && this.enemyOnScreen(e)) {
+            e.attackCd = time + CFG.castle.warlockFireRate;
+            e.play(`${prefix}-atk`);
+            (e as any)._boltEmitAt = time + 200;
           }
           return true;
         }

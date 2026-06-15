@@ -198,8 +198,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.flying = true;
         break;
       case 'castle_rat':
-        applyEntityVisual(this, 'castle_rat', 'move', 0.45, 22, 20, 20, 24);
-        this.play('ecrat-move');
+        // castle_rat reuses the rat character wholesale (own stats, same art)
+        applyEntityVisual(this, 'rat', 'move', 0.45, 22, 20, 20, 24);
+        this.play('erat-move');
         break;
       case 'scorpion':
         applyEntityVisual(this, 'scorpion', 'move', 0.5, 26, 22, 19, 23);
@@ -277,7 +278,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       case 'golem': return 'ego';
       case 'shadow_imp': return 'esi';
       case 'castle_bat': return 'ebt'; // shares the bat's textures/anims
-      case 'castle_rat': return 'ecrat';
+      case 'castle_rat': return 'erat'; // shares the rat's textures/anims
       case 'scorpion': return 'escp';
       case 'boss_scorpion': return 'ebsc';
       case 'scarab': return 'esrb';
